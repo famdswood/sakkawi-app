@@ -1,0 +1,1135 @@
+/* ==================================================================
+   سِكّاوي | js/leaderboard.js
+   ------------------------------------------------------------------
+   المرحلة 3: محرك التايمر التنازلي (Countdown Timer Engine) + منطق
+   تبديل تبويبات البطولات (Tabs Switching Logic) لصفحة "الترتيب
+   والبطولات".
+
+   المرحلة 4 (جديد): جلب البيانات والتزامن مع Supabase مباشرة من هنا -
+   تنفيذ Stored Procedure "get_leaderboard(period_type)"، رسم منصّة
+   التتويج (Top 3) وباقي القائمة (4-50)، شريط "مركزك الحالي" المثبت،
+   وربط كل ده بتبديل التبويبات مع حالات تحميل (Skeleton) واضحة.
+
+   ملحوظة معمارية مهمة (اتغيّرت في المرحلة 4 بقرار صريح): الوصف القديم
+   تحت كان بيقول إن js/profiles.js هو "المصدر الوحيد للحقيقة" لبيانات
+   الليدربورد، وإن الملف ده مايعرفش حاجة عن Supabase خالص. من دلوقتي،
+   وبناءً على طلب صريح، الملف ده (js/leaderboard.js) بقى هو المسؤول
+   المباشر عن جلب ورسم بيانات الليدربورد بنفسه عن طريق get_leaderboard،
+   من غير ما نلمس أي حرف في js/profiles.js. النسخة القديمة الموجودة
+   هناك (fetchLeaderboardTop / loadAndRenderLeaderboard / renderLeaderboardPodium
+   / renderLeaderboardRemainingList / renderCurrentUserRankBanner) اتسابت
+   زي ما هي بالظبط ومعطوبة الاستخدام حالياً (Dead Code Path) - مش بتتنفذ
+   تاني، لأننا مبقيناش بنعتمد على آلية "تسجيل Loader خارجي"
+   (registerLeaderboardDataLoader) في تشغيل تبديل التبويبات ولا في أول
+   تحميل، واستبدلناها بنداء مباشر لـ loadAndRenderPeriod() تحت في نفس
+   الملف. الدالة registerLeaderboardDataLoader() لسه متصدّرة (Exported)
+   بس عشان النداء الموجود فعلاً جوه initLeaderboardUI() في profiles.js
+   ماياخدش خطأ Import - لكن القيمة اللي بتتسجّل فيها مبقتش بتتستخدم من
+   جوه الملف ده تاني.
+
+   مسؤوليات هذا الملف حصرياً دلوقتي:
+     1) حساب الوقت المتبقي لكل بطولة (يومية/أسبوعية/شهرية) بدقة على
+        توقيت مصر (Africa/Cairo) - بغض النظر عن التوقيت المحلي
+        لجهاز المستخدم نفسه (حتى لو فاتح الموقع من بلد تاني).
+     2) تحديث الأرقام على الشاشة كل ثانية بالظبط من غير أي Drift
+        تراكمي (بنعيد حساب "وقت النهاية" من الصفر كل Tick بدل ما
+        نعتمد على عداد بينقص، فمفيش تراكم أخطاء حتى لو الجهاز اتأخر
+        شوية في تنفيذ الـ setInterval).
+     3) لما التايمر يوصل للصفر، بيرجع يحسب "دورة" جديدة تلقائياً من
+        غير أي كود إضافي (لأن حساب "نهاية اليوم/الأسبوع/الشهر الحالي"
+        دايماً بيرجع تاريخ في المستقبل بمجرد ما اللحظة الحالية تتخطى
+        النهاية القديمة) - وده اللي بيخلي loadAndRenderPeriod() تتنادى
+        تلقائياً تاني لحظة بداية الدورة الجديدة.
+     4) تبديل تبويبات البطولة (Active State + aria-selected) وجلب/رسم
+        بيانات البطولة المختارة فوراً من Supabase (المرحلة 4).
+     5) (المرحلة 5 - جديد) تشغيل حركات الدخول التدريجي (Staggered
+        Entrance) على كروت باقي المتصدرين ومنصّة التتويج مع كل رسم/
+        تحديث بيانات، وبناء Skeleton Loaders حقيقية بأبعاد ثابتة بدل
+        نص "..." الجامد (منعاً لأي Layout Shift)، وكشف شريط "مركزك
+        الحالي" فعلياً أول مرة (كان فيه كلاس "hidden" متسيب عليه من
+        غير أي كود بيشيله - شوف renderLeaderboardLoadingState تحت).
+   ================================================================== */
+
+import { supabaseClient } from './supabase-config.js';
+import { restoreSession } from './auth.js';
+// أيقونة "مفيش صورة" الموحّدة المستخدمة في كل مكان تاني بالمشروع (auth.js
+// وprofiles.js) - بدل الاعتماد القديم على placehold.co?text=بطل، اللي كان
+// بيتكسر ويظهر "؟؟؟" لأن خدمة placehold.co مابتعرفش ترندر الحروف العربية
+// جوه بارامتر text (شوف باج "اللي مش حاطين صور ظاهرين بعلامات استفهام")
+import { DEFAULT_AVATAR_URI } from './profiles.js';
+// نقطة "أونلاين الآن" فوق صور البروفايل في الليدربورد (بودیوم Top 3 +
+// باقي القائمة) - نفس المنطق المستخدم في كل مكان تاني بالتطبيق (شوف
+// الشرح الكامل عن قاعدة الأمان في js/presence.js). كانت متسابة هنا في
+// نسخة الليدربورد الجديدة (get_leaderboard) بعد ما بقت هي المسؤولة عن
+// الرسم بدل النسخة القديمة في profiles.js.
+import { presenceDotHtml, loadAndApplyPresence } from './presence.js';
+
+const CAIRO_TIME_ZONE = 'Africa/Cairo';
+
+/* ------------------------------------------------------------------
+   0) إعداد كل بطولة: أي زرار تبويب بيتبعلها، أي مقياس ترتيب (metric)
+      بتستخدمه (بيتحكم بس في وحدة القياس المعروضة وحساب الفرق عن
+      اللي فوقك في شريط "مركزك الحالي" - الترتيب الفعلي نفسه بقى
+      محسوب بالكامل جوه get_leaderboard على مستوى قاعدة البيانات)،
+      ونصوص العنوان/التسمية الخاصة بيها في الواجهة.
+   ------------------------------------------------------------------ */
+const CHAMPIONSHIP_PERIODS = Object.freeze({
+    today: {
+        key: 'today',
+        tabId: 'filter-today',
+        metric: 'points',
+        countdownLabel: 'الوقت المتبقي على نهاية البطولة اليومية',
+        podiumSubtitle: 'أعلى 3 أبطال دلوقتي',
+        winnerTitle: 'بطل اليوم',
+    },
+    week: {
+        key: 'week',
+        tabId: 'filter-week',
+        metric: 'points',
+        countdownLabel: 'الوقت المتبقي على نهاية البطولة الأسبوعية',
+        podiumSubtitle: 'أعلى 3 أبطال الأسبوع ده',
+        winnerTitle: 'بطل الأسبوع',
+    },
+    month: {
+        key: 'month',
+        tabId: 'filter-month',
+        metric: 'total_steps',
+        countdownLabel: 'الوقت المتبقي على نهاية البطولة الشهرية',
+        podiumSubtitle: 'أعلى 3 أبطال الشهر ده',
+        winnerTitle: 'بطل الشهر',
+    },
+});
+
+/** تحويل مفتاح الفترة الداخلي (today/week/month) لقيمة period_type اللي get_leaderboard() متوقعاها فعلياً في Supabase */
+const PERIOD_TYPE_MAP = Object.freeze({
+    today: 'daily',
+    week: 'weekly',
+    month: 'monthly',
+});
+
+/** الفترة النشطة حالياً - بتتحدث بس من setActivePeriod() */
+let activePeriod = 'today';
+
+/** معرّف الـ setInterval الحالي لعداد الوقت - لازم نوقفه قبل أي بداية جديدة */
+let countdownIntervalId = null;
+
+/** آخر قيمة "وقت متبقي بالثانية" شفناها - بنستخدمها بس لاكتشاف لحظة الرجوع لدورة جديدة */
+let lastKnownRemainingSeconds = null;
+
+/** علم لمنع ربط أحداث أزرار التبويبات أكتر من مرة (Memory Leak Guard) - نفس فلسفة leaderboardEventsBound في profiles.js */
+let tabEventsBound = false;
+
+/**
+ * دالة تحميل بيانات خارجية اختيارية (Legacy) - لسه ممكن تتسجل عن طريق
+ * registerLeaderboardDataLoader() من برّه (profiles.js بينادي عليها
+ * فعلاً)، لكنها مبقتش بتتنادى من جوه الملف ده تاني بعد المرحلة 4 (شوف
+ * الملحوظة المعمارية أعلى الملف) - متسابة بس عشان التوافق مع الكود
+ * الموجود ومنعاً لأي كسر في الـ Import.
+ * @type {Function|null}
+ */
+let leaderboardDataLoader = null;
+
+
+/* ==================================================================
+   1) حساب الوقت بدقة على توقيت مصر (Africa/Cairo) - بمعزل تماماً عن
+      التوقيت المحلي لجهاز/متصفح المستخدم
+   ================================================================== */
+
+/**
+ * حساب فرق التوقيت (بالدقايق) بين توقيت القاهرة ولحظة UTC معينة.
+ * بيستخدم Intl.DateTimeFormat (اللي بيعرف قاعدة بيانات التوقيتات
+ * الرسمية IANA) عشان يطلع الفرق صح تلقائياً حتى لو مصر غيّرت قاعدة
+ * التوقيت الصيفي/الشتوي في المستقبل - من غير ما نكتب أي رقم offset
+ * ثابت بإيدينا (زي +2 أو +3) ممكن يبقى غلط بعد أي قرار حكومي جديد.
+ * @param {Date} referenceInstant - أي لحظة UTC حقيقية نحسب عندها الفرق
+ * @returns {number} الفرق بالدقايق (موجب لمصر لأنها شرق جرينتش)
+ */
+function getCairoOffsetMinutes(referenceInstant) {
+    const parts = getCairoWallClockParts(referenceInstant);
+    const asIfUTC = Date.UTC(
+        parts.year, parts.month - 1, parts.day,
+        parts.hour, parts.minute, parts.second,
+    );
+    return Math.round((asIfUTC - referenceInstant.getTime()) / 60000);
+}
+
+/**
+ * قراءة "الوقت الحائطي" الحالي في القاهرة (سنة/شهر/يوم/ساعة/دقيقة/ثانية)
+ * المقابل للحظة UTC معينة - بغض النظر عن توقيت جهاز المستخدم نفسه
+ * @param {Date} referenceInstant
+ * @returns {{year:number, month:number, day:number, hour:number, minute:number, second:number}}
+ */
+function getCairoWallClockParts(referenceInstant) {
+    const formatter = new Intl.DateTimeFormat('en-US', {
+        timeZone: CAIRO_TIME_ZONE,
+        hourCycle: 'h23',
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', second: '2-digit',
+    });
+
+    return formatter.formatToParts(referenceInstant).reduce((parts, part) => {
+        if (part.type !== 'literal') parts[part.type] = parseInt(part.value, 10);
+        return parts;
+    }, {});
+}
+
+/**
+ * تحويل "وقت حائطي" مقصود بتوقيت القاهرة (مثلاً 23:59:59.999 يوم
+ * معين) إلى لحظة UTC حقيقية (Date instance) نقدر نقارنها بـ Date.now()
+ * @param {number} year
+ * @param {number} month - من 1 لـ 12 (مش 0-based زي JS الأصلي)
+ * @param {number} day
+ * @param {number} hour
+ * @param {number} minute
+ * @param {number} second
+ * @param {number} millisecond
+ * @returns {Date}
+ */
+function cairoWallClockToInstant(year, month, day, hour, minute, second, millisecond = 0) {
+    // بنستخدم اللحظة الحالية كمرجع لحساب فرق التوقيت (offset) - كافي
+    // جداً عملياً لأن مصر معندهاش قفزات توقيت صيفي/شتوي متكررة، وحتى
+    // لو حصلت، الفرق هيتحسب صح تاني أول ما اللحظة الحالية تعدّي نقطة
+    // التغيير فعلياً
+    const offsetMinutes = getCairoOffsetMinutes(new Date());
+    const naiveUTC = Date.UTC(year, month - 1, day, hour, minute, second, millisecond);
+    return new Date(naiveUTC - offsetMinutes * 60000);
+}
+
+/**
+ * حساب "لحظة نهاية" البطولة الحالية حسب نوعها - كلها محسوبة بتوقيت
+ * القاهرة بالظبط زي المطلوب:
+ *   - "today": آخر لحظة في اليوم الحالي (23:59:59.999 بتوقيت القاهرة)
+ *   - "week":  آخر لحظة في يوم الأحد الجاي (23:59:59.999) - لو اليوم
+ *              نفسه أحد، بترجع نهاية النهارده (نفس منطق "امتى بينتهي
+ *              الأسبوع الحالي؟")
+ *   - "month": آخر لحظة في آخر يوم من الشهر الحالي (23:59:59.999)
+ * الدالة دي بتتنادى من الصفر كل Tick (مش بتحفظ نتيجة قديمة)، فلما
+ * اللحظة الحالية تعدّي "النهاية" المحسوبة، النداء اللي بعده بيرجّع
+ * نهاية الدورة الجايّة تلقائياً - وده هو سر إعادة التصفير التلقائي
+ * من غير أي كود reset منفصل.
+ * @param {'today'|'week'|'month'} period
+ * @returns {Date}
+ */
+function getChampionshipEndDate(period) {
+    const now = new Date();
+    const nowParts = getCairoWallClockParts(now);
+
+    if (period === 'month') {
+        // Date.UTC(year, month, 0) بترجع "آخر لحظة UTC في اليوم اللي قبل
+        // أول يوم من الشهر رقم month" - يعني عملياً آخر يوم في الشهر
+        // الحالي (لأن nowParts.month أصلاً 1-based، فبتبقى بديل الـ
+        // "الشهر الجاي" الـ 0-based المطلوب لـ Date.UTC هنا)
+        const lastDayOfMonth = new Date(Date.UTC(nowParts.year, nowParts.month, 0)).getUTCDate();
+        return cairoWallClockToInstant(nowParts.year, nowParts.month, lastDayOfMonth, 23, 59, 59, 999);
+    }
+
+    if (period === 'week') {
+        // بنحسب "رقم يوم الأسبوع" (0 = أحد ... 6 = سبت) لتاريخ القاهرة
+        // الحالي عن طريق تفسيره كتاريخ UTC مجرّد (رقم اليوم مش بيتأثر
+        // بفرق التوقيت أصلاً، بس بالتاريخ نفسه)
+        const dateOnlyUTC = Date.UTC(nowParts.year, nowParts.month - 1, nowParts.day);
+        const weekday = new Date(dateOnlyUTC).getUTCDay(); // 0=أحد .. 6=سبت
+        const daysUntilSunday = (7 - weekday) % 7; // لو النهاردة أحد، = 0 (تنتهي النهاردة)
+
+        const sundayDateUTC = new Date(dateOnlyUTC + daysUntilSunday * 86400000);
+        return cairoWallClockToInstant(
+            sundayDateUTC.getUTCFullYear(),
+            sundayDateUTC.getUTCMonth() + 1,
+            sundayDateUTC.getUTCDate(),
+            23, 59, 59, 999,
+        );
+    }
+
+    // period === 'today' (الافتراضي)
+    return cairoWallClockToInstant(nowParts.year, nowParts.month, nowParts.day, 23, 59, 59, 999);
+}
+
+
+/* ==================================================================
+   2) محرك التايمر التنازلي (Countdown Engine)
+   ================================================================== */
+
+/**
+ * تحديث أرقام العداد على الشاشة (ساعات:دقايق:ثواني) + كلاس "is-urgent"
+ * في آخر دقيقة، واكتشاف لحظة "الدورة اتصفرت وبدأت من جديد" عشان نبلغ
+ * دالة تحميل البيانات تحدّث نفسها تلقائياً (بدون ما المستخدم يعمل
+ * Refresh يدوي وقت منتصف الليل/نهاية الأسبوع/الشهر بالظبط)
+ * @param {'today'|'week'|'month'} period
+ */
+function tickCountdown(period) {
+    const countdownEl = document.getElementById('champCountdown');
+    const daysBoxEl = document.getElementById('champDaysBox');
+    const daysSepEl = document.getElementById('champDaysSep');
+    const daysEl = document.getElementById('champDays');
+    const hoursEl = document.getElementById('champHours');
+    const minutesEl = document.getElementById('champMinutes');
+    const secondsEl = document.getElementById('champSeconds');
+    if (!countdownEl || !hoursEl || !minutesEl || !secondsEl) return;
+
+    const endDate = getChampionshipEndDate(period);
+    const remainingMs = Math.max(0, endDate.getTime() - Date.now());
+    const remainingSeconds = Math.floor(remainingMs / 1000);
+
+    // من 24 ساعة لحد اللحظة دي، بنعرض "يوم" كوحدة منفصلة (بطولات
+    // الأسبوعية/الشهرية غالباً) بدل ما نسيب الساعات تكبر لأرقام غريبة
+    // زي "153 ساعة" - وبمجرد ما يفضل أقل من يوم، الصندوق بيختفي
+    // تلقائياً ويرجع العداد لصيغة ساعات:دقايق:ثواني عادية زي اليومية
+    const days = Math.floor(remainingSeconds / 86400);
+    const hours = days > 0
+        ? Math.floor((remainingSeconds % 86400) / 3600)
+        : Math.floor(remainingSeconds / 3600);
+    const minutes = Math.floor((remainingSeconds % 3600) / 60);
+    const seconds = remainingSeconds % 60;
+
+    if (daysEl) daysEl.textContent = String(days).padStart(2, '0');
+    if (daysBoxEl) daysBoxEl.classList.toggle('hidden', days === 0);
+    if (daysSepEl) daysSepEl.classList.toggle('hidden', days === 0);
+    hoursEl.textContent = String(hours).padStart(2, '0');
+    minutesEl.textContent = String(minutes).padStart(2, '0');
+    secondsEl.textContent = String(seconds).padStart(2, '0');
+
+    countdownEl.classList.toggle('is-urgent', remainingSeconds > 0 && remainingSeconds <= 60);
+
+    // اكتشاف "الدورة اتصفرت وبدأت من جديد فعلياً" - بيحصل لما القيمة
+    // الجديدة تقفز لأعلى بفارق كبير عن القيمة اللي قبلها مباشرة (يعني
+    // إحنا عدّينا نقطة النهاية القديمة ووصلنا لبداية دورة تانية بعيدة)
+    if (lastKnownRemainingSeconds !== null && remainingSeconds > lastKnownRemainingSeconds + 5) {
+        loadAndRenderPeriod(period);
+    }
+    lastKnownRemainingSeconds = remainingSeconds;
+}
+
+/**
+ * تشغيل/إعادة تشغيل عداد بطولة معينة - بيوقف أي عداد شغال قبل كده
+ * أولاً (تجنّباً لتراكم أكتر من setInterval شغال في نفس الوقت، وهو
+ * سبب كلاسيكي لتسريبات الذاكرة/سلوك غريب لو اتنسي التنظيف)
+ * @param {'today'|'week'|'month'} period
+ */
+function startCountdown(period) {
+    stopCountdown();
+
+    const labelEl = document.getElementById('champCountdownLabel');
+    if (labelEl) labelEl.textContent = CHAMPIONSHIP_PERIODS[period].countdownLabel;
+
+    lastKnownRemainingSeconds = null; // تصفير مرجع اكتشاف الدورة الجديدة مع كل بداية عداد جديد
+    tickCountdown(period); // أول تحديث فوري من غير ما ننتظر أول Tick بعد ثانية
+    countdownIntervalId = setInterval(() => tickCountdown(period), 1000);
+}
+
+/** إيقاف عداد الوقت الحالي بأمان (بيتنادى تلقائياً قبل أي بداية جديدة، ومتاح كمان لو حبيت توقف الصفحة كلها يدوياً) */
+function stopCountdown() {
+    if (countdownIntervalId !== null) {
+        clearInterval(countdownIntervalId);
+        countdownIntervalId = null;
+    }
+}
+
+
+/* ==================================================================
+   3) منطق تبديل التبويبات (Tabs Switching Logic)
+   ================================================================== */
+
+/** تحديث الشكل البصري لكل أزرار التبويبات دفعة واحدة (is-active + aria-selected) */
+function updateActiveTabUI(period) {
+    Object.values(CHAMPIONSHIP_PERIODS).forEach((config) => {
+        const btn = document.getElementById(config.tabId);
+        if (!btn) return;
+
+        const isActive = config.key === period;
+        btn.classList.toggle('is-active', isActive);
+        btn.setAttribute('aria-selected', String(isActive));
+    });
+}
+
+/** تحديث عنوان "قمّة أبطال البطولة" الفرعي (podium subtitle) بما يناسب الفترة المختارة */
+function updatePodiumSubtitle(period) {
+    const subtitleEl = document.getElementById('champPodiumSubtitle');
+    if (subtitleEl) subtitleEl.textContent = CHAMPIONSHIP_PERIODS[period].podiumSubtitle;
+}
+
+/** تحديث لقب صاحب المركز الأول (p1-title) بما يناسب الفترة المختارة -
+ *  "بطل اليوم"/"بطل الأسبوع"/"بطل الشهر" بدل نص ثابت "بطل البطولة"،
+ *  عشان يوضّح أنهي بطولة بالظبط هو بطلها من غير ما نغيّر هيكل المنصة نفسه */
+function updatePodiumWinnerTitle(period) {
+    const titleEl = document.getElementById('p1-title');
+    if (titleEl) titleEl.textContent = CHAMPIONSHIP_PERIODS[period].winnerTitle;
+}
+
+/** تبديل كلاس ثيم الألوان الخاص بفترة البطولة الحالية على الحاوية
+ *  الرئيسية (يومي = تركواز، أسبوعي = الذهبي الافتراضي (بدون كلاس
+ *  إضافي فعّال)، شهري = ذهبي أغمق وأغنى) - شوف قسم "9) ثيم الألوان لكل
+ *  فترة بطولة" في نهاية css/leaderboard-championships.css. بيأثر بس
+ *  على التابات/شريط العداد/إطار المنصة، مش على شكل الترتيب نفسه */
+function updatePeriodTheme(period) {
+    const container = document.getElementById('leaderboardMainContent');
+    if (!container) return;
+    container.classList.remove('theme-today', 'theme-week', 'theme-month');
+    container.classList.add(`theme-${period}`);
+}
+
+/**
+ * تفعيل فترة بطولة معينة بالكامل: تحديث الشكل البصري، تشغيل عداد
+ * الوقت الخاص بيها، وجلب ورسم بياناتها الحقيقية من Supabase. دي نقطة
+ * الدخول الموحّدة اللي كل تبديل تبويب (بالكليك) أو تفعيل أول تحميل
+ * للصفحة بيمرّوا من خلالها.
+ * @param {'today'|'week'|'month'} period
+ */
+function setActivePeriod(period) {
+    if (!CHAMPIONSHIP_PERIODS[period]) {
+        console.error(`فترة بطولة غير معروفة: ${period}`);
+        return;
+    }
+
+    activePeriod = period;
+
+    updateActiveTabUI(period);
+    updatePeriodTheme(period);
+    updatePodiumSubtitle(period);
+    updatePodiumWinnerTitle(period);
+    startCountdown(period);
+    loadAndRenderPeriod(period);
+}
+
+/**
+ * ربط أزرار تبويبات البطولة الثلاثة بحدث الكليك - مرة واحدة بس بفضل
+ * علم tabEventsBound (نفس فلسفة leaderboardEventsBound في profiles.js)
+ * عشان initChampionshipTabs() لو اتنادت أكتر من مرة (مثلاً بعد
+ * تسجيل دخول جديد) ما تراكمش Listeners فوق بعضها.
+ */
+function bindChampionshipTabs() {
+    if (tabEventsBound) return;
+    tabEventsBound = true;
+
+    Object.values(CHAMPIONSHIP_PERIODS).forEach((config) => {
+        const btn = document.getElementById(config.tabId);
+        if (!btn) return;
+
+        btn.addEventListener('click', () => {
+            // زرار متعطّل (disabled) بيتجاهل الكليك تلقائياً من المتصفح
+            // أصلاً، لكن بنتأكد هنا كمان لأي حالة تعطيل مستقبلية عن طريق
+            // كلاس بس من غير attribute حقيقي
+            if (btn.disabled || btn.getAttribute('aria-disabled') === 'true') return;
+            if (config.key === activePeriod) return; // نفس الفترة النشطة - مفيش داعي نكرر نفس الشغل
+
+            setActivePeriod(config.key);
+        });
+    });
+}
+
+
+/* ==================================================================
+   4) المرحلة 4: جلب البيانات والتزامن (Supabase Integration)
+   ------------------------------------------------------------------
+   كل حاجة تحت مسؤولة عن: تنفيذ get_leaderboard(period_type)، توحيد
+   شكل الصفوف الراجعة، رسم منصّة التتويج + باقي القائمة + شريط "مركزك
+   الحالي"، حالات التحميل (Skeleton)، وحماية من Race Conditions لو
+   المستخدم بدّل تبويب بسرعة قبل ما Request قديم يخلص.
+   ================================================================== */
+
+/** أقصى عدد صفوف نعرضهم في باقي القائمة (من المركز 4 لحد الرقم ده) -
+ * (تحديث: الليدربورد بقى بيوقف عند أول 10 بس - المستخدم اللي ترتيبه
+ * بره العشرة دول بيشوف ترتيبه في #selfRankBar تحت بدل ما يتحطله جوه
+ * القائمة نفسها، شوف renderSelfRankBar) */
+const LEADERBOARD_DISPLAY_LIMIT = 10;
+
+/**
+ * قيمة limit_count اللي بنطلبها من get_leaderboard مع كل نداء - الدالة
+ * نفسها بتقبل أقصى حد 200 (شوف LEAST(limit_count, 200) في تعريفها)،
+ * فبنطلب أقصى قيمة مسموحة عمداً (مش الافتراضي 50) عشان نقدر نلاقي
+ * ونحسب ترتيب المستخدم الحالي بدقة في شريط "مركزك الحالي" حتى لو
+ * ترتيبه بره أول 50 الظاهرين في الواجهة - من غير أي Request إضافي
+ * منفصل. لو ترتيبه أبعد من الرقم ده أصلاً، بنرجع لرسالة تحفيزية عامة
+ * (شوف renderSelfRankBar تحت).
+ */
+const LEADERBOARD_RPC_FETCH_LIMIT = 200;
+
+/** عدد كروت الـ Skeleton الوهمية اللي بتتعرض في باقي القائمة أثناء التحميل */
+const LEADERBOARD_SKELETON_ROWS = 6;
+
+/** أقصى قيمة لمتغير --stagger-index بنبعتها لكروت باقي المتصدرين (شوف .rank-card.champ-pop-in في CSS) - عشان آخر كارت في قائمة طويلة (لحد 50 عنصر) ما يستناش تأخير تراكمي كبير قبل ما يظهر */
+const CHAMP_MAX_STAGGER_INDEX = 10;
+
+/** إعدادات كل مركز في منصّة التتويج (Top 3) - نفس عناصر index.html بالظبط */
+const PODIUM_SLOTS = [
+    { rank: 1, nameEl: 'p1-name', pointsEl: 'p1-points', stepsEl: 'p1-steps', avatarEl: 'p1-avatar', presenceEl: 'p1-avatar-presence', fallback: 'https://placehold.co/100x100/f59e0b/ffffff?text=1' },
+    { rank: 2, nameEl: 'p2-name', pointsEl: 'p2-points', stepsEl: 'p2-steps', avatarEl: 'p2-avatar', presenceEl: 'p2-avatar-presence', fallback: 'https://placehold.co/100x100/cbd5e1/334155?text=2' },
+    { rank: 3, nameEl: 'p3-name', pointsEl: 'p3-points', stepsEl: 'p3-steps', avatarEl: 'p3-avatar', presenceEl: 'p3-avatar-presence', fallback: 'https://placehold.co/100x100/b45309/ffffff?text=3' },
+];
+
+/** رقم كل Request جلب بيانات (بيزيد مع كل نداء جديد) - بنستخدمه كـ Race Condition Guard: أي نتيجة راجعة بعد ما رقمها بقى قديم بننكرها (شوف loadAndRenderPeriod) */
+let leaderboardFetchToken = 0;
+
+/** آخر مصفوفة بيانات ليدربورد اتجابت فعلياً من get_leaderboard - محتفظين بيها هنا (مش بس تحطيط) عشان أي استخدام مستقبلي (مثلاً لو حبينا نضيف بحث محلي من غير Request جديد) */
+let leaderboardRows = [];
+
+/**
+ * المرحلة 7: كاش خفيف لكتالوج الأوسمة (id -> {icon, title}) - نفس فكرة
+ * badgesCatalogCache في profiles.js بالظبط، بس نسخة منفصلة هنا عمداً
+ * (بدل ما نستورد من profiles.js) عشان نتجنب أي Circular Import ثابت -
+ * الملف ده أصلاً بيتستورد جوه profiles.js (import { initChampionshipTabs,
+ * registerLeaderboardDataLoader } from './leaderboard.js'). جدول badges
+ * قراءة عامة (SELECT للجميع)، فمفيش مشكلة نقراه هنا مباشرة من غير RPC.
+ * @type {Map<string, {icon: string, title: string}> | null}
+ */
+let leaderboardBadgesCatalogCache = null;
+let leaderboardBadgesCatalogLoadPromise = null;
+
+/** بترجع كاش كتالوج الأوسمة، وتجيبه من Supabase أول مرة بس */
+async function ensureLeaderboardBadgesCatalogCache() {
+    if (leaderboardBadgesCatalogCache) return leaderboardBadgesCatalogCache;
+
+    if (!leaderboardBadgesCatalogLoadPromise) {
+        leaderboardBadgesCatalogLoadPromise = supabaseClient
+            .from('badges')
+            .select('id, icon, title')
+            .then(({ data, error }) => {
+                if (error) {
+                    console.error('خطأ في جلب كتالوج الأوسمة (ليدربورد):', error.message);
+                    leaderboardBadgesCatalogCache = new Map();
+                } else {
+                    leaderboardBadgesCatalogCache = new Map((data || []).map((badge) => [badge.id, { icon: badge.icon, title: badge.title }]));
+                }
+                leaderboardBadgesCatalogLoadPromise = null;
+                return leaderboardBadgesCatalogCache;
+            });
+    }
+
+    return leaderboardBadgesCatalogLoadPromise;
+}
+
+/**
+ * تجهيز/تحديث أيقونة "الشارة المميزة" جنب اسم صاحب مركز في الليدربورد -
+ * نفس فكرة renderFeaturedBadgeInline في profiles.js بالظبط (DOM API
+ * مش innerHTML، عنصر <span> واحد بس بيتحدّث مكانه، مربوط بـ
+ * data-featured-badge-for بمعرف عنصر الاسم)
+ * @param {HTMLElement|null} nameEl
+ * @param {string|null|undefined} featuredBadgeId
+ */
+function renderFeaturedBadgeInline(nameEl, featuredBadgeId) {
+    if (!nameEl || !nameEl.id || !nameEl.parentElement) return;
+
+    let badgeEl = nameEl.parentElement.querySelector(`[data-featured-badge-for="${nameEl.id}"]`);
+    const badge = featuredBadgeId ? leaderboardBadgesCatalogCache?.get(featuredBadgeId) : null;
+
+    if (!badge) {
+        if (badgeEl) badgeEl.remove();
+        return;
+    }
+
+    if (!badgeEl) {
+        badgeEl = document.createElement('span');
+        badgeEl.dataset.featuredBadgeFor = nameEl.id;
+        badgeEl.className = 'featured-badge-icon';
+        badgeEl.style.marginInlineStart = '0.25rem';
+        nameEl.insertAdjacentElement('afterend', badgeEl);
+    }
+
+    badgeEl.textContent = badge.icon;
+    badgeEl.title = badge.title;
+}
+
+
+/**
+ * تنفيذ Stored Procedure الليدربورد الحقيقي على Supabase مباشرة -
+ * get_leaderboard(period_type, limit_count). طابقنا التوقيع والأعمدة
+ * هنا بالظبط على التعريف الفعلي المؤكد من قاعدة البيانات:
+ *   RETURNS TABLE(id uuid, full_name text, avatar_url text,
+ *                 steps bigint, points bigint, rank_position bigint)
+ * ملحوظتين مهمتين عن سلوكها الفعلي:
+ *   1) الأعمدة اسمها "steps" و"rank_position" (مش total_steps/rank) -
+ *      شوف normalizeLeaderboardRow() تحت اللي بتوحّدهم لأسماء موحّدة
+ *      نستخدمها في باقي الملف.
+ *   2) الدالة بترجع بس أعلى limit_count صف (مش كل المستخدمين) - عشان
+ *      كده بنبعت LEADERBOARD_RPC_FETCH_LIMIT (200) صراحة بدل الاعتماد
+ *      على الافتراضي (50)، عشان نوسّع أكتر ما يمكن مدى حساب "مركزك
+ *      الحالي" في renderSelfRankBar تحت من غير Request تاني منفصل.
+ *      rank_position نفسه محسوب صح عالمياً (ROW_NUMBER() على كل صفوف
+ *      profiles قبل ما الـ LIMIT يتطبّق)، فمفيش مشكلة في دقة الأرقام
+ *      الراجعة حتى لو مقطوعة عند 200.
+ * @param {'today'|'week'|'month'} periodKey
+ * @returns {Promise<Array<{id:string, full_name:string, avatar_url:string|null, points:number, total_steps:number, rank:number}>>}
+ */
+async function fetchLeaderboardData(periodKey) {
+    const periodType = PERIOD_TYPE_MAP[periodKey] || PERIOD_TYPE_MAP.today;
+
+    const { data, error } = await supabaseClient.rpc('get_leaderboard', {
+        period_type: periodType,
+        limit_count: LEADERBOARD_RPC_FETCH_LIMIT,
+    });
+
+    if (error) {
+        console.error(`خطأ في تنفيذ get_leaderboard(period_type: '${periodType}'):`, error.message);
+        return [];
+    }
+
+    return (data || []).map(normalizeLeaderboardRow);
+}
+
+/**
+ * جلب العدد الحقيقي لـ"المشاركين الفعليين" (نقط/خطوات أكبر من صفر) في
+ * فترة بطولة معينة، عن طريق get_leaderboard_active_count - RPC منفصلة
+ * بترجع count(*) خام من غير أي LIMIT، فمظبوطة 100% مهما كبر عدد
+ * المستخدمين (بعكس الاعتماد القديم على طول rows المجلوبة من
+ * get_leaderboard نفسها، اللي كانت هتفضل مقفولة عند LEADERBOARD_RPC_FETCH_LIMIT
+ * = 200 لو التطبيق كبر أوي - شوف sql/... اللي فيه تعريفها). لو حصل أي
+ * خطأ، بنرجع null (مش صفر) عشان renderRemainingParticipantsCount تعرف
+ * تفرّق بين "معرفناش نجيب الرقم" و"فعلاً محدش تاني"، فمتخفيش الجملة
+ * غلط بسبب خطأ شبكة عابر.
+ * @param {'today'|'week'|'month'} periodKey
+ * @returns {Promise<number|null>}
+ */
+/**
+ * جلب إجمالي عدد المستخدمين المسجلين في التطبيق كله (بغض النظر عن أي
+ * نشاط في أي فترة) - مستخدم في جملة الحماس تحت القائمة (شوف
+ * buildRemainingParticipantsPhrase). القرار ده بديل عن العدّ بالنشاط
+ * الفعلي بس (get_leaderboard_active_count كانت هتفضل بترجع صفر/رقم صغير
+ * جداً في أول أيام التطبيق - قبل ما يتجمع نشاط حقيقي كفاية)؛ استخدمنا
+ * إجمالي المسجلين بدل كده عشان الجملة تظهر من أول يوم وتحفّز أي حد
+ * لسه ما لعبش إنه ينزل يشارك، مش بس تعكس اللي بيلعب فعلاً دلوقتي.
+ *
+ * نفس منطق fetchTotalProfilesCount في profiles.js بالظبط (نفس الـ View
+ * public_profiles، ونفس أسلوب count: 'exact', head: true) - مكرّرة هنا
+ * بدل ما نستوردها عشان نفس فلسفة عدم الاستيراد المتبادل غير الضروري
+ * بين ملفات الليدربورد والبروفايل (شوف تعليق "ليه ملف منفصل" في
+ * presence.js لنفس المبدأ)
+ * @returns {Promise<number|null>} null يعني فشل الجلب (خطأ شبكة/RPC)
+ */
+async function fetchTotalRegisteredUsersCount() {
+    const { count, error } = await supabaseClient
+        .from('public_profiles')
+        .select('id', { count: 'exact', head: true });
+
+    if (error) {
+        console.error('خطأ في حساب إجمالي عدد المستخدمين المسجلين:', error.message);
+        return null;
+    }
+
+    return count ?? 0;
+}
+
+/**
+ * توحيد شكل أي صف راجع من get_leaderboard (steps/rank_position) لأسماء
+ * موحّدة (total_steps/rank) نستخدمها في باقي الملف - Number(...) هنا
+ * احتياطاً بس، لأن أعمدة bigint في Postgres ممكن يرجعها بعض عملاء
+ * PostgREST كـ string لتجنب فقدان الدقة مع أرقام كبيرة جداً، وده مش
+ * متوقع يحصل هنا لأرقام نقاط/خطوات عادية لكن بنتحسب له.
+ * @param {{id:string, full_name:string, avatar_url:string|null, steps:number|string, points:number|string, rank_position:number|string}} row
+ */
+function normalizeLeaderboardRow(row) {
+    return {
+        id: row.id,
+        full_name: row.full_name || 'بطل',
+        avatar_url: row.avatar_url || null,
+        points: Number(row.points ?? 0),
+        total_steps: Number(row.steps ?? 0),
+        rank: Number(row.rank_position ?? 0),
+        // (المرحلة 7) هيفضل undefined لحد ما get_leaderboard() نفسها
+        // تتحدّث في Supabase عشان ترجّع العمود ده - شوف sql/phase-7-badges.sql.
+        // لحد ما يحصل ده، القيمة هتبقى undefined دايماً وأيقونة الشارة
+        // المميزة ببساطة مش هتظهر في الليدربورد (من غير أي خطأ)
+        featured_badge_id: row.featured_badge_id ?? null,
+    };
+}
+
+/** رجوع معرف المستخدم الحالي (لو مسجل دخول) - قراءة sync سريعة من الجلسة المحفوظة محلياً (نفس ما بيستخدمه auth.js)، من غير أي Request شبكة إضافي */
+function getCurrentUserId() {
+    const user = restoreSession();
+    return user?.id || null;
+}
+
+/** رجوع قيمة عمود معين (points أو total_steps) من صف - بديفولت صفر لو مش موجود */
+function metricValueOf(row, metric) {
+    return row?.[metric] ?? 0;
+}
+
+/** وحدة القياس المعروضة في نصوص الفرق (نقطة/خطوة) حسب المقياس */
+function metricUnitLabel(metric) {
+    return metric === 'total_steps' ? 'خطوة' : 'نقطة';
+}
+
+/**
+ * بترجع جملة "و (رقم) بطل كمان بينافسوك عليها" بصيغة عربية سليمة حسب
+ * قواعد عدد/معدود العربي (١ مفرد، ٢ مثنى، ٣-١٠ جمع "أبطال"، ١١+ مفرد
+ * "بطل" - نفس قاعدة "أعلى 3 أبطال" المستخدمة في نص podiumSubtitle فوق).
+ * الدالة دي بترجع الجملة كاملة جاهزة للعرض، أو null لو count <= 0 (يبقى
+ * المفروض العنصر يتخفي تمامًا مش يتحط له نص فاضي)
+ * @param {number} count - عدد "الأبطال" (المشاركين الفعليين) بره أول 10
+ * @returns {string|null}
+ */
+function buildRemainingParticipantsPhrase(count) {
+    if (!count || count <= 0) return null;
+    if (count === 1) return 'و بطل واحد كمان بينافسوك عليها 🔥';
+    if (count === 2) return 'و بطلين كمان بينافسوك عليها 🔥';
+    if (count <= 10) return `و ${count} أبطال كمان بينافسوك عليها 🔥`;
+    return `و ${count} بطل كمان بينافسوك عليها 🔥`;
+}
+
+/**
+ * تحديث جملة الحماس "و (رقم) بطل كمان بينافسوك عليها" تحت القائمة -
+ * الرقم إجمالي المستخدمين المسجلين في التطبيق (شوف
+ * fetchTotalRegisteredUsersCount) - مش مربوط بفترة بطولة معينة، فبيفضل
+ * نفس القيمة في التبويبات التلاتة (يومي/أسبوعي/شهري).
+ * @param {number|null} totalUsersCount - null يعني حصل خطأ في جلب
+ * الرقم (شبكة/RPC) - في الحالة دي بنسيب الجملة زي ما هي (مخفية
+ * افتراضياً من renderLeaderboardLoadingState) بدل ما نفترض صفر غلط
+ */
+function renderRemainingParticipantsCount(totalUsersCount) {
+    const el = document.getElementById('leaderboardParticipantsCount');
+    if (!el) return;
+
+    if (totalUsersCount === null) return; // فشل الجلب - سيبها مخفية زي ما هي، متفترضش صفر
+
+    const remainingCount = Math.max(0, totalUsersCount - LEADERBOARD_DISPLAY_LIMIT);
+    const phrase = buildRemainingParticipantsPhrase(remainingCount);
+
+    if (!phrase) {
+        el.classList.add('hidden');
+        el.textContent = '';
+        return;
+    }
+
+    el.textContent = phrase;
+    el.classList.remove('hidden');
+}
+
+/** تنسيق رقم كبير بصيغة مختصرة ("12.4K" بدل "12400") - نفس منطق formatCompactNumber المستخدم في باقي الملفات */
+function formatCompactNumber(num) {
+    if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
+    return String(num);
+}
+
+/** إخراج آمن (HTML-escaped) لأي نص هيتحط جوه template string - مفيدة قبل عرض full_name/title جوه innerHTML */
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text ?? '';
+    return div.innerHTML;
+}
+
+/**
+ * (المرحلة 7) بترجع HTML جاهز لأيقونة الشارة المميزة (أو نص فاضي لو
+ * مفيش شارة/الكاش لسه مش جاهز) - تُستخدم جوه template باقي القائمة
+ * (renderLeaderboardRemainingList) اللي بتتبني بالكامل بـ innerHTML مع
+ * كل رسم، بعكس منصّة التتويج (عناصر ثابتة بتتحدّث في مكانها)
+ * @param {string|null|undefined} featuredBadgeId
+ * @returns {string}
+ */
+function featuredBadgeIconHtml(featuredBadgeId) {
+    const badge = featuredBadgeId ? leaderboardBadgesCatalogCache?.get(featuredBadgeId) : null;
+    if (!badge) return '';
+    return `<span class="featured-badge-icon" title="${escapeHtml(badge.title)}" style="margin-inline-start:0.25rem;">${escapeHtml(badge.icon)}</span>`;
+}
+
+/** تحديث نص عنصر بمعرفه (id) لو موجود فعلاً في الصفحة - اختصار بسيط بيتكرر استخدامه كتير تحت */
+function setElementText(elementId, text) {
+    const el = document.getElementById(elementId);
+    if (el) el.textContent = text;
+}
+
+/**
+ * (المرحلة 5) إعادة تشغيل حركة الدخول (.champ-pop-in من CSS) على عنصر
+ * ثابت في الصفحة زي كروت منصّة التتويج - العناصر دي (بعكس كروت باقي
+ * القائمة) بتتحدّث في مكانها بنفس الـ DOM node مع كل تبديل تبويب، مش
+ * بتتحذف وتتعاد، فمجرد إضافة الكلاس مرة واحدة من الأول مش كفاية عشان
+ * الـ Animation يشتغل تاني. الحل القياسي: نشيل الكلاس، نجبر Reflow
+ * بقراءة offsetWidth (المتصفح لازم "ينسى" إن الكلاس كان متحط قبل كده)،
+ * وبعدين نرجّع الكلاس تاني عشان الحركة تبدأ من الصفر.
+ * @param {HTMLElement|null} el
+ */
+function replayEntranceAnimation(el) {
+    if (!el) return;
+    el.classList.remove('champ-pop-in');
+    void el.offsetWidth; // إجبار Reflow - سطر ضروري، متسيبوش
+    el.classList.add('champ-pop-in');
+}
+
+/**
+ * فتح البروفايل العام لصاحب صف معين بالضغط عليه - بنستورد
+ * openPublicProfile من profiles.js بشكل ديناميكي (import() بدل import
+ * ثابت فوق الملف) عمداً، بنفس أسلوب استيراد notifications.js الموجود
+ * جوه profiles.js نفسه، عشان نتجنب أي Circular Import ثابت بين
+ * leaderboard.js وprofiles.js (هي أصلاً بتعمل import ثابت من الملف ده).
+ * @param {string} userId
+ */
+async function openLeaderboardUserProfile(userId) {
+    if (!userId) return;
+    try {
+        const { openPublicProfile } = await import('./profiles.js');
+        if (typeof openPublicProfile === 'function') await openPublicProfile(userId);
+    } catch (err) {
+        console.error('تعذر فتح البروفايل العام من لوحة الصدارة:', err);
+    }
+}
+
+/**
+ * رسم منصّة التتويج (المراكز 1، 2، 3) بالبيانات الحقيقية الراجعة من
+ * get_leaderboard. كل صف بييجي معاه points وtotal_steps سوا دايماً،
+ * فبنعرض الاتنين في الـ Dual-Stat Badge بغض النظر عن أي المقياسين هو
+ * الأساس في ترتيب البطولة الحالية.
+ * @param {Array<object>} rows
+ */
+function renderLeaderboardPodium(rows) {
+    const podiumUserIds = [];
+
+    PODIUM_SLOTS.forEach((slot, index) => {
+        const row = rows[slot.rank - 1] || null;
+        const nameEl = document.getElementById(slot.nameEl);
+        const pointsEl = document.getElementById(slot.pointsEl);
+        const stepsEl = document.getElementById(slot.stepsEl);
+        const avatarEl = document.getElementById(slot.avatarEl);
+        const presenceEl = document.getElementById(slot.presenceEl);
+        const cardEl = document.querySelector(`.podium-card[data-rank="${slot.rank}"]`);
+
+        // (المرحلة 5) إزالة حالة الـ Skeleton أولاً - لو لسه متحطة من
+        // renderLeaderboardLoadingState - قبل ما نرسم القيم الحقيقية،
+        // عشان النص/الإحصائيات الحقيقية تبان فوراً بدل ما تفضل مخفية
+        // وراء ستايل الـ Skeleton سهواً
+        [nameEl, pointsEl, stepsEl].forEach((el) => el?.classList.remove('champ-skel'));
+
+        if (nameEl) nameEl.textContent = row ? row.full_name : '—';
+        if (pointsEl) pointsEl.textContent = row ? row.points.toLocaleString() : '—';
+        if (stepsEl) stepsEl.textContent = row ? formatCompactNumber(row.total_steps) : '—';
+        if (avatarEl) avatarEl.src = row?.avatar_url || slot.fallback;
+
+        // نقطة "أونلاين الآن" لصاحب المركز ده - شوف js/presence.js. لو
+        // مفيش صف أصلاً في المركز ده بنشيل الـ data attribute عشان
+        // النقطة تفضل مخفية (مش هتتفعّل لأي id قديم متسيب من رسمة فاتت)
+        if (presenceEl) {
+            if (row?.id) {
+                presenceEl.setAttribute('data-presence-avatar', row.id);
+                podiumUserIds.push(row.id);
+            } else {
+                presenceEl.removeAttribute('data-presence-avatar');
+                presenceEl.classList.remove('is-online');
+            }
+        }
+
+        // (المرحلة 7) أيقونة الشارة المميزة جنب اسم صاحب المركز
+        ensureLeaderboardBadgesCatalogCache().then(() => {
+            renderFeaturedBadgeInline(nameEl, row?.featured_badge_id);
+        });
+
+        // الضغط على صورة أو اسم صاحب المركز (1، 2، أو 3) بيفتح بروفايله
+        // العام - بنعيد تعيين onclick في كل رسم (بدل addEventListener)
+        // عشان العناصر دي ثابتة في الصفحة وما بتتحذفش، فمش عايزين نراكم
+        // نفس الـ Listener مرات كتير مع كل تحميل جديد للّيدربورد
+        [nameEl, avatarEl].forEach((el) => {
+            if (!el) return;
+            el.onclick = row ? () => openLeaderboardUserProfile(row.id) : null;
+            el.classList.toggle('cursor-pointer', Boolean(row));
+        });
+
+        // (المرحلة 5) دخول تدريجي متتالي (Staggered Entrance) - كل كارت
+        // بيدخل بعد اللي قبله بفارق بسيط (شوف --stagger-index في CSS).
+        // بنعيد تشغيلها مع كل تحديث بيانات (مش بس أول تحميل) عشان تبديل
+        // التبويبات يحس بحركة حيّة بدل ما البيانات الجديدة تقفز فجأة
+        if (cardEl) {
+            cardEl.style.setProperty('--stagger-index', String(index));
+            replayEntranceAnimation(cardEl);
+        }
+    });
+
+    if (podiumUserIds.length > 0) loadAndApplyPresence(podiumUserIds);
+}
+
+/**
+ * رسم باقي القائمة (المراكز من 4 لحد LEADERBOARD_DISPLAY_LIMIT) وإبراز
+ * صف المستخدم الحالي لو موجود ضمنهم - كروت زجاجية (.rank-card) بشريط
+ * إحصائيات مزدوج (خطوات + نقاط سوا).
+ * @param {Array<object>} rows
+ */
+function renderLeaderboardRemainingList(rows) {
+    const list = document.getElementById('leaderboardList');
+    if (!list) return;
+
+    const remaining = rows.slice(3, LEADERBOARD_DISPLAY_LIMIT);
+    const currentUserId = getCurrentUserId();
+
+    if (remaining.length === 0) {
+        list.innerHTML = `
+            <p class="text-xs text-lux-500 font-medium text-center py-6">
+                لسه مفيش متسابقين تانيين في البطولة دي
+            </p>
+        `;
+        return;
+    }
+
+    list.innerHTML = remaining.map((row, index) => {
+        const isCurrentUser = Boolean(currentUserId && row.id === currentUserId);
+        // (المرحلة 5) --stagger-index بيتحدد Inline لكل كارت هنا - كروت
+        // القائمة دي بتتحذف وتتعاد بالكامل مع كل رسم (innerHTML)، فمجرد
+        // ما العنصر الجديد يتضاف للـ DOM، الحركة (.champ-pop-in في CSS)
+        // بتشتغل تلقائياً من غير أي Reflow-Trick زي منصّة التتويج فوق
+        const staggerIndex = Math.min(index, CHAMP_MAX_STAGGER_INDEX);
+
+        return `
+            <article class="rank-card champ-pop-in${isCurrentUser ? ' rank-card-self' : ''}" data-leaderboard-user-id="${row.id}" style="--stagger-index:${staggerIndex}">
+                <span class="rank-card-number">${row.rank}</span>
+                <span class="relative inline-block shrink-0">
+                    <img src="${row.avatar_url || DEFAULT_AVATAR_URI}" alt="${escapeHtml(row.full_name)}"
+                         class="rank-card-avatar"
+                         onerror="this.onerror=null;this.src='${DEFAULT_AVATAR_URI}'">
+                    ${presenceDotHtml(row.id)}
+                </span>
+                <div class="rank-card-info">
+                    <h5 class="rank-card-name">${escapeHtml(row.full_name)}${isCurrentUser ? ' (أنت)' : ''}${featuredBadgeIconHtml(row.featured_badge_id)}</h5>
+                    <div class="dual-stat-badge dual-stat-badge-compact">
+                        <span class="dual-stat-item" title="عدد الخطوات">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l2-6 4 12 2-6h6"/></svg>
+                            <span>${formatCompactNumber(row.total_steps)}</span>
+                        </span>
+                        <span class="dual-stat-divider" aria-hidden="true"></span>
+                        <span class="dual-stat-item" title="النقاط">
+                            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2l2.9 6.6 7.1.6-5.4 4.7 1.6 7-6.2-3.9-6.2 3.9 1.6-7L2 9.2l7.1-.6z"/></svg>
+                            <span>${row.points.toLocaleString()}</span>
+                        </span>
+                    </div>
+                </div>
+            </article>
+        `;
+    }).join('');
+
+    list.querySelectorAll('[data-leaderboard-user-id]').forEach((rowEl) => {
+        rowEl.addEventListener('click', () => openLeaderboardUserProfile(rowEl.dataset.leaderboardUserId));
+    });
+
+    loadAndApplyPresence(remaining.map((row) => row.id));
+}
+
+/**
+ * تحديث شريط "مركزك الحالي" المثبت (#selfRankBar) بالترتيب والصورة
+ * والإحصائيات المزدوجة (خطوات + نقاط) والفرق الحقيقي عن اللي فوقه
+ * مباشرة في الترتيب. بما إن rows هنا (حسب الفرض المعماري في
+ * fetchLeaderboardData) بترجع كل المستخدمين مش بس أعلى 50، فالحساب
+ * دقيق دايماً حتى لو ترتيب المستخدم الحالي بره أعلى 10 الظاهرين في
+ * الواجهة.
+ *
+ * (تحديث - طلب صريح): الشريط ده كان متسكّر تماماً (`display: none
+ * !important` في leaderboard-championships.css) من قبل عشان كان بياخد
+ * مساحة محسوسة ومشتّت أثناء التصفح. دلوقتي رجّعناه، لكن **بس** لما
+ * ترتيب المستخدم يبقى بره أول 10 الظاهرين في الليدربورد نفسه (اللي
+ * جواه أصلاً صفه بيتحدد بـ .rank-card-self، فمفيش داعي شريط سفلي زيادة
+ * يكرر نفس المعلومة). النص بقى "ترتيبك (٣٧)" بدل الرقم والتسمية
+ * المنفصلين "مركزك" - شوف #currentUserRankNumber في index.html.
+ * @param {Array<object>} rows
+ * @param {'points'|'total_steps'} metric
+ */
+function renderSelfRankBar(rows, metric) {
+    const rankNumberEl = document.getElementById('currentUserRankNumber');
+    const gapTextEl = document.getElementById('currentUserRankPercentText');
+    const pointsEl = document.getElementById('currentUserRankPointsBadge');
+    const stepsEl = document.getElementById('selfRankSteps');
+    const avatarEl = document.getElementById('selfRankAvatar');
+    const barEl = document.getElementById('selfRankBar');
+
+    const currentUserId = getCurrentUserId();
+    const myRow = currentUserId ? rows.find((row) => row.id === currentUserId) : null;
+
+    // الشريط بيظهر بس لو المستخدم مسجّل دخول، ترتيبه معروف فعلاً، وبره
+    // أول LEADERBOARD_DISPLAY_LIMIT الظاهرين في القائمة - غير كده بيفضل
+    // مخفي (صفه ظاهر أصلاً جوه القائمة نفسها لو ضمن أول 10)
+    const shouldShowBar = Boolean(myRow && myRow.rank > LEADERBOARD_DISPLAY_LIMIT);
+    if (barEl) barEl.classList.toggle('hidden', !shouldShowBar);
+
+    if (!shouldShowBar) return;
+
+    if (avatarEl && myRow.avatar_url) avatarEl.src = myRow.avatar_url;
+    if (rankNumberEl) rankNumberEl.textContent = `ترتيبك (${myRow.rank.toLocaleString()})`;
+    if (pointsEl) pointsEl.textContent = myRow.points.toLocaleString();
+    if (stepsEl) stepsEl.textContent = formatCompactNumber(myRow.total_steps);
+
+    if (gapTextEl) {
+        // اللي فوق المستخدم الحالي مباشرة - بنلاقيه بالـ rank نفسه
+        // (مش بالـ index) عشان نفضل مظبوطين حتى لو فيه أي فجوة غير
+        // متوقعة في الأرقام الراجعة من الـ RPC
+        const aboveRow = rows.find((row) => row.rank === myRow.rank - 1);
+
+        if (aboveRow) {
+            const gapValue = Math.max(0, metricValueOf(aboveRow, metric) - metricValueOf(myRow, metric));
+            const unit = metricUnitLabel(metric);
+            gapTextEl.textContent = gapValue > 0
+                ? `فاضلك ${gapValue.toLocaleString()} ${unit} لتسبق المركز ${aboveRow.rank}`
+                : 'قربت جداً من اللي فوقك.. كمّل!';
+        } else {
+            gapTextEl.textContent = 'كمّل نشاطك عشان تتقدم في الترتيب!';
+        }
+    }
+
+    if (barEl) barEl.classList.remove('is-topper');
+}
+
+/**
+ * عرض حالة تحميل (Skeleton) في منصّة التتويج، باقي القائمة، وشريط
+ * "مركزك الحالي" فوراً وقت بداية أي Request جديد - عشان مفيش أي قفزة
+ * بصرية أو ظهور مفاجئ لبيانات فاضية/قديمة أثناء انتظار الرد من Supabase.
+ */
+function renderLeaderboardLoadingState() {
+    const podium = document.getElementById('podiumContainer');
+    if (podium) podium.classList.add('animate-pulse', 'opacity-60', 'pointer-events-none');
+
+    // (المرحلة 5) Skeleton حقيقي بأبعاد ثابتة (كلاس champ-skel في CSS)
+    // بدل نص "..." الجامد القديم - بيمنع أي قفزة بصرية (Layout Shift)
+    // لما البيانات الحقيقية توصل، لأن أبعاد الشريط الرمادي قريبة جداً
+    // من أبعاد النص الحقيقي اللي هيحل محله. المسافة الغير منقسمة
+    // (NBSP) بدل نص فاضي تماماً عشان ارتفاع السطر يفضل ثابت حتى لو
+    // المتصفح تجاهل أبعاد champ-skel لأي سبب
+    PODIUM_SLOTS.forEach((slot) => {
+        [slot.nameEl, slot.pointsEl, slot.stepsEl].forEach((elementId) => {
+            const el = document.getElementById(elementId);
+            if (!el) return;
+            el.textContent = '\u00A0';
+            el.classList.add('champ-skel');
+        });
+    });
+
+    const list = document.getElementById('leaderboardList');
+    if (list) {
+        list.innerHTML = Array.from({ length: LEADERBOARD_SKELETON_ROWS }).map(() => `
+            <div class="rank-card" aria-hidden="true">
+                <span class="w-5 h-3 rounded bg-white/10 animate-pulse inline-block flex-shrink-0"></span>
+                <span class="w-10 h-10 rounded-full bg-white/10 animate-pulse inline-block flex-shrink-0"></span>
+                <div class="flex-1 min-w-0 flex flex-col gap-2">
+                    <span class="block w-24 h-3 rounded bg-white/10 animate-pulse"></span>
+                    <span class="block w-32 h-3 rounded bg-white/5 animate-pulse"></span>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    setElementText('currentUserRankNumber', '—');
+    setElementText('selfRankSteps', '—');
+    setElementText('currentUserRankPointsBadge', '—');
+    setElementText('currentUserRankPercentText', 'بنجيب بيانات ترتيبك...');
+
+    const participantsCountEl = document.getElementById('leaderboardParticipantsCount');
+    if (participantsCountEl) participantsCountEl.classList.add('hidden');
+
+    const barEl = document.getElementById('selfRankBar');
+    if (barEl) barEl.classList.add('animate-pulse');
+}
+
+/** إزالة كلاسات حالة التحميل (Skeleton) بعد وصول البيانات الحقيقية ورسمها */
+function clearLeaderboardLoadingState() {
+    const podium = document.getElementById('podiumContainer');
+    if (podium) {
+        podium.classList.remove('animate-pulse', 'opacity-60', 'pointer-events-none');
+        // شبكة أمان إضافية (المرحلة 5) - renderLeaderboardPodium() بتشيل
+        // champ-skel بنفسها أصلاً من كل عنصر بترسمه، لكن بنتأكد هنا كمان
+        // من غير أي استثناء لو حصل خطأ غير متوقع في الرسم
+        podium.querySelectorAll('.champ-skel').forEach((el) => el.classList.remove('champ-skel'));
+    }
+
+    const barEl = document.getElementById('selfRankBar');
+    if (barEl) barEl.classList.remove('animate-pulse');
+}
+
+/**
+ * نقطة الدخول الموحّدة لجلب ورسم بيانات فترة بطولة معينة بالكامل -
+ * بتتنادى من setActivePeriod() (تبديل تبويب يدوي) ومن tickCountdown()
+ * (لما دورة البطولة تتصفر تلقائياً في منتصف الليل/نهاية الأسبوع أو
+ * الشهر). فيها حماية من Race Conditions عن طريق leaderboardFetchToken:
+ * لو المستخدم بدّل تبويب تاني بسرعة قبل ما Request قديم يخلص، بنتجاهل
+ * نتيجته لما توصل متأخرة عشان بيانات بطولة غلط ماتظهرش فوق تبويب جديد.
+ * @param {'today'|'week'|'month'} periodKey
+ */
+async function loadAndRenderPeriod(periodKey) {
+    const config = CHAMPIONSHIP_PERIODS[periodKey];
+    if (!config) return;
+
+    const requestToken = ++leaderboardFetchToken;
+    renderLeaderboardLoadingState();
+
+    let rows = [];
+    let totalUsersCount = null;
+    try {
+        // (المرحلة 7) بنجيب كتالوج الأوسمة بالتوازي مع صفوف الليدربورد
+        // نفسها (مش بعدها) - عشان لما نوصل لمرحلة الرسم (renderLeaderboardPodium/
+        // renderLeaderboardRemainingList) يكون الكاش جاهز فعلاً ونقدر
+        // نستخدمه sync جوه template الـ innerHTML، من غير Flicker
+        // (الشارة تظهر بعد الاسم بلحظة) زي لو جبناها بعد الرسم.
+        // (تحديث) وبرضه بالتوازي: إجمالي عدد المستخدمين المسجلين -
+        // مش مربوط بالفترة نفسها فعليًا، لكن بنجيبه هنا كل مرة (بدل
+        // تخزينه مرة واحدة بس) عشان يفضل محدّث مع أي تسجيل جديد
+        [rows, , totalUsersCount] = await Promise.all([
+            fetchLeaderboardData(periodKey),
+            ensureLeaderboardBadgesCatalogCache(),
+            fetchTotalRegisteredUsersCount(),
+        ]);
+    } catch (err) {
+        console.error('استثناء غير متوقع أثناء تحميل بيانات البطولة:', err);
+    }
+
+    // Request قديم وصل متأخر بعد ما المستخدم بدّل تبويب تاني بالفعل -
+    // بنتجاهل نتيجته تماماً (لا رسم ولا حتى إخفاء الـ Skeleton، عشان
+    // الـ Request الأحدث هو اللي هيتكفل بده لما يخلص هو)
+    if (requestToken !== leaderboardFetchToken) return;
+
+    leaderboardRows = rows;
+
+    clearLeaderboardLoadingState();
+    renderLeaderboardPodium(rows);
+    renderLeaderboardRemainingList(rows);
+    renderRemainingParticipantsCount(totalUsersCount);
+    renderSelfRankBar(rows, config.metric);
+}
+
+
+/* ==================================================================
+   5) الواجهة العامة (Public API) - دي بس اللي المفروض تتستورد من برّه
+   ================================================================== */
+
+/**
+ * (Legacy - شوف الملحوظة المعمارية أعلى الملف) تسجيل دالة تحميل بيانات
+ * خارجية. متسابة بس عشان التوافق مع النداء الموجود فعلاً جوه
+ * initLeaderboardUI() في profiles.js - القيمة المسجّلة هنا مبقتش
+ * بتتنادى من جوه الملف ده تاني بعد المرحلة 4 (loadAndRenderPeriod
+ * بقت هي المسؤولة مباشرة عن الجلب من Supabase).
+ * @param {Function} loaderFn
+ */
+export function registerLeaderboardDataLoader(loaderFn) {
+    leaderboardDataLoader = loaderFn;
+}
+
+/** @returns {'today'|'week'|'month'} الفترة النشطة حالياً */
+export function getActivePeriod() {
+    return activePeriod;
+}
+
+/** @returns {'points'|'total_steps'} مقياس الترتيب المستخدم في الفترة النشطة حالياً */
+export function getActiveMetric() {
+    return CHAMPIONSHIP_PERIODS[activePeriod].metric;
+}
+
+/**
+ * نقطة الدخول الرئيسية - تُستدعى من initLeaderboardUI() في js/profiles.js.
+ * بتربط أزرار التبويبات وتفعّل فترة بطولة بكل ما يخصها (عداد + جلب ورسم
+ * بيانات حقيقية من Supabase).
+ *
+ * ملحوظة مهمة: مش دايماً بتفعّل initialPeriod ("اليومية") بالقوة. أول
+ * تهيئة فعلية بس (لسه tabEventsBound = false) هي اللي بتاخد initialPeriod.
+ * أي نداء تاني بعد كده (مثلاً initProfileUI بتتنادى تاني من حدث
+ * "auth:login" اللي Supabase ممكن يطلقه تاني بمجرد رجوع فوكس التاب أو
+ * تجديد التوكن، حتى من غير أي تسجيل دخول فعلي جديد) بيحافظ على الفترة
+ * اللي المستخدم كان واقف فيها فعلاً (activePeriod) بدل ما يرجّعه بالقوة
+ * لـ"اليومية" من غير أي كليك منه - وده بالظبط سبب باج "بترجعني لليومية
+ * فجأة وانا في الشهرية".
+ * @param {'today'|'week'|'month'} [initialPeriod='today']
+ */
+export function initChampionshipTabs(initialPeriod = 'today') {
+    const alreadyInitialized = tabEventsBound;
+    bindChampionshipTabs();
+
+    const periodToActivate = alreadyInitialized
+        ? activePeriod
+        : (CHAMPIONSHIP_PERIODS[initialPeriod] ? initialPeriod : 'today');
+
+    setActivePeriod(periodToActivate);
+}
+
+/**
+ * تنظيف كامل (إيقاف العداد الشغال) - مش لازم تتنادى في السياق العادي
+ * للتطبيق (الصفحة SPA وعناصرها ثابتة طول عمر التبويب)، لكن متاحة لو
+ * احتجت تفكيك الموديول ده يدوياً (مثلاً أثناء اختبارات Unit Tests)
+ */
+export function destroyChampionshipTimers() {
+    stopCountdown();
+}

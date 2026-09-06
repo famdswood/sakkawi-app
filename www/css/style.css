@@ -1,0 +1,3353 @@
+/* ==================================================================
+   سِكّاوي | css/style.css
+   ------------------------------------------------------------------
+   هذا الملف يحتوي على:
+   1) متغيرات نظام الألوان (Design Tokens) الخاصة بهوية "Dark Luxury"
+      + نسخة "Light" منها لدعم المود الفاتح (Light Mode)
+   2) التنسيقات الأساسية للـ body والعناصر العامة
+   3) الرسوم المتحركة والتأثيرات البصرية (Animations)
+   4) تنسيقات مكونات محددة (الشريط الشخصي، الستوريز، التبويبات، زرار
+      تبديل المود)
+
+   ملاحظة: التنسيقات هنا "تكميلية" فوق Tailwind CDN المُحمّل من index.html
+   (الذي يحتوي أغلب الـ Utility Classes)، وليست بديلاً عنه.
+   ================================================================== */
+
+/* ------------------------------------------------------------------
+   1) متغيرات نظام الألوان (نفس القيم المستخدمة في tailwind.config)
+   موجودة هنا كـ CSS Variables عشان:
+   أ) أي عنصر يحتاج قيمة مباشرة في CSS عادي يقدر يستخدمها
+   ب) tailwind.config بيقرأ ألوان "lux" من هنا مباشرة (var(--lux-XXX))
+      وده اللي بيخلي التبديل بين المود الداكن/الفاتح يشتغل تلقائياً
+      على كل كلاسات Tailwind (bg-lux-900, text-lux-50... إلخ) من غير
+      ما نغيّر أي كلاس في الـ HTML وقت التبديل
+   ------------------------------------------------------------------ */
+:root {
+    /* درجات الأسطح الداكنة (Dark Luxury - المود الافتراضي) */
+    --lux-950: #0B0D12;   /* خلفية الصفحة الأساسية */
+    --lux-900: #0F1219;   /* خلفية الكروت والهيدر */
+    --lux-800: #14171F;   /* أسطح مرتفعة قليلاً (Elevated) */
+    --lux-700: #1E222D;   /* حدود وفواصل داكنة */
+    --lux-600: #5C5966;
+    --lux-500: #7D7A85;
+    --lux-400: #9A96A0;   /* نصوص ثانوية */
+    --lux-50:  #F3EFE3;   /* نص أساسي (عاجي دافئ) */
+
+    /* اللون الذهبي: يمثل الإنجاز والفخامة (ثابت في المودين) */
+    --gold-300: #F2D77E;
+    --gold-400: #E8C158;
+    --gold-500: #D4AF37;
+    --gold-600: #B8942A;
+
+    /* التركواز: لون العلامة التجارية الثانوي (ثابت في المودين) */
+    --brand-500: #14b8a6;
+    --brand-600: #0d9488;
+
+    /* ياقوتي مكتوم - لون واحد بس، مستخدم حصرياً في حالة "آخر 5 ثواني"
+       بمؤقت كارت السؤال اليومي (js/daily-question.js). مفيش لون أحمر
+       تاني في أي مكان في المشروع، فمتقلقش تستخدمه في مكان تاني */
+    --dq-timer-danger: #d9534f;
+}
+
+/* ------------------------------------------------------------------
+   1.1) قيم المود الفاتح (Light Mode)
+   بتتفعّل تلقائياً لما كلاس "dark" يتشال من <html> (js/theme.js هو
+   المسؤول عن إضافة/إزالة الكلاس ده). نفس أسماء المتغيرات، قيم مختلفة،
+   فمفيش أي حاجة تانية محتاجة تتغيّر في باقي المشروع
+   ------------------------------------------------------------------ */
+html:not(.dark) {
+    --lux-950: #F7F4EC;   /* خلفية الصفحة الأساسية (عاجي فاتح دافئ) */
+    --lux-900: #FFFFFF;   /* خلفية الكروت والهيدر */
+    --lux-800: #F1ECDF;   /* أسطح مرتفعة قليلاً (Elevated) */
+    --lux-700: #E2DBC9;   /* حدود وفواصل فاتحة */
+    --lux-600: #8B8778;
+    --lux-500: #6B6759;
+    --lux-400: #57534A;   /* نصوص ثانوية (غامقة بما يكفي فوق خلفية فاتحة) */
+    --lux-50:  #1C1A15;   /* نص أساسي غامق دافئ */
+}
+
+/* ------------------------------------------------------------------
+   1.2) سياسة التجاوب (Responsive Policy) - قاعدة ثابتة لكل المشروع
+   ------------------------------------------------------------------
+   التطبيق مبني على تصميم "إطار موبايل" (Phone Frame): حاوية رئيسية
+   واحدة عرضها الأقصى ثابت دايماً عند max-w-md (28rem = 448px) ومتمركزة
+   في نص الشاشة (body: flex justify-center)، بغض النظر عن حجم الشاشة
+   الفعلي (موبايل صغير / عادي / تابلت / ديسكتوب). فبدل ما المحتوى يتمدد
+   ويتباعد على شاشة عريضة، بيفضل شكله زي تطبيق موبايل حقيقي وسط الشاشة.
+
+   القاعدة دي لازم تتحترم في أي CSS جديد أو تعديل:
+   - أي عنصر ثابت (fixed) بيغطي عرض الشاشة كله (هيدر، بار سفلي، توست،
+     بانرات) لازم يتمركز بنفس max-w-md بالظبط، مش أعرض ومش أضيق، عشان
+     يفضل متحاذي مع حاوية التطبيق تحته على أي مقاس شاشة.
+   - الـ @media (min-width: ...) المستخدمة في المشروع دايماً لتحسينات
+     بسيطة (مساحة لمس أكبر، إزاحة/تأثير حركي مختلف) - مش لتكبير عرض
+     الحاويات. أي استثناء حقيقي لازم يتوثّق بتعليق زي ده يشرح السبب.
+   ------------------------------------------------------------------ */
+
+/* ------------------------------------------------------------------
+   1.3) شاشة "لف الموبايل رأسي" - شوف التعليق المصاحب في index.html
+   ------------------------------------------------------------------ */
+.landscape-lock-overlay {
+    display: none;
+}
+@media (orientation: landscape) and (max-height: 500px) {
+    .landscape-lock-overlay {
+        display: flex;
+        position: fixed;
+        inset: 0;
+        z-index: 999999;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 1rem;
+        padding: 2rem;
+        text-align: center;
+        background: var(--lux-950);
+        color: var(--lux-50);
+    }
+    .landscape-lock-overlay svg {
+        width: 2.75rem;
+        height: 2.75rem;
+        color: var(--gold-400);
+        animation: landscapeLockRotateHint 1.8s ease-in-out infinite;
+    }
+    .landscape-lock-overlay p {
+        font-family: 'Cairo', 'Tajawal', sans-serif;
+        font-weight: 800;
+        font-size: 0.95rem;
+        max-width: 20rem;
+    }
+}
+@keyframes landscapeLockRotateHint {
+    0%, 100% { transform: rotate(0deg); }
+    50%      { transform: rotate(-90deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+    .landscape-lock-overlay svg {
+        animation: none !important;
+    }
+}
+
+
+/* ------------------------------------------------------------------
+   2) التنسيقات الأساسية
+   ------------------------------------------------------------------ */
+body {
+    font-family: 'Cairo', 'Tajawal', sans-serif;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+    /* [تعديل - إصلاح تجاوب APK]: منع أثر "المطاط" (Overscroll Bounce)
+       عند وصول اللف لآخر نقطة فوق/تحت - ده تحديداً بيبان بشكل غريب/مقطوع
+       جوه WebView تطبيق APK (مفيش شريط متصفح حواليه يوضح إنه سكرول عادي)،
+       بعكس المتصفح العادي اللي التأثير ده مقبول فيه بصريًا */
+    overscroll-behavior-y: none;
+    /* إلغاء شريط التمرير خالص في كل التطبيق (Firefox) - شوف
+       ::-webkit-scrollbar تحت لباقي المتصفحات (Chrome/Safari/Edge) */
+    scrollbar-width: none;
+    -ms-overflow-style: none; /* Edge القديم/IE */
+}
+
+/* إلغاء شريط التمرير خالص في كل عنصر قابل للسكرول في التطبيق (Chrome/
+   Safari/Edge الحديث) - كان فيه شريط تمرير مخصص هنا (رفيع بلون ذهبي)
+   بناءً على طلب صريح سابق، اتشال تمامًا بناءً على طلب أحدث. اللف
+   (Scroll) نفسه لسه شغال زي ما هو، بس من غير أي شريط ظاهر */
+::-webkit-scrollbar {
+    display: none;
+}
+
+/* ملحوظة: .notif-scroll و#storiesBar كان ليهم قواعد شريط تمرير مخصصة/
+   مخفية منفصلة قبل كده (شوف قسم "قائمة الإشعارات" تحت) - بقت زيادة عن
+   الحاجة دلوقتي لأن ::-webkit-scrollbar فوق بقى بيغطي كل عنصر في
+   الصفحة، فاتشالت من هناك بدل ما تتكرر لغرض واحد في مكانين */
+
+/* إتاحة استخدام focus واضح لأغراض إمكانية الوصول (Accessibility) */
+button:focus-visible,
+input:focus-visible {
+    outline: 2px solid var(--gold-500);
+    outline-offset: 2px;
+}
+
+/* ------------------------------------------------------------------
+   2.1) انتقال ناعم بين المود الداكن والفاتح
+   بنحدد الخصائص المرتبطة بالألوان بس (مش كل شيء) عشان الأداء يفضل
+   كويس، وعشان مانكسرش الرسوم المتحركة التانية (transform..إلخ) اللي
+   عناصر تانية بتستخدمها بكلاسات Tailwind أكتر تحديداً
+   ------------------------------------------------------------------ */
+body,
+header,
+nav,
+main,
+button,
+input,
+[class*="bg-lux-"],
+[class*="text-lux-"],
+[class*="border-gold-"],
+[class*="border-lux-"] {
+    transition: background-color 0.35s ease, color 0.35s ease, border-color 0.35s ease;
+}
+
+/* ------------------------------------------------------------------
+   3) الرسوم المتحركة (Animations)
+   ------------------------------------------------------------------ */
+
+/* نبضة خفيفة للعناصر النشطة (زي ستريك الأيام) */
+@keyframes subtlePulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+}
+.animate-subtle-pulse {
+    animation: subtlePulse 2.5s infinite ease-in-out;
+}
+
+/* حالة تحميل هادية لاسم الهيدر (#headerUserName / #profileName) - بتتفعّل
+   بس لو لسه معندناش أي اسم حقيقي نعرضه (لا من Supabase ولا من كاش محلي
+   من زيارة سابقة - شوف renderProfileHeader في js/profiles.js). بديل عن
+   عرض اسم المستخدم (username) أو أي نص مؤقت غلط لحد ما البيانات
+   الحقيقية توصل. */
+@keyframes headerNameSkeletonPulse {
+    0%, 100% { opacity: 0.4; }
+    50% { opacity: 0.85; }
+}
+.header-name-skeleton {
+    display: inline-block;
+    width: 96px;
+    max-width: 60%;
+    height: 0.95em;
+    border-radius: 6px;
+    background: var(--lux-700);
+    animation: headerNameSkeletonPulse 1.3s infinite ease-in-out;
+    vertical-align: middle;
+}
+
+/* تأثير لمعان ذهبي على الشارات (Badges) المفتوحة */
+.badge-glow {
+    position: relative;
+    overflow: hidden;
+}
+.badge-glow::after {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: linear-gradient(60deg, transparent, rgba(232, 193, 88, 0.25), transparent);
+    transform: rotate(30deg);
+    animation: shimmer 4s infinite;
+}
+@keyframes shimmer {
+    0%   { transform: translate(-100%, -100%) rotate(30deg); }
+    100% { transform: translate(100%, 100%) rotate(30deg); }
+}
+
+/* أنيميشن ظهور هادئ للشاشات المستقلة اللي كانت مودالات منبثقة قبل كده
+   (زي #createStoryModal بعد ما بقت Full-screen Screen) - فيد بسيط +
+   انزلاق خفيف من تحت لفوق، بنفس روح باقي شاشات التطبيق. اختياري: يتفعّل
+   بإضافة كلاس "screen-fade-in" على العنصر لحظة إظهاره (شوف stories.js) */
+@keyframes screenFadeSlideIn {
+    from { opacity: 0; transform: translateY(12px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+.screen-fade-in {
+    animation: screenFadeSlideIn 0.28s ease-out;
+}
+
+/* احترام تفضيل تقليل الحركة للمستخدمين اللي فعّلوه في نظام التشغيل */
+@media (prefers-reduced-motion: reduce) {
+        .animate-subtle-pulse,
+    .badge-glow::after,
+    .animate-bounce,
+    .screen-fade-in,
+    .story-heart-btn.pulse svg {   /* السطر الجديد */
+        animation: none !important;
+    }
+    .animate-subtle-pulse,
+    .badge-glow::after,
+    .animate-bounce,
+    .post-comment-row.is-highlighted .post-comment-bubble {
+        animation: none !important;
+    }
+
+    /* تعطيل انتقال الألوان الناعم بين المودين واستبداله بتبديل فوري */
+    body,
+    header,
+    nav,
+    main,
+    button,
+    input,
+    [class*="bg-lux-"],
+    [class*="text-lux-"],
+    [class*="border-gold-"],
+    [class*="border-lux-"],
+    #themeToggleThumb,
+    #notificationsModal,
+    .notif-panel,
+    .notif-card {
+        transition: none !important;
+    }
+}
+
+/* ------------------------------------------------------------------
+   4) تنسيقات مكونات محددة
+   ------------------------------------------------------------------ */
+
+/* كانفاس تأثير الكونفيتي الاحتفالي (يعمل فوق كل شيء) */
+#confettiCanvas {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    pointer-events: none;
+    z-index: 9999;
+}
+
+/* التبديل بين تبويبات الشاشة الرئيسية */
+.tab-content {
+    display: none;
+    opacity: 0;
+    transform: translateY(8px);
+    transition: opacity 0.25s ease, transform 0.25s ease;
+}
+.tab-content.active {
+    display: block;
+    opacity: 1;
+    transform: translateY(0);
+}
+
+/* دائرة الستوري في الشريط العلوي (js/stories.js بيتحكم في محتواها) */
+.story-avatar {
+    width: 4rem;
+    height: 4rem;
+    border-radius: 9999px;
+    padding: 2px;
+    background: linear-gradient(135deg, var(--gold-400), var(--brand-500));
+    flex-shrink: 0;
+    cursor: pointer;
+    transition: transform 0.2s ease;
+}
+.story-avatar:active {
+    transform: scale(0.95);
+}
+.story-avatar.viewed {
+    background: var(--lux-700);
+}
+.story-avatar img {
+    width: 100%;
+    height: 100%;
+    border-radius: 9999px;
+    object-fit: cover;
+    border: 2px solid var(--lux-950);
+}
+
+/* ------------------------------------------------------------------
+   4.2) زر "هويتي" (أول عنصر ثابت في storiesBar - js/stories.js)
+   بيحل محل دائرة "أضف قصة" الفارغة القديمة: بيعرض صورة المستخدم
+   الحالي نفسه (avatar_url أو الأفاتار الافتراضي)، مع بادج (+) صغير
+   عائم في الركن السفلي لإنشاء استوري جديدة. نفس مقاس .story-avatar
+   الأساسي بالظبط (فمفيش أي تشوه بصري أو اختلاف مسافات في الشريط
+   الأفقي)، لكن بحاوية position:relative عشان نقدر نثبّت البادج فوقها
+   ------------------------------------------------------------------ */
+.story-avatar.my-story-avatar {
+    position: relative;
+    display: block;
+    /* لما يكون عند المستخدم استوري نشطة، .story-avatar الأساسي بيدّي
+       الإطار المتدرج اللامع (padding: 2px + الخلفية المتدرجة) زي أي
+       دائرة استوري تانية بالظبط - من غير أي تعديل إضافي هنا */
+}
+
+/* الحالة الافتراضية: مفيش استوري نشطة عند المستخدم - بنلغي الإطار
+   المتدرج اللامع (اللي معناه "عندك استوري لسه محدش شافها") ونستبدله
+   بإطار بسيط هادئ، عشان الفرق يبقى واضح بصريًا بين "عندك استوري" و
+   "مفيش عندك استوري لسه" بنفس فلسفة إنستجرام بالظبط */
+.story-avatar.my-story-avatar.no-active-story {
+    background: var(--lux-700);
+    padding: 2px;
+}
+
+.my-story-avatar-img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    padding: 0;
+    margin: 0;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    border-radius: 9999px;
+}
+.my-story-avatar-img img {
+    width: 100%;
+    height: 100%;
+    border-radius: 9999px;
+    object-fit: cover;
+    border: 2px solid var(--lux-950);
+    display: block;
+    transition: transform 0.2s ease;
+}
+.my-story-avatar-img:active img {
+    transform: scale(0.95);
+}
+
+/* بادج الـ (+) العائم في الركن السفلي - ذهبي/تركواز متدرج ولافت،
+   بحلقة (ring) بلون خلفية الصفحة var(--lux-950) بتفصله بصريًا عن صورة
+   المستخدم اللي وراه. بنستخدم خصائص منطقية (inset-inline-end/
+   inset-block-end) بدل left/right/bottom الصريحة عشان يفضل شغال صح
+   في الصفحة بتاعتنا اللي dir="rtl" (الركن السفلي القريب من بداية
+   السطر منطقيًا، زي إنستجرام تمامًا) */
+.my-story-add-badge {
+    /* (إصلاح) بادج الـ (+) كان <button> بيورّث الـ UA stylesheet الافتراضي
+       بتاع المتصفح (font-family/line-height/box-sizing مختلفين عن باقي
+       الصفحة) - وده اللي كان بيخلي المسافة فوق/تحت علامة الـ + مش متساوية
+       فتبان "مش في النص". box-sizing: border-box + margin: 0 + font: inherit
+       هنا بيصفّروا أي فرق موروث من المتصفح قبل ما نيجي نحسب التوسيط */
+    box-sizing: border-box;
+    margin: 0;
+    font: inherit;
+    appearance: none;
+    -webkit-appearance: none;
+    position: absolute;
+    inset-block-end: -2px;
+    inset-inline-end: -2px;
+    width: 1.15rem;
+    height: 1.15rem;
+    min-width: 0;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 9999px;
+    background: linear-gradient(135deg, var(--gold-400), var(--brand-500));
+    border: 2px solid var(--lux-950);
+    box-shadow: 0 0 0 1px rgba(212, 175, 55, 0.35);
+    cursor: pointer;
+    z-index: 1;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+    animation: subtlePulse 2.5s infinite ease-in-out;
+}
+/* (إصلاح) بدل ما نعتمد على حرف "+" نصي جوه <span> - شكل الحرف ده مش
+   متمركز عمودياً بنفس القيمة في كل الخطوط (الـ glyph نفسه غالباً أعلى
+   شوية من نص الصندوق اللي بيحسبه المتصفح)، فمهما ظبطنا flex هيفضل
+   بايظ بصريًا. الحل المضمون 100%: نرسم الـ + بخطين (بار أفقي + بار
+   رأسي) بـ CSS نفسه فوق الـ span الفاضي، فبيبقى متمركز بالبكسل مهما
+   كان الخط المستخدم في الصفحة */
+.my-story-add-badge span {
+    position: relative;
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+.my-story-add-badge span::before,
+.my-story-add-badge span::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    background: #0B0D12;
+    border-radius: 1px;
+}
+.my-story-add-badge span::before {
+    /* البار الأفقي */
+    width: 0.55rem;
+    height: 0.14rem;
+    transform: translate(-50%, -50%);
+}
+.my-story-add-badge span::after {
+    /* البار الرأسي */
+    width: 0.14rem;
+    height: 0.55rem;
+    transform: translate(-50%, -50%);
+}
+.my-story-add-badge:hover,
+.my-story-add-badge:focus-visible {
+    transform: scale(1.12);
+    box-shadow: 0 0 0 2px rgba(212, 175, 55, 0.5);
+}
+.my-story-add-badge:active {
+    transform: scale(0.9);
+    animation: none;
+}
+@media (prefers-reduced-motion: reduce) {
+    .my-story-add-badge {
+        animation: none;
+    }
+}
+
+/* ------------------------------------------------------------------
+   4.3) أزرار اختيار خلفية الاستوري (#storyBgOptions - مودال الإنشاء)
+   دايرة صغيرة بلون/تدرج الخيار نفسه، وحلقة ذهبية بارزة حوالين
+   الخيار المختار حالياً (.selected) بدل ما نغيّر الحجم أو نضيف علامة
+   صح فوقها عشان اللون الأصلي للخيار يفضل واضح ومقروء بالكامل
+   ------------------------------------------------------------------ */
+.story-bg-swatch {
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: 9999px;
+    flex-shrink: 0;
+    cursor: pointer;
+    border: 2px solid transparent;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+    transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.story-bg-swatch:hover {
+    transform: scale(1.08);
+}
+/* حلقة التحديد الذهبية + توهج ناعم إضافي حوالينها - بيبرز أكتر
+   فوق خلفيات النيون/الفاتحة الجديدة (volt, gold, cyber) من غير ما
+   يغيّر شكل الحلقة الأساسي المعتمد في باقي عناصر الاختيار */
+.story-bg-swatch.selected {
+    border-color: var(--gold-400);
+    box-shadow: 0 0 0 2px var(--lux-900), 0 0 0 4px var(--gold-500), 0 0 12px 1px rgba(242, 215, 126, 0.55);
+}
+
+/* ------------------------------------------------------------------
+   4.3-ب) وضوح نص الاستوري فوق كل الخلفيات (معاينة الإنشاء + مشغل
+   المشاهدة الفعلي) - ظل خفيف تحت النص الأبيض يضمن قراءة مريحة حتى
+   فوق التدرجات الفاتحة/النيون الجديدة (gold, volt, cyber) من غير ما
+   يأثر على الخلفيات الداكنة (carbon, teal, crimson...)
+   ------------------------------------------------------------------ */
+#storyPreviewText,
+#storyContent p {
+    text-shadow: 0 2px 8px rgba(0, 0, 0, 0.65);
+}
+
+/* (المرحلة 4-ب) #storyContent بيبقى الـ containing block الصريح لكبسولة
+   .story-stat-sticker وقت العرض في المشغل الفعلي، بدل ما يعتمد بالصدفة
+   على إن أبوه (#storyViewerCard) هو الـ position:relative الوحيد في
+   السلسلة - بما إن #storyContent أصلاً w-full h-full زي أبوه بالظبط،
+   الإضافة دي مالهاش أي أثر بصري تاني غير إنها بتضمن تموضع الكبسولة صح
+   حتى لو اتغيّر هيكل storyViewerCard في تعديل مستقبلي */
+#storyContent {
+    position: relative;
+}
+
+/* ------------------------------------------------------------------
+   4.4) أزرار اختيار شكل الخط (#storyFontOptions - مودال الإنشاء)
+   الشكل الافتراضي (لون lux-300 فوق lux-800) بييجي inline من stories.js
+   نفسه؛ هنا بس بنحدد شكل حالة الاختيار (.selected) عشان تتماشى مع
+   هوية الذهبي المستخدمة في باقي عناصر التحديد بالتطبيق
+   ------------------------------------------------------------------ */
+.story-font-btn.selected {
+    background: linear-gradient(135deg, var(--gold-400), var(--gold-600)) !important;
+    border-color: var(--gold-500) !important;
+    color: var(--lux-950) !important;
+}
+
+/* ------------------------------------------------------------------
+   4.5) أزرار اختيار مدة عرض الاستوري (#storyDurationOptions - مودال الإنشاء)
+   نفس شكل حالة الاختيار المستخدمة في story-font-btn بالظبط، عشان
+   يبقى متسق بصريًا مع باقي أزرار الاختيار في نفس المودال
+   ------------------------------------------------------------------ */
+.story-duration-btn.selected {
+    background: linear-gradient(135deg, var(--gold-400), var(--gold-600)) !important;
+    border-color: var(--gold-500) !important;
+    color: var(--lux-950) !important;
+}
+
+/* ------------------------------------------------------------------
+   4.6) أزرار اختيار خصوصية الاستوري (#storyVisibilityOptions - مودال
+   الإنشاء) - نفس أسلوب الاختيار المستخدم في story-duration-btn/
+   story-font-btn بالظبط. (تعديل) خيار محاذاة النص اتشال بالكامل بناءً
+   على طلب المستخدم - نص الاستوري بقى دايمًا في النص (.text-center)
+   ------------------------------------------------------------------ */
+.story-visibility-btn.selected {
+    background: linear-gradient(135deg, var(--gold-400), var(--gold-600)) !important;
+    border-color: var(--gold-500) !important;
+    color: var(--lux-950) !important;
+}
+
+/* ------------------------------------------------------------------
+   4.7) زرار تفعيل "ملصق الإنجاز الحي" (#btnToggleStatSticker - مودال
+   الإنشاء، المرحلة 4-أ). الشكل الافتراضي: Dark Luxury هادئ (سطح
+   lux-800 وحدود ذهبية خفيفة) بنفس روح باقي أزرار الاختيار في المودال.
+   حالة .is-active (لما المستخدم يفعّل الملصق): خلفية ذهبية متدرجة +
+   توهج خفيف + نص داكن واضح فوقها، بنفس منطق .selected في الأزرار
+   التانية بالظبط عشان يبقى الاتساق البصري كامل جوه المودال
+   ------------------------------------------------------------------ */
+.story-stat-toggle-btn {
+    background: var(--lux-800);
+    border: 1px solid rgba(212, 175, 55, 0.15);
+    color: var(--lux-300, var(--lux-50));
+}
+
+.story-stat-toggle-btn:hover {
+    border-color: rgba(212, 175, 55, 0.35);
+}
+
+.story-stat-toggle-btn:active {
+    transform: scale(0.98);
+}
+
+.story-stat-toggle-btn.is-active {
+    background: linear-gradient(135deg, var(--gold-400), var(--gold-600));
+    border-color: var(--gold-500);
+    color: var(--lux-950);
+    box-shadow: 0 0 16px 1px rgba(212, 175, 55, 0.35);
+}
+
+/* ------------------------------------------------------------------
+   4.8) كبسولة "ملصق الإنجاز الحي" (.story-stat-sticker - المعاينة الحية
+   #storyPreviewSticker وقت الإنشاء، المرحلة 4-أ + مشغل المشاهدة الفعلي
+   #storyContent .story-stat-sticker وقت العرض، المرحلة 4-ب). الكلاس
+   عام (مش مربوط بـ ID معيّن) عشان نفس الشكل بالظبط - خلفية زجاجية
+   داكنة فاخرة، أرقام ذهبية/بيضاء واضحة، حدود ناعمة متوهجة - يتطابق
+   تلقائيًا بين المكانين من غير أي تكرار في الـ CSS.
+   (تعديل) بقى المستخدم قادر يسحب الكبسولة لأي مكان جوه المعاينة وقت
+   الإنشاء ويكبّرها/يصغّرها بإصبعين (Pinch) - راجع bindStickerDragAndResize
+   في stories.js. المكان والمقاس بقوا متحكم فيهم بمتغيرات CSS مخصصة:
+   --sticker-x/--sticker-y (نسبة % من عرض/ارتفاع الحاوية، مركز الكبسولة)
+   و--sticker-scale (معامل تكبير/تصغير) - لو مفيش قيمة متحطة (استوري
+   قديمة اتنشرت قبل الميزة دي)، بيرجع تلقائيًا لنفس المكان الافتراضي
+   القديم تقريبًا (تحت النص، في النص أفقيًا) بفضل قيم fallback الـ var().
+   pointer-events: none بشكل افتراضي (المرحلة 4-ب): الكبسولة وقت العرض
+   الفعلي (#storyContent .story-stat-sticker) عنصر عرض بس (مفيهاش أي
+   تفاعل بالنقر)، فتعطيل أحداث الإشارة عليها بيضمن إن أي ضغطة فوقها
+   جوه مشغل الاستوري (#storyViewerModal) "تنفذ" لغاية العنصر اللي تحتها
+   فعليًا (منطقتا التنقل #storyRightZone/#storyLeftZone)، من غير ما
+   الكبسولة تحجب أو تتعارض مع التنقل يمين/شمال أبداً. #storyPreviewSticker
+   وقت الإنشاء بس بيلغي ده تحت (pointer-events: auto) عشان يبقى قابل
+   للسحب فعليًا */
+.story-stat-sticker {
+    position: absolute;
+    left: var(--sticker-x, 50%);
+    top: var(--sticker-y, 88%);
+    transform: translate(-50%, -50%) scale(var(--sticker-scale, 1));
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 14px;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.5);
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(212, 175, 55, 0.45);
+    box-shadow: 0 4px 16px -4px rgba(0, 0, 0, 0.5);
+    white-space: nowrap;
+    max-width: calc(100% - 24px);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    z-index: 2;
+    pointer-events: none;
+}
+
+.story-stat-sticker.hidden {
+    display: none;
+}
+
+/* كبسولة المعاينة وقت الإنشاء بس (#storyPreviewSticker): قابلة للسحب
+   بإصبع واحد ولتكبير/تصغير بإصبعين (Pinch)، عكس نسخة العرض النهائي
+   اللي فوق (pointer-events: none). touch-action: none بيمنع المتصفح
+   من عمل Scroll/Zoom افتراضي على الكبسولة وقت اللمس، عشان يسيب التحكم
+   بالكامل للـ JS (راجع bindStickerDragAndResize في stories.js) */
+#storyPreviewSticker {
+    pointer-events: auto;
+    cursor: grab;
+    touch-action: none;
+}
+
+#storyPreviewSticker:active {
+    cursor: grabbing;
+}
+
+.story-stat-sticker-icon {
+    font-size: 14px;
+    line-height: 1;
+}
+
+.story-stat-sticker-steps {
+    font-family: 'Cairo', sans-serif;
+    font-weight: 900;
+    font-size: 13px;
+    color: #ffffff;
+    letter-spacing: 0.2px;
+}
+
+.story-stat-sticker-percent {
+    font-family: 'Cairo', sans-serif;
+    font-weight: 800;
+    font-size: 11px;
+    color: var(--gold-300, var(--gold-400));
+    padding-inline-start: 4px;
+    border-inline-start: 1px solid rgba(212, 175, 55, 0.4);
+}
+
+/* أشرطة تقدم الستوريز داخل المودال */
+.story-progress-bar {
+    flex: 1;
+    height: 3px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.25);
+    overflow: hidden;
+}
+.story-progress-bar > span {
+    display: block;
+    height: 100%;
+    width: 0%;
+    background: var(--gold-400);
+}
+
+/* ------------------------------------------------------------------
+   4.6) زرار "القلب" البرمجي (SVG) في مشغل الاستوري (المرحلة 3-2)
+   حالة عادية: قلب بحد أبيض شفاف من جوه. حالة "liked": يتلوّن ويتوهج
+   بلون التفاعل المميز (Rose)، مع نبضة (.pulse) بتتشغّل لحظة الضغط بس
+   ------------------------------------------------------------------ */
+.story-heart-btn {
+    width: 2.75rem;
+    height: 2.75rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 9999px;
+    background: rgba(0, 0, 0, 0.35);
+    backdrop-filter: blur(4px);
+    transition: transform 0.15s ease, background 0.25s ease;
+}
+.story-heart-btn:active {
+    transform: scale(0.9);
+}
+.story-heart-btn svg {
+    width: 1.5rem;
+    height: 1.5rem;
+}
+.story-heart-btn .heart-shape {
+    fill: transparent;
+    stroke: var(--lux-50);
+    stroke-width: 2;
+    transition: fill 0.25s ease, stroke 0.25s ease, filter 0.3s ease;
+}
+/* لون التفاعل المميز عند اللايك (Rose) - مختلف عمداً عن الذهبي/التركواز
+   الأساسيين في الهوية عشان يفضل واضح كـ "حالة تفاعل" منفصلة */
+.story-heart-btn.liked {
+    background: rgba(251, 113, 133, 0.18);
+}
+.story-heart-btn.liked .heart-shape {
+    fill: #fb7185;
+    stroke: #fb7185;
+    filter: drop-shadow(0 0 6px rgba(251, 113, 133, 0.85));
+}
+
+@keyframes heartPulse {
+    0%   { transform: scale(1); }
+    30%  { transform: scale(1.35); }
+    55%  { transform: scale(0.9); }
+    100% { transform: scale(1); }
+}
+.story-heart-btn.pulse svg {
+    animation: heartPulse 0.55s cubic-bezier(0.17, 0.89, 0.32, 1.49);
+}
+/* باگ: .story-heart-btn بتفرض display:flex بنفس specificity بتاعة
+   .hidden (كلاس واحد في الاتنين)، وبما إن القاعدة دي جايه بعد Tailwind
+   في الترتيب، كانت بتكسب وتخلي زرار القلب يفضل ظاهر حتى وهو حامل كلاس
+   hidden فعلاً (updateHeartButtonVisibility بتضيفه صح، بس الـ CSS مكنش
+   بيحترمه) - ده اللي كان بيسبب تراكب القلب مع زرار "مين شافها" لما
+   يكون المستخدم صاحب الاستوري. نفس مبدأ فيكس #notificationsModal فوق. */
+.story-heart-btn.hidden {
+    display: none !important;
+}
+/* حالة تعطيل مؤقت لأزرار الإجابة بعد الاختيار */
+.quiz-btn:disabled {
+    cursor: not-allowed;
+}
+
+/* شاشة تسجيل الدخول: عرض/إخفاء عبر كلاس utility بسيط
+   ملحوظة: #notificationsModal اتشالت من هنا لأنها بتستخدم كلاس "flex"
+   Tailwind ثابت في الـ HTML من الأساس (مش كلاس بيتضاف/يتشال ديناميكياً
+   زي authScreen/storyViewerModal)، فالقاعدة دي كانت بتطابقها طول الوقت
+   وبتفرض display:flex عليها حتى وهي معاها كلاس "hidden" (specificity
+   الـ ID+class هنا أعلى من ".hidden")، وده كان بيخلي اللوحة تقعد فوق
+   الشاشة كلها وتاخد كل الكليكات حتى وهي "مقفولة" ظاهريًا. عرض/إخفاء
+   #notificationsModal بقى معتمد بالكامل على toggle كلاس "hidden" بس
+   (شوف #notificationsModal تحت). */
+#authScreen.flex,
+#storyViewerModal.flex {
+    display: flex;
+}
+
+/* ------------------------------------------------------------------
+   4.1) زرار تبديل المود الداكن/الفاتح (Theme Toggle Switch)
+   العنصر نفسه ثابت المكان (right-0.5) والمقبض (Thumb) هو اللي بيتحرك
+   عن طريق transform، عشان الحركة تفضل سليمة برضه في صفحة RTL
+   ------------------------------------------------------------------ */
+#themeToggleThumb {
+    transform: translateX(0);
+}
+#themeToggleBtn.is-light #themeToggleThumb {
+    /* بيحرك المقبض ناحية الطرف التاني من المسار (44px عرض - 20px مقبض
+       - 4px بادينج على الجانبين = 20px مسافة الحركة) */
+    transform: translateX(-1.25rem);
+}
+
+/* ------------------------------------------------------------------
+   4.7) لوحة الإشعارات (Notifications Drawer)
+   Glassmorphism panel + كروت إشعارات بأنواعها التلاتة (طلب صداقة/
+   إنجاز/إعلان عام) + نقطة "غير مقروء" متوهجة + أزرار قبول/رفض طلب
+   الصداقة + حالة فارغة (Empty State) + سكرول بار مخصص + انتقالات
+   فتح/قفل ناعمة. راجع التعليقات فوق #notificationsModal في
+   index.html لتفاصيل "تصرافة" (Choreography) فتح/قفل اللوحة بالظبط،
+   واللي المرحلة الجاية (js/notifications.js) هتعتمد عليها.
+   ------------------------------------------------------------------ */
+
+/* الخلفية المعتمة خلف اللوحة - fade in/out بسيط. الشفافية والـ blur
+   بتاعة الخلفية نفسها جايين من كلاسات Tailwind مباشرة في الـ HTML
+   (bg-lux-950/70)، هنا بنتحكم بس في ظهور/اختفاء اللوحة كلها */
+#notificationsModal {
+    opacity: 0;
+    transition: opacity 0.28s ease;
+}
+#notificationsModal.is-open {
+    opacity: 1;
+}
+
+/* اللوحة نفسها: بتبدأ من برّه الشاشة (تحت في الموبايل) أو أصغر شوية
+   ومختفية (في الديسكتوب sm+)، وتتحرك لمكانها الطبيعي لما JS يضيف
+   كلاس "is-open" على #notificationsModal الأب */
+.notif-panel {
+    transform: translateY(100%);
+    transition: transform 0.34s cubic-bezier(0.22, 1, 0.36, 1);
+}
+#notificationsModal.is-open .notif-panel {
+    transform: translateY(0);
+}
+@media (min-width: 640px) {
+    .notif-panel {
+        transform: translateY(10px) scale(0.95);
+    }
+    #notificationsModal.is-open .notif-panel {
+        transform: translateY(0) scale(1);
+    }
+}
+
+/* تبويبات التصفية (الكل / غير المقروء) */
+.notif-tab-btn {
+    background: var(--lux-800);
+    color: var(--lux-400);
+    border: 1px solid transparent;
+    transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+.notif-tab-btn.is-active {
+    background: rgba(212, 175, 55, 0.12);
+    color: var(--gold-400);
+    border-color: rgba(212, 175, 55, 0.35);
+}
+/* شارة العداد الصغيرة جوه تبويب "غير المقروء" - JS بيحدّث رقمها،
+   ولو وصل العداد لصفر يقدر يخفيها بكلاس "hidden" */
+.notif-tab-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    border-radius: 999px;
+    background: var(--gold-500);
+    color: var(--lux-950);
+    font-size: 10px;
+    font-weight: 900;
+    line-height: 1;
+}
+
+/* سكرول بار قائمة الإشعارات: اتشال (شوف ::-webkit-scrollbar في قسم 2
+   فوق - بقى بيغطي كل عنصر في الصفحة بما فيهم دي، فمحتاجينش تكرار هنا) */
+
+/* ---- كارت الإشعار ----
+   الكارت نفسه (.notif-card) بقى بس "الإطار" الثابت: الحدود، الاستدارة،
+   overflow:hidden (بيقص خلفية الحذف بنفس استدارة الكارت)، وانيميشن
+   الـ Collapse عند الحذف (.is-removing). الخلفية الفعلية ومحتوى الكارت
+   القابل للسحب اتنقلوا لـ .notif-card-inner جواه (شوف تحت) عشان نقدر
+   نحرّكه أفقياً بـ translateX من غير ما نأثر على إطار الكارت أو نكسر
+   انيميشن الـ Collapse بتاعته */
+.notif-card {
+    position: relative;
+    border-radius: 1.25rem;
+    border: 1px solid rgba(212, 175, 55, 0.08);
+    max-height: 20rem;
+    overflow: hidden;
+    transition: opacity 0.25s ease, transform 0.25s ease, max-height 0.35s ease,
+                margin 0.35s ease, border-color 0.2s ease;
+}
+/* حالة "غير مقروء" - حدود ذهبية خفيفة عشان تلفت النظر من غير ما تبقى
+   صارخة أو تكسر هدوء التصميم العام (الخلفية الأفتح بقت على .notif-card-inner تحت) */
+.notif-card.is-unread {
+    border-color: rgba(212, 175, 55, 0.22);
+}
+
+/* خلفية "حذف" الحمراء - ثابتة على يسار الكارت لكن بعرض صفر افتراضياً
+   (مش ظاهرة خالص طول ما محدش بيسحب)، وJS هو اللي بيكبّر عرضها بالظبط
+   بقد مسافة السحب الفعلية (شوف handleNotifCardPointerMove في
+   notifications.js) - مش طبقة كاملة العرض ثابتة تحت الكارت، عشان كده
+   ملهاش أي تأثير بصري في الحالة العادية. direction:ltr هنا عشان
+   flex-start/padding-left يفضلوا معناهم "يسار الشاشة فعلياً" مهما كان
+   اتجاه الصفحة (rtl)، لأن الكشف بيبدأ فعلياً من يسار الكارت مع سحبه
+   لليمين */
+.notif-swipe-bg {
+    position: absolute;
+    inset-block: 0;
+    left: 0;
+    width: 0;
+    overflow: hidden;
+    direction: ltr;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    padding-left: 1.35rem;
+    background: linear-gradient(135deg, #ef4444, #b91c1c);
+    color: #fff;
+    transition: width 0.3s cubic-bezier(0.22, 1, 0.36, 1), background 0.15s ease;
+}
+/* أثناء السحب الفعلي - بنلغي انتقال العرض عشان الكشف يتابع الإصبع
+   لحظياً بالظبط زي .notif-card-inner.is-dragging تحت (نفس الفلسفة) */
+.notif-swipe-bg.is-dragging {
+    transition: background 0.15s ease;
+}
+.notif-swipe-label {
+    font-size: 0.78rem;
+    font-weight: 800;
+    letter-spacing: 0.01em;
+    white-space: nowrap;
+    transition: transform 0.15s ease;
+}
+/* لما السحب يعدّي الحد المطلوب للحذف (شوف SWIPE_DELETE_RATIO) - تغذية
+   راجعة بصرية واضحة إن الإفلات دلوقتي هيحذف الإشعار فعلاً */
+.notif-swipe-bg.is-armed {
+    background: linear-gradient(135deg, #f87171, #dc2626);
+}
+.notif-swipe-bg.is-armed .notif-swipe-label {
+    transform: scale(1.08);
+}
+
+/* المحتوى الفعلي للكارت (الأيقونة + النص) - هو اللي بيتحرك أفقياً أثناء
+   السحب (translateX عبر JS)، فوق خلفية .notif-swipe-bg، وبيحمل نفس
+   الخلفية/الـ padding اللي كانت أصلاً على .notif-card قبل التقسيم ده */
+/* المحتوى الفعلي للكارت (الأيقونة + النص) - هو اللي بيتحرك أفقياً أثناء
+   السحب (translateX عبر JS)، فوق خلفية .notif-swipe-bg، وبيحمل نفس
+   الخلفية/الـ padding اللي كانت أصلاً على .notif-card قبل التقسيم ده.
+   الخلفية بقت غامقة أكتر عمداً (بدل الشفافة اللي كانت 3% بس) عشان نص
+   الرسالة والوقت (--lux-400/--lux-600، رماديين فاتحين نسبياً) يبانوا
+   بوضوح أكتر فوقها - التباين مع لون النص الفاتح بيزيد كل ما الخلفية
+   بقت أغمق */
+.notif-card-inner {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    padding: 0.875rem;
+    background: rgba(6, 6, 12, 0.45);
+    /* pan-y: بيسيب المتصفح يعمل سكرول رأسي عادي للقائمة، وبيسيب JS
+       يتحكم في الحركة الأفقية (السحب) - شوف preventDefault الشرطي في
+       handleNotifCardPointerMove */
+    touch-action: pan-y;
+    transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1), background-color 0.2s ease;
+}
+.notif-card:hover .notif-card-inner {
+    background: rgba(6, 6, 12, 0.58);
+}
+/* غير مقروء: نفس فكرة الغامق فوق، بس بميل دافئ خفيف للذهبي (بدل
+   الرمادي المحايد) عشان يفضل واضح إنه "غير مقروء" زي التصميم الأصلي،
+   من غير ما نضحي بالتباين اللي المستخدم طلبه */
+.notif-card.is-unread .notif-card-inner {
+    background: rgba(38, 28, 6, 0.5);
+}
+/* (إصلاح - الوضع النهاري): لوحة الإشعارات نفسها زجاجية شبه شفافة
+   (bg-lux-900/75) وبتبقى بيضاء في الوضع النهاري. الطبقة الغامقة فوق
+   (rgba(6,6,12,...)) دي كانت ثابتة في المودين، فكانت بتطلع كبقعة رمادية/
+   بنية معتّمة فوق خلفية بيضاء بدل عمق خفيف زي في الداكن - ده اللي كان
+   بيسبب صعوبة قراءة عنوان ورسالة كل كارت إشعار في الوضع النهاري. هنا
+   بنستبدلها بطبقة فاتحة دافئة (متطابقة مع --lux-950 الفاتح) بدل السودا،
+   فيفضل نفس مبدأ "الكارت أوضح شوية من اللوحة اللي وراه" لكن بالاتجاه
+   الصح حسب المود */
+html:not(.dark) .notif-card-inner {
+    background: rgba(247, 244, 236, 0.7);
+}
+html:not(.dark) .notif-card:hover .notif-card-inner {
+    background: rgba(247, 244, 236, 0.92);
+}
+html:not(.dark) .notif-card.is-unread .notif-card-inner {
+    background: rgba(232, 193, 88, 0.16);
+}
+/* أثناء السحب الفعلي بالإصبع/الماوس (JS بيضيف الكلاس ده في
+   handleNotifCardPointerMove) - بنلغي الـ transition عشان الكارت يتابع
+   حركة الإصبع فوراً من غير أي تأخير، وبترجع تلقائياً بعد الإفلات لأن
+   الكلاس بيتشال وقتها (transition الافتراضية فوق بترجع تشتغل) */
+.notif-card-inner.is-dragging {
+    transition: none;
+}
+
+/* دايرة أيقونة نوع الإشعار - لونها بيتغيّر حسب data-notif-type على
+   .notif-card الأب (الأيقونة نفسها إيموجي جوه <span>، بتتحدد من JS) */
+.notif-icon-wrap {
+    flex-shrink: 0;
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: 9999px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.15rem;
+    background: var(--lux-700);
+}
+.notif-card[data-notif-type="friend_request"] .notif-icon-wrap {
+    background: rgba(13, 148, 136, 0.18); /* تركواز - علاقات/أصدقاء */
+}
+.notif-card[data-notif-type="achievement"] .notif-icon-wrap {
+    background: rgba(212, 175, 55, 0.18); /* ذهبي - إنجازات/أوسمة */
+}
+.notif-card[data-notif-type="system_broadcast"] .notif-icon-wrap {
+    background: rgba(148, 163, 184, 0.18); /* رمادي محايد - إعلانات النظام */
+}
+.notif-card[data-notif-type="leaderboard_pass"] .notif-icon-wrap {
+    background: rgba(217, 70, 239, 0.18); /* بنفسجي - تنافس/ترتيب */
+}
+/* admin_message: مفيهوش دايرة/أيقونة خالص وعمداً - كارت نصي بالكامل
+   بالذهبي عشان يتحس إنه إشعار رسمي/مميز عن باقي الأنواع (بدل الإيموجي
+   القديم اللي كان متحط في العنوان نفسه - شوف ADMIN_NOTIFICATION_TITLE
+   في admin.js). .notif-icon-wrap بيتخفي هنا، و.notif-card-inner فلكس
+   فبيسيب .notif-body ياخد العرض كله من غير أي تعديل layout إضافي
+   (نفس أسلوب إخفاء .notif-actions تحت بالظبط) */
+.notif-card[data-notif-type="admin_message"] .notif-icon-wrap,
+.notif-card[data-notif-type="admin_reply"] .notif-icon-wrap,
+.notif-card[data-notif-type="support_message"] .notif-icon-wrap {
+    display: none;
+}
+
+/* (تعديل - المرحلة 8) admin_reply (رد الأدمن عليك في شات الدعم)
+   وsupport_message (رسالة مستخدم جديدة وصلت للأدمن) - زي أي نوع تاني
+   ليه فعل تنقل، الكارت كله قابل للضغط (شوف handleNotificationsListClick
+   في notifications.js) */
+.notif-card[data-notif-type="admin_reply"],
+.notif-card[data-notif-type="support_message"] {
+    cursor: pointer;
+}
+
+/* صورة بروفايل صاحب طلب الصداقة - بتملأ دايرة .notif-icon-wrap بالكامل
+   بدل الإيموجي (شوف buildNotificationCard في notifications.js) */
+.notif-avatar-img {
+    width: 100%;
+    height: 100%;
+    border-radius: 9999px;
+    object-fit: cover;
+}
+
+/* (تعديل) ميدالية الأوسمة/الإنجازات (achievement/achievement_unlocked) -
+   بتملأ دايرة .notif-icon-wrap بالكامل بدل الإيموجي، بنفس منطق
+   .notif-avatar-img فوق (شوف ACHIEVEMENT_BADGE_SVG في notifications.js) */
+.notif-badge-icon {
+    width: 100%;
+    height: 100%;
+}
+
+/* منطقة الصورة/اسم صاحب طلب الصداقة جوه كارت friend_request قابلة للضغط
+   لفتح بروفايله العام (openPublicProfile في notifications.js) - مؤشر
+   الماوس بيوضح ده صراحة بدل ما يفضل نفس cursor عادي زي باقي الكارت */
+.notif-card[data-notif-type="friend_request"] .notif-icon-wrap,
+.notif-card[data-notif-type="friend_request"] .notif-title {
+    cursor: pointer;
+}
+
+/* الأنواع دي (على عكس friend_request) الكارت كله قابل للضغط للتنقل
+   (بروفايل/ستوري/تبويب الأوسمة أو الترتيب - شوف
+   handleNotificationsListClick في notifications.js)، فمؤشر الماوس
+   بيتحط على مستوى الكارت بالكامل */
+.notif-card[data-notif-type="friend_accept"],
+.notif-card[data-notif-type="story_reaction"],
+.notif-card[data-notif-type="achievement_unlocked"],
+.notif-card[data-notif-type="leaderboard_pass"] {
+    cursor: pointer;
+}
+
+.notif-body {
+    min-width: 0;
+    flex: 1;
+}
+.notif-body-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+}
+.notif-title {
+    font-size: 0.8rem;
+    font-weight: 800;
+    color: var(--lux-50);
+    line-height: 1.3;
+}
+/* نص الإشعار - محدود بسطرين بحد أقصى (line-clamp) عشان الكارت يفضل
+   بارتفاع متسق حتى لو النص طويل، والمستخدم يقدر يفتح تفاصيل الإشعار
+   لو حابب يقرا الباقي (سلوك الفتح نفسه هيتحدد في مرحلة الـ JS) */
+.notif-message {
+    font-size: 0.72rem;
+    font-weight: 500;
+    color: var(--lux-400);
+    line-height: 1.5;
+    margin-top: 0.15rem;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+.notif-time {
+    display: block;
+    font-size: 0.65rem;
+    font-weight: 600;
+    color: var(--lux-600);
+    margin-top: 0.35rem;
+}
+
+/* admin_message: العنوان (نص "رسالة من إدارة سِكّاوي" الثابت - شوف
+   ADMIN_NOTIFICATION_TITLE في admin.js) بلون النص العادي الأبيض/العاجي
+   (نفس .notif-title الافتراضي بره - var(--lux-50))، والرسالة (محتوى
+   الإشعار الفعلي اللي الأدمن كتبه) لوحدها بالذهبي (var(--gold-400))
+   عشان تفضل مميّزة عن باقي الأنواع من غير ما العنوان يبان "مبهت" فوق
+   خلفية الكارت الغامقة */
+.notif-card[data-notif-type="admin_message"] .notif-message,
+.notif-card[data-notif-type="admin_reply"] .notif-message,
+.notif-card[data-notif-type="support_message"] .notif-message {
+    color: var(--gold-400);
+}
+
+/* نقطة الإشعار غير المقروء - زرقاء متوهجة عمداً (لون مختلف عن الذهبي/
+   التركواز الأساسيين في الهوية) عشان تفضل واضحة كعلامة "جديد" مميزة
+   ومتمايزة بصريًا عن باقي ألوان التطبيق */
+.notif-unread-dot {
+    flex-shrink: 0;
+    width: 8px;
+    height: 8px;
+    border-radius: 9999px;
+    background: #38bdf8;
+    box-shadow: 0 0 8px rgba(56, 189, 248, 0.8);
+    margin-top: 0.2rem;
+}
+/* احتياطية: لو JS فضّل يخفي النقطة بدل ما يشيلها من الـ DOM لما
+   الإشعار يتقرا، بدل ما يعتمد بس على وجودها/غيابها في الـ HTML */
+.notif-card:not(.is-unread) .notif-unread-dot {
+    display: none;
+}
+
+/* أزرار قبول/رفض طلب الصداقة - ظاهرة بس لما data-notif-type يساوي
+   "friend_request"، فمحتاجينش أي كلاس إضافي من JS عشان يظهروا أو
+   يتخفوا حسب نوع الإشعار */
+.notif-actions {
+    display: none;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.6rem;
+}
+.notif-card[data-notif-type="friend_request"] .notif-actions {
+    display: flex;
+}
+.notif-action-btn {
+    flex: 1;
+    font-size: 0.68rem;
+    font-weight: 800;
+    padding: 0.4rem 0;
+    border-radius: 0.75rem;
+    transition: transform 0.15s ease, filter 0.15s ease, background-color 0.15s ease;
+}
+.notif-action-btn:active {
+    transform: scale(0.94);
+}
+.notif-action-accept {
+    background: linear-gradient(135deg, var(--gold-400), var(--gold-600));
+    color: var(--lux-950);
+}
+.notif-action-accept:hover {
+    filter: brightness(1.08);
+}
+.notif-action-reject {
+    background: var(--lux-700);
+    color: var(--lux-300);
+}
+.notif-action-reject:hover {
+    background: var(--lux-600);
+}
+
+/* رسالة تأكيد "تم قبول/رفض الطلب" - بتستبدل زرارين قبول/رفض مؤقتاً
+   بعد نجاح العملية (شوف showFriendRequestActionResult في notifications.js)
+   قبل ما الكارت كله يتشال بانيميشن الإزالة المعتاد */
+.notif-action-result {
+    display: block;
+    font-size: 0.7rem;
+    font-weight: 800;
+    color: var(--lux-400);
+    text-align: center;
+    animation: notifActionResultFadeIn 0.2s ease;
+}
+@keyframes notifActionResultFadeIn {
+    from { opacity: 0; transform: translateY(2px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* نبضة جرس الإشعارات عند وصول إشعار جديد لحظياً (playNewNotificationFeedback
+   في notifications.js). كانت مستخدمة Tailwind الجاهزة "animate-bounce"
+   قبل كده، وهي حركة رأسية (فوق/تحت) واضحة وملفتة أكتر من اللازم -
+   استبدلناها بـ "bell-shake": حركة أفقية خفيفة (يمين/شمال) بمدى صغير
+   جداً (±3px بحد أقصى) بتخفت تدريجياً، عشان تلفت الانتباه من غير ما
+   تعمل إزعاج بصري في الهيدر. مدة الأنيميشن (0.7s) لازم تتطابق مع
+   الـ setTimeout بتاع bellAnimationTimeoutId في notifications.js. */
+@keyframes bellShake {
+    0%, 100% { transform: translateX(0); }
+    15%      { transform: translateX(-3px); }
+    32%      { transform: translateX(3px); }
+    50%      { transform: translateX(-2px); }
+    68%      { transform: translateX(1.5px); }
+    84%      { transform: translateX(-0.75px); }
+}
+.bell-shake {
+    animation: bellShake 0.7s ease-in-out;
+}
+
+/* حالة إزالة الكارت (بعد قبول/رفض طلب الصداقة مثلاً، أو أي إشعار
+   المستخدم شايله يدوياً) - Collapse ناعم بدل الاختفاء المفاجئ. JS
+   بيضيف الكلاس ده الأول، وبعد ما الانتقال يخلص (~350ms) يشيل العنصر
+   فعلياً من الـ DOM */
+.notif-card.is-removing {
+    opacity: 0;
+    transform: scale(0.94) translateY(-4px);
+    max-height: 0;
+    margin: 0 !important;
+    border-width: 0;
+}
+/* الـ padding بقى على .notif-card-inner بعد تقسيم الكارت لطبقتين
+   (شوف .notif-card-inner فوق)، فلازم نصفّره هو كمان وقت الإزالة عشان
+   الـ Collapse يبقى كامل من غير مسافة فاضية باقية */
+.notif-card.is-removing .notif-card-inner {
+    padding-top: 0;
+    padding-bottom: 0;
+}
+
+/* Empty State - عرض/إخفاء عبر نفس نمط الـ utility class المستخدم في
+   باقي المشروع (hidden <-> flex) */
+#notificationsEmptyState.flex {
+    display: flex;
+}
+
+/* ==================================================================
+   7) كارت "السؤال اليومي" (المرحلة الأولى/الثانية/الثالثة) - js/daily-question.js
+   ------------------------------------------------------------------
+   الكارتين (المغلق والنشط) بياخدوا نفس تنسيق باقي كروت الصفحة
+   الرئيسية مباشرة من Tailwind (bg-lux-900 rounded-3xl shadow-soft-card
+   border border-gold-500/10 - شوف #q1-card في index.html كمرجع)،
+   عشان يبانوا جزء طبيعي من الصفحة مش كارت غريب عنها. الكلاسات هنا بس
+   بتضيف التفاصيل اللي Tailwind من غير config جديد مش هيقدر يعملها:
+   نسيج ألياف الكربون، توهج المؤقت، وحالاته الديناميكية.
+
+   ألوان المؤقت: بدل ما نجيب "أخضر/أصفر/أحمر" غريبة عن هوية التطبيق،
+   استخدمنا نفس الألوان الموجودة أصلاً (--brand-500 التركواز للحالة
+   الآمنة، --gold-500 للتنبيه) وضفنا لون ياقوتي واحد بس للحالة
+   الحرجة (مفيش لون أحمر تاني في أي مكان في المشروع)
+   ================================================================== */
+
+.dq-card {
+    position: relative;
+    overflow: hidden;
+    isolation: isolate;
+}
+
+/* نسيج ألياف كربون خفيف جداً فوق خلفية الكارت - إحساس "Dark Luxury"
+   بدون ما يأثر على قابلية القراءة */
+.dq-card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background-image: repeating-linear-gradient(
+        45deg,
+        rgba(255, 255, 255, 0.015) 0px,
+        rgba(255, 255, 255, 0.015) 1px,
+        transparent 1px,
+        transparent 4px
+    );
+}
+
+.dq-card > * {
+    position: relative;
+    z-index: 1;
+}
+
+/* -------- الحالة 1: مغلق -------- */
+
+.dq-locked-icon {
+    width: 46px;
+    height: 46px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    color: var(--gold-400);
+    background: radial-gradient(circle at 50% 40%, rgba(212, 175, 55, 0.16), rgba(212, 175, 55, 0.02));
+    border: 1px solid rgba(212, 175, 55, 0.18);
+}
+
+.dq-locked-icon svg { width: 22px; height: 22px; }
+
+/* حالة "اتحرم النهاردة" (المرحلة الثانية/الثالثة) - لما المستخدم يطلع
+   برة التطبيق وهو لسه بيجاوب على السؤال. بنستخدم درجة الـ rose نفسها
+   المستخدمة أصلاً في مودال تأكيد الخروج (logoutConfirmModal) عشان
+   نفضل متسقين مع نفس لغة "التحذير/الخسارة" الموجودة في التطبيق، من
+   غير ما نلمس --dq-timer-danger (محجوز حصرياً لآخر 5 ثواني بالمؤقت) */
+.dq-locked-icon.is-forfeited {
+    color: #fb7185; /* rose-400 */
+    background: radial-gradient(circle at 50% 40%, rgba(244, 63, 94, 0.16), rgba(244, 63, 94, 0.02));
+    border-color: rgba(244, 63, 94, 0.22);
+}
+
+.dq-start-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    font-family: inherit;
+    cursor: pointer;
+    transition: transform 0.2s ease, filter 0.2s ease;
+}
+
+.dq-start-btn:hover { transform: translateY(-2px); filter: brightness(1.05); }
+.dq-start-btn:active { transform: translateY(0); filter: brightness(0.96); }
+
+.dq-start-btn-icon {
+    width: 16px;
+    height: 16px;
+    transform: rotate(180deg); /* السهم يشاور يمين->شمال زي اتجاه القراءة RTL */
+    transition: transform 0.2s ease;
+}
+.dq-start-btn:hover .dq-start-btn-icon { transform: rotate(180deg) translateX(3px); }
+
+/* -------- الحالة 2: نشط -------- */
+
+.dq-timer-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.dq-timer-track {
+    flex: 1;
+    height: 6px;
+    border-radius: 999px;
+    background: var(--lux-700);
+    overflow: hidden;
+}
+
+.dq-timer-fill {
+    height: 100%;
+    width: 100%;
+    border-radius: inherit;
+    background: var(--dq-timer-color, var(--brand-500));
+    box-shadow: 0 0 10px 1px var(--dq-timer-color, var(--brand-500));
+    transition: width 0.1s linear, background-color 0.4s ease, box-shadow 0.4s ease;
+}
+
+.dq-timer-track.is-expired .dq-timer-fill { width: 0% !important; }
+
+.dq-timer-badge {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--lux-700);
+    color: var(--dq-timer-color, var(--brand-500));
+    font-size: 0.78rem;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    transition: color 0.4s ease;
+}
+.dq-timer-badge svg { width: 13px; height: 13px; }
+.dq-timer-unit { opacity: 0.7; font-size: 0.68rem; margin-inline-start: 1px; }
+
+.dq-question-eyebrow {
+    display: block;
+    font-size: 0.7rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    color: var(--gold-400);
+    margin-bottom: 6px;
+}
+
+.dq-options-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+@media (max-width: 380px) {
+    .dq-options-grid { grid-template-columns: 1fr; }
+}
+
+.dq-option-card {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px;
+    border-radius: 14px;
+    border: 1px solid var(--lux-700);
+    background: var(--lux-800);
+    color: var(--lux-50);
+    font-family: inherit;
+    font-size: 0.85rem;
+    font-weight: 700;
+    line-height: 1.5;
+    text-align: right;
+    cursor: pointer;
+    transition: border-color 0.2s ease, background-color 0.2s ease, transform 0.15s ease;
+}
+
+.dq-option-card:hover:not(:disabled) {
+    border-color: rgba(212, 175, 55, 0.4);
+    transform: translateY(-1px);
+}
+.dq-option-card:active:not(:disabled) { transform: translateY(0); }
+
+.dq-option-marker {
+    flex-shrink: 0;
+    width: 18px;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    border: 1.5px solid var(--lux-600);
+    color: transparent;
+    transition: all 0.2s ease;
+}
+.dq-option-marker svg { width: 11px; height: 11px; }
+
+.dq-option-card.is-selected {
+    border-color: var(--gold-400);
+    background: linear-gradient(135deg, rgba(212, 175, 55, 0.16), rgba(212, 175, 55, 0.04));
+}
+.dq-option-card.is-selected .dq-option-marker {
+    border-color: var(--gold-400);
+    background: var(--gold-400);
+    color: var(--lux-950);
+}
+
+.dq-option-card:disabled { cursor: default; opacity: 0.45; }
+.dq-option-card:disabled:not(.is-selected) { filter: grayscale(0.3); }
+
+/* -------- نتيجة الإجابة (صح/غلط) - المرحلة 7: js/daily-question.js
+   بيضيف الكلاسات دي على كروت الاختيارات بعد ما المستخدم يجاوب (أو
+   بعد ما يخلص الوقت من غير إجابة) عشان يبان صح إيه وغلط إيه -------- */
+
+/* أخضر واحد بس للإجابة الصح - مضاف هنا عشان --dq-timer-danger فوق
+   (الياقوتي) هو اللون التحذيري الوحيد المستخدم أصلاً في المشروع،
+   وبقى دلوقتي مستخدم كمان لتمييز الاختيار الغلط تحديداً */
+:root {
+    --dq-success: #22c55e; /* emerald-500 */
+}
+
+/* الاختيار المُختار لو كان صح، أو الاختيار الصحيح لما يتبرز بعد
+   اختيار غلط/بعد ما يخلص الوقت من غير إجابة */
+.dq-option-card.is-correct,
+.dq-option-card.is-correct-reveal {
+    border-color: var(--dq-success);
+    background: linear-gradient(135deg, rgba(34, 197, 94, 0.18), rgba(34, 197, 94, 0.05));
+}
+.dq-option-card.is-correct .dq-option-marker,
+.dq-option-card.is-correct-reveal .dq-option-marker {
+    border-color: var(--dq-success);
+    background: var(--dq-success);
+    color: var(--lux-950);
+}
+
+/* الاختيار المُختار لما يكون غلط */
+.dq-option-card.is-incorrect {
+    border-color: var(--dq-timer-danger);
+    background: linear-gradient(135deg, rgba(217, 83, 79, 0.18), rgba(217, 83, 79, 0.05));
+}
+.dq-option-card.is-incorrect .dq-option-marker {
+    border-color: var(--dq-timer-danger);
+    background: var(--dq-timer-danger);
+    color: var(--lux-950);
+}
+
+/* أي كارت اتعطّل بعد الإجابة لكنه مُصنّف صح/غلط/إجابة صحيحة مُبرزة -
+   لازم يفضل واضح ومقروء 100% (بدل الـ opacity/grayscale الافتراضي
+   المستخدم للكروت المُعطّلة العادية اللي محدش اختارها) */
+.dq-option-card.is-correct:disabled,
+.dq-option-card.is-incorrect:disabled,
+.dq-option-card.is-correct-reveal:disabled {
+    opacity: 1;
+    filter: none;
+}
+
+/* ==================================================================
+   8) شريط تنبيه الزوار (Guest Mode Banner) - المرحلة الثالثة (جزء 1)
+   ------------------------------------------------------------------
+   Glassmorphism داكن + توهج نيون كهرماني (Amber/Gold) خفيف على
+   الحدود السفلية، مع حركة Fade/Slide ناعمة عند الظهور والاختفاء.
+   الإظهار/الإخفاء الفعلي بيتم عن طريق إضافة/إزالة كلاس "is-visible"
+   من js/guest-banner.js — الـ CSS هنا مسؤول بس عن الشكل والحركة
+   ================================================================== */
+
+.guest-banner {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 40; /* فوق باقي محتوى الصفحة، تحت أي مودال (z-index أعلى) */
+
+    /* الحالة الافتراضية: مخفي تماماً، مش موجود في تدفق التفاعل (Interaction) */
+    visibility: hidden;
+    pointer-events: none;
+    opacity: 0;
+    transform: translateY(-100%);
+
+    transition:
+        opacity 0.45s cubic-bezier(0.16, 1, 0.3, 1),
+        transform 0.45s cubic-bezier(0.16, 1, 0.3, 1),
+        visibility 0s linear 0.45s;
+}
+
+/* حالة الظهور - بتتضاف من الـ JS لما isGuestMode = true */
+.guest-banner.is-visible {
+    visibility: visible;
+    pointer-events: auto;
+    opacity: 1;
+    transform: translateY(0);
+    transition:
+        opacity 0.5s cubic-bezier(0.16, 1, 0.3, 1),
+        transform 0.5s cubic-bezier(0.16, 1, 0.3, 1),
+        visibility 0s linear 0s;
+}
+
+/* الحاوية الداخلية: الزجاجية الداكنة + التوهج الكهرماني على الحد السفلي */
+.guest-banner-inner {
+    position: relative;
+    max-width: 28rem; /* نفس max-w-md المستخدم في باقي هيدرز التطبيق */
+    margin: 0 auto;
+
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 14px;
+
+    background: linear-gradient(
+        180deg,
+        rgba(15, 18, 25, 0.82) 0%,
+        rgba(11, 13, 18, 0.9) 100%
+    );
+    backdrop-filter: blur(14px) saturate(140%);
+    -webkit-backdrop-filter: blur(14px) saturate(140%);
+
+    border: 1px solid rgba(212, 175, 55, 0.22);
+    border-top: none;
+    border-radius: 0 0 18px 18px;
+
+    box-shadow:
+        0 8px 24px -8px rgba(0, 0, 0, 0.55),
+        0 1px 0 0 rgba(255, 255, 255, 0.03) inset,
+        0 -1px 0 0 rgba(212, 175, 55, 0.12) inset;
+}
+
+/* خط توهج نيون كهرماني رفيع أسفل الشريط مباشرة - إحساس "ضوء منبعث" */
+.guest-banner-inner::after {
+    content: '';
+    position: absolute;
+    left: 12%;
+    right: 12%;
+    bottom: -1px;
+    height: 1px;
+    background: linear-gradient(
+        90deg,
+        transparent,
+        rgba(232, 193, 88, 0.9),
+        transparent
+    );
+    box-shadow: 0 0 12px 2px rgba(232, 193, 88, 0.55);
+    filter: blur(0.5px);
+}
+
+/* أيقونة التنبيه */
+.guest-banner-icon {
+    flex-shrink: 0;
+    width: 34px;
+    height: 34px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    color: var(--gold-400);
+    background: radial-gradient(circle at 50% 40%, rgba(212, 175, 55, 0.2), rgba(212, 175, 55, 0.03));
+    border: 1px solid rgba(212, 175, 55, 0.25);
+    box-shadow: 0 0 10px 1px rgba(212, 175, 55, 0.18);
+}
+.guest-banner-icon svg {
+    width: 18px;
+    height: 18px;
+}
+
+/* نص الرسالة */
+.guest-banner-text {
+    flex: 1;
+    min-width: 0;
+    font-size: 0.78rem;
+    line-height: 1.55;
+    font-weight: 600;
+    color: var(--lux-400);
+    margin: 0;
+}
+.guest-banner-highlight {
+    color: var(--gold-400);
+    font-weight: 800;
+}
+
+/* زر "سجّل دلوقتي" - CTA الأساسي في الشريط (تعديل: هدف الشريط الأول
+   هو التسجيل، مش الدعم، فده بقى الزرار الذهبي المليان اللافت، وزرار
+   الدعم بقى ثانوي/Outline تحت - شوف .guest-banner-secondary-btn) */
+.guest-banner-primary-btn {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: inherit;
+    font-size: 0.74rem;
+    font-weight: 800;
+    white-space: nowrap;
+    color: var(--lux-950);
+    background: linear-gradient(135deg, var(--gold-300), var(--gold-500));
+    padding: 9px 14px;
+    border: none;
+    border-radius: 999px;
+    cursor: pointer;
+    box-shadow: 0 4px 14px -4px rgba(212, 175, 55, 0.55);
+    transition: transform 0.2s ease, filter 0.2s ease, box-shadow 0.2s ease;
+}
+.guest-banner-primary-btn svg {
+    width: 13px;
+    height: 13px;
+    flex-shrink: 0;
+}
+.guest-banner-primary-btn:hover {
+    transform: translateY(-1px);
+    filter: brightness(1.06);
+    box-shadow: 0 6px 18px -4px rgba(212, 175, 55, 0.65);
+}
+.guest-banner-primary-btn:active {
+    transform: translateY(0);
+    filter: brightness(0.95);
+}
+
+/* زر "تواصل مع الدعم للمغتربين" - إجراء ثانوي (Outline شفاف بدل
+   خلفية ذهبية مليانة) عشان يبقى واضح إنه أقل أولوية من زرار التسجيل
+   الأساسي فوق، من غير ما يختفي أو يبقى صعب اللقاء */
+.guest-banner-secondary-btn {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: inherit;
+    font-size: 0.7rem;
+    font-weight: 700;
+    white-space: nowrap;
+    color: var(--gold-400);
+    background: transparent;
+    padding: 8px 12px;
+    border: 1px solid rgba(212, 175, 55, 0.35);
+    border-radius: 999px;
+    cursor: pointer;
+    transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+}
+.guest-banner-secondary-btn svg {
+    width: 13px;
+    height: 13px;
+    flex-shrink: 0;
+}
+.guest-banner-secondary-btn:hover {
+    background: rgba(212, 175, 55, 0.1);
+    border-color: rgba(212, 175, 55, 0.55);
+}
+.guest-banner-secondary-btn:active {
+    transform: scale(0.97);
+}
+
+/* زر الإغلاق */
+.guest-banner-close-btn {
+    flex-shrink: 0;
+    width: 26px;
+    height: 26px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--lux-500);
+    background: transparent;
+    border: none;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: color 0.2s ease, background-color 0.2s ease;
+}
+.guest-banner-close-btn svg {
+    width: 13px;
+    height: 13px;
+}
+.guest-banner-close-btn:hover {
+    color: var(--lux-50);
+    background: rgba(255, 255, 255, 0.06);
+}
+
+/* المساحة البديلة تحت الشريط - بتتفعّل ارتفاعها من JS بس وقت الظهور،
+   عشان الصفحة ماتقفزش سواء الشريط ظاهر أو مخفي */
+.guest-banner-spacer {
+    height: 0;
+    transition: height 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+    flex-shrink: 0;
+}
+
+/* ------------------------------------------------------------------
+   تجاوب كامل مع شاشات الهواتف الصغيرة
+   ------------------------------------------------------------------ */
+@media (max-width: 420px) {
+    .guest-banner-inner {
+        flex-wrap: wrap;
+        border-radius: 0 0 14px 14px;
+        padding: 10px 12px;
+    }
+    .guest-banner-text {
+        order: 1;
+        flex-basis: 100%;
+        font-size: 0.74rem;
+    }
+    .guest-banner-icon {
+        order: 0;
+    }
+    .guest-banner-close-btn {
+        order: 2;
+        margin-inline-start: auto;
+    }
+    .guest-banner-secondary-btn {
+        order: 3;
+        flex-basis: 100%;
+        justify-content: center;
+        margin-top: 4px;
+    }
+    /* (إصلاح - باج حقيقي): الزرار ده كان من غير أي order صريح، فكان
+       بياخد القيمة الافتراضية (0) - يعني بيتحاذى مع الأيقونة (order:0
+       برضه) في نفس الصف الأول أعلى الشريط، بدل ما يفضل تحت زرار الدعم
+       زي ما مطلوب. دلوقتي بقى order:4 (بعد زرار الدعم order:3 مباشرة)
+       بنفس تنسيق الصف الكامل العرض، فيبان فعليًا تحت زرار الدعم مش
+       جنب الأيقونة */
+    .guest-banner-primary-btn {
+        order: 4;
+        flex-basis: 100%;
+        justify-content: center;
+        margin-top: 4px;
+    }
+}
+
+/* [تعديل - إصلاح تجاوب]: اتشالت هنا قاعدة كانت بتوسّع الشريط لـ 40rem
+   عند 768px، لأنها كانت بتخليه أعرض من حاوية التطبيق نفسها (اللي
+   متسقّفة دايماً عند max-w-md = 28rem بتصميم Mobile-First ثابت، زي
+   باقي التطبيق - نفس المبدأ الموثّق في leaderboard-championships.css).
+   النتيجة كانت إن الشريط يبان أعرض من الكارت اللي تحته على أي شاشة
+   تابلت/ديسكتوب. دلوقتي بيفضل محصور بنفس الـ 28rem على كل المقاسات
+   عشان يفضل متحاذي تماماً مع حاوية التطبيق تحته. */
+
+/* احترام تفضيل تقليل الحركة - نفس النمط المستخدم فوق مع باقي عناصر
+   المشروع في قسم @media (prefers-reduced-motion: reduce) */
+@media (prefers-reduced-motion: reduce) {
+    .guest-banner,
+    .guest-banner.is-visible,
+    .guest-banner-spacer {
+        transition: none !important;
+    }
+}
+
+/* ==================================================================
+   9) مودال "الدعم الفني للمغتربين" (Support Modal) - المرحلة الثالثة
+      (الجزء 2)
+   ------------------------------------------------------------------
+   نفس فلسفة #logoutConfirmModal / #dqWarningModal (كارت لوكس داكن
+   وسط الشاشة)، لكن بخلفية Backdrop Blur مخصصة + حركة دخول/خروج
+   Scale/Fade ناعمة (بدل الظهور الفوري بمجرد شيل/إضافة "hidden")،
+   وأيقونة علوية بتوهج ذهبي زي باقي عناصر التوهج في المشروع.
+   الإظهار/الإخفاء الفعلي (شيل/إضافة كلاس "hidden" + "is-open")
+   بيتم بالكامل من js/support-modal.js
+   ================================================================== */
+
+/* الحاوية الخارجية: بترجع لـ "hidden" (display:none) بالكامل بعد ما
+   حركة الخروج تخلص - شوف SUPPORT_MODAL_CLOSE_ANIM_MS في الـ JS */
+.support-modal {
+    display: none;
+}
+.support-modal.is-open {
+    display: block;
+}
+
+/* خلفية معتمة + Backdrop Blur، بتفني/تظهر بحركة ناعمة مستقلة عن
+   حركة الكارت نفسه (إحساس "طبقتين" بدل طبقة واحدة فقط) */
+.support-modal-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(11, 13, 18, 0.86);
+    backdrop-filter: blur(10px) saturate(120%);
+    -webkit-backdrop-filter: blur(10px) saturate(120%);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+.support-modal.is-open .support-modal-backdrop {
+    opacity: 1;
+}
+
+/* كارت المودال نفسه: بيبدأ مصغّر وشفاف شوية وبيتحرك لأعلى قليلاً،
+   وبيرجع لحجمه الطبيعي مع فتح المودال (Scale + Fade + Slide خفيف) */
+.support-modal-card {
+    position: relative;
+    box-shadow:
+        0 24px 60px -16px rgba(0, 0, 0, 0.6),
+        0 0 0 1px rgba(212, 175, 55, 0.14) inset;
+    border: 1px solid rgba(212, 175, 55, 0.16);
+    opacity: 0;
+    transform: scale(0.92) translateY(14px);
+    transition: opacity 0.3s cubic-bezier(0.16, 1, 0.3, 1),
+        transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.support-modal.is-open .support-modal-card {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+}
+
+/* أيقونة علوية دائرية بتوهج ذهبي - نفس فكرة .guest-banner-icon لكن
+   بحجم أكبر شوية عشان تناسب مودال بحجم أكبر من شريط التنبيه */
+.support-modal-icon {
+    width: 52px;
+    height: 52px;
+    margin: 0 auto 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    color: var(--gold-400);
+    background: radial-gradient(circle at 50% 35%, rgba(212, 175, 55, 0.22), rgba(212, 175, 55, 0.03));
+    border: 1px solid rgba(212, 175, 55, 0.28);
+    box-shadow: 0 0 18px 2px rgba(212, 175, 55, 0.2);
+}
+.support-modal-icon svg {
+    width: 26px;
+    height: 26px;
+}
+
+/* زر الإغلاق (X) - أعلى يمين الكارت، دايماً في نفس الزاوية بصرف
+   النظر عن اتجاه RTL/LTR عشان يفضل مكانه متوقّع للمستخدم */
+.support-modal-close-btn {
+    position: absolute;
+    top: 14px;
+    inset-inline-end: 14px;
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--lux-500);
+    background: var(--lux-800);
+    border: none;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: color 0.2s ease, background-color 0.2s ease, transform 0.2s ease;
+}
+.support-modal-close-btn svg {
+    width: 14px;
+    height: 14px;
+}
+.support-modal-close-btn:hover {
+    color: var(--lux-50);
+    background: var(--lux-700);
+}
+.support-modal-close-btn:active {
+    transform: scale(0.9);
+}
+
+/* قائمة خطوات التفعيل (١ و ٢) */
+.support-modal-steps {
+    list-style: none;
+    margin: 18px 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    text-align: right;
+}
+.support-modal-steps li {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 12px;
+    background: var(--lux-800);
+    border: 1px solid var(--lux-700);
+    border-radius: 14px;
+}
+.support-modal-step-num {
+    flex-shrink: 0;
+    width: 22px;
+    height: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.72rem;
+    font-weight: 800;
+    color: var(--lux-950);
+    background: linear-gradient(135deg, var(--gold-300), var(--gold-500));
+    border-radius: 50%;
+}
+.support-modal-step-text {
+    flex: 1;
+    font-size: 0.72rem;
+    line-height: 1.6;
+    font-weight: 600;
+    color: var(--lux-400);
+}
+
+/* أزرار قنوات التواصل: واتساب وتليجرام جنب بعض، بألوان كل منصة
+   الرسمية لكن مطفّية شوية عشان تفضل متناسقة مع هوية Dark Luxury
+   بدل ما تبان غريبة عن باقي الألوان في التطبيق */
+.support-modal-channels {
+    display: flex;
+    gap: 10px;
+    margin-top: 18px;
+}
+.support-modal-channel-btn {
+    flex: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    font-size: 0.74rem;
+    font-weight: 800;
+    text-decoration: none;
+    padding: 11px 10px;
+    border-radius: 16px;
+    transition: transform 0.2s ease, filter 0.2s ease, box-shadow 0.2s ease;
+}
+.support-modal-channel-btn svg {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+}
+.support-modal-channel-btn:hover {
+    transform: translateY(-1px);
+    filter: brightness(1.08);
+}
+.support-modal-channel-btn:active {
+    transform: translateY(0);
+    filter: brightness(0.95);
+}
+
+.support-modal-channel-btn.is-whatsapp {
+    color: #EAFBF3;
+    background: linear-gradient(135deg, #22C36B, #178A4C);
+    box-shadow: 0 6px 16px -6px rgba(34, 195, 107, 0.55);
+}
+.support-modal-channel-btn.is-telegram {
+    color: #EAF4FE;
+    background: linear-gradient(135deg, #3BA4E8, #1E7EC2);
+    box-shadow: 0 6px 16px -6px rgba(59, 164, 232, 0.55);
+}
+
+/* شاشات صغيرة جداً: الزرارين يبقوا فوق بعض بدل جنب بعض عشان النص
+   يفضل مقروء وميتقصّش */
+@media (max-width: 340px) {
+    .support-modal-channels {
+        flex-direction: column;
+    }
+}
+
+/* احترام تفضيل تقليل الحركة - نفس النمط المتبع في باقي المشروع */
+@media (prefers-reduced-motion: reduce) {
+    .support-modal-backdrop,
+    .support-modal-card {
+        transition: none !important;
+    }
+}
+
+/* ==================================================================
+   10) واجهة تحكم الأدمن (Admin Controls) - المرحلة الثالثة (الجزء 3)
+   ------------------------------------------------------------------
+   تنسيقات خاصة بـ admin.html: Slider نطاق الجيوفنس، Input رقمي مرافق
+   له، مربع البحث عن مستخدم، وToggle Switch تفعيل/إلغاء تفعيل حساب
+   المغترب (is_verified_override). نفس هوية Dark Luxury (ذهبي/lux)
+   المستخدمة في باقي المكونات فوق.
+   ================================================================== */
+
+.admin-card {
+    -webkit-user-select: text;
+    user-select: text; /* نصوص/أرقام لوحة الأدمن لازم تتقدر تتنسخ عادي */
+}
+
+/* ------------------------------------------------------------------
+   10.1) Range Slider مخصص (نصف قطر النطاق الجغرافي)
+   Track رفيع بتدرج ذهبي خافت + Thumb دائري ذهبي بارز، بنفس أسلوب
+   الـ Reset الموحّد (appearance: none) على كل من WebKit وFirefox
+   ------------------------------------------------------------------ */
+.admin-range-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    height: 6px;
+    border-radius: 999px;
+    background: linear-gradient(90deg, var(--gold-600), var(--lux-700));
+    outline: none;
+    cursor: pointer;
+}
+.admin-range-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--gold-300), var(--gold-500));
+    border: 2px solid var(--lux-950);
+    box-shadow: 0 0 0 1px rgba(212, 175, 55, 0.4), 0 2px 8px -2px rgba(0, 0, 0, 0.6);
+    cursor: pointer;
+    transition: transform 0.15s ease;
+}
+.admin-range-slider::-webkit-slider-thumb:hover {
+    transform: scale(1.1);
+}
+.admin-range-slider::-moz-range-track {
+    height: 6px;
+    border-radius: 999px;
+    background: linear-gradient(90deg, var(--gold-600), var(--lux-700));
+}
+.admin-range-slider::-moz-range-thumb {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--gold-300), var(--gold-500));
+    border: 2px solid var(--lux-950);
+    box-shadow: 0 0 0 1px rgba(212, 175, 55, 0.4), 0 2px 8px -2px rgba(0, 0, 0, 0.6);
+    cursor: pointer;
+}
+.admin-range-slider:focus-visible {
+    outline: 2px solid var(--gold-500);
+    outline-offset: 4px;
+}
+
+/* Input رقمي بجانب الـ Slider */
+.admin-number-input {
+    font-family: inherit;
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--lux-50);
+    background: var(--lux-800);
+    border: 1px solid var(--lux-700);
+    border-radius: 12px;
+    padding: 10px 12px;
+    text-align: center;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.admin-number-input:focus {
+    outline: none;
+    border-color: var(--gold-500);
+    box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.15);
+}
+/* إخفاء أسهم الزيادة/النقصان الافتراضية بتاعة input[type=number] عشان
+   تنسجم بصرياً مع باقي حقول التطبيق (اللي مفيهاش أسهم زي كده) */
+.admin-number-input::-webkit-outer-spin-button,
+.admin-number-input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+.admin-number-input[type='number'] {
+    -moz-appearance: textfield;
+}
+
+/* زر الحفظ */
+.admin-save-btn {
+    flex-shrink: 0;
+    font-family: inherit;
+    font-size: 0.78rem;
+    font-weight: 800;
+    color: var(--lux-950);
+    background: linear-gradient(135deg, var(--gold-300), var(--gold-500));
+    border: none;
+    border-radius: 12px;
+    padding: 10px 18px;
+    cursor: pointer;
+    box-shadow: 0 4px 14px -4px rgba(212, 175, 55, 0.5);
+    transition: transform 0.15s ease, filter 0.15s ease, opacity 0.15s ease;
+}
+.admin-save-btn:hover:not(:disabled) {
+    transform: translateY(-1px);
+    filter: brightness(1.06);
+}
+.admin-save-btn:active:not(:disabled) {
+    transform: translateY(0);
+    filter: brightness(0.95);
+}
+.admin-save-btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+    filter: grayscale(0.3);
+}
+
+/* رسالة حالة عامة (نجاح/خطأ/تحميل) - مستخدمة في الويدجتين */
+.admin-status-text {
+    min-height: 1em;
+    font-size: 0.72rem;
+    font-weight: 700;
+    margin: 0;
+    transition: color 0.2s ease;
+}
+.admin-status-text[data-state='loading'] { color: var(--lux-500); }
+.admin-status-text[data-state='success'] { color: #34d399; }
+.admin-status-text[data-state='error']   { color: var(--dq-timer-danger); }
+.admin-status-text[data-state='empty']   { color: var(--lux-500); }
+
+/* ------------------------------------------------------------------
+   10.2) مربع البحث عن مستخدم
+   ------------------------------------------------------------------ */
+.admin-search-box {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--lux-800);
+    border: 1px solid var(--lux-700);
+    border-radius: 14px;
+    padding: 10px 12px;
+    color: var(--lux-500);
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.admin-search-box:focus-within {
+    border-color: var(--gold-500);
+    box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.15);
+}
+.admin-search-box svg {
+    width: 16px;
+    height: 16px;
+}
+.admin-search-box input {
+    flex: 1;
+    min-width: 0;
+    background: transparent;
+    border: none;
+    outline: none;
+    font-family: inherit;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--lux-50);
+}
+.admin-search-box input::placeholder {
+    color: var(--lux-500);
+    font-weight: 500;
+}
+
+/* ------------------------------------------------------------------
+   10.2ب) Widget الإشعارات (المرحلة 3) - نتائج اختيار المستخدم + الشارة
+   المختارة + مربع النص
+   ------------------------------------------------------------------ */
+
+/* قائمة نتائج البحث عن مستخدم لإرسال إشعار له - بتظهر بس أثناء الكتابة
+   (JS بيضيف/يشيل .hidden)، ومحدودة الارتفاع عشان متاخدش مساحة كبيرة
+   من الويدجت لو النتائج كتيرة */
+.admin-notify-picker-results {
+    max-height: 220px;
+    overflow-y: auto;
+}
+.admin-notify-picker-results.hidden {
+    display: none;
+}
+.admin-notify-picker-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    background: var(--lux-800);
+    border: 1px solid var(--lux-700);
+    border-radius: 12px;
+    padding: 7px 10px;
+    cursor: pointer;
+    font-family: inherit;
+    text-align: start;
+    transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+.admin-notify-picker-row:hover {
+    border-color: var(--gold-500);
+    background: var(--lux-700);
+}
+.admin-notify-picker-row-name {
+    flex: 1;
+    min-width: 0;
+    font-size: 0.74rem;
+    font-weight: 700;
+    color: var(--lux-50);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* شارة المستخدم المختار حالياً (وضع "لمستخدم محدد") - بديل مربع البحث
+   بعد الاختيار، عشان يبقى واضح مين المُستهدف قبل الإرسال */
+.admin-notify-selected-chip {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(212, 175, 55, 0.1);
+    border: 1px solid var(--gold-500);
+    border-radius: 14px;
+    padding: 8px 10px;
+}
+.admin-notify-selected-chip.hidden {
+    display: none;
+}
+.admin-notify-selected-chip span {
+    font-size: 0.78rem;
+    font-weight: 800;
+    color: var(--lux-50);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.admin-notify-clear-btn {
+    flex-shrink: 0;
+    width: 22px;
+    height: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--lux-800);
+    border: 1px solid var(--lux-700);
+    border-radius: 50%;
+    color: var(--lux-400);
+    font-size: 0.7rem;
+    cursor: pointer;
+}
+.admin-notify-clear-btn:hover {
+    color: var(--lux-50);
+    border-color: var(--dq-timer-danger);
+}
+
+/* مربع نص رسالة الإشعار - نفس هوية admin-number-input بس textarea قابل
+   للتمدد رأسياً بس (مش أفقياً عشان الليه-اوت متتكسرش) */
+.admin-notify-textarea {
+    font-family: inherit;
+    font-size: 0.82rem;
+    font-weight: 600;
+    line-height: 1.5;
+    color: var(--lux-50);
+    background: var(--lux-800);
+    border: 1px solid var(--lux-700);
+    border-radius: 14px;
+    padding: 10px 12px;
+    resize: vertical;
+    min-height: 90px;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.admin-notify-textarea:focus {
+    outline: none;
+    border-color: var(--gold-500);
+    box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.15);
+}
+.admin-notify-textarea::placeholder {
+    color: var(--lux-500);
+    font-weight: 500;
+}
+
+/* ------------------------------------------------------------------
+   10.3) كارت مستخدم في نتائج البحث + Toggle Switch
+   ------------------------------------------------------------------ */
+.admin-user-row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    background: var(--lux-800);
+    border: 1px solid var(--lux-700);
+    border-radius: 16px;
+    padding: 10px 12px;
+    transition: border-color 0.2s ease, background-color 0.2s ease;
+}
+
+/* (المرحلة 2) حساب محظور - تمييز بصري خفيف للصف كله عشان يبان بسرعة
+   وسط قائمة طويلة، من غير ما يبقى مزعج أو يخفي باقي المعلومات */
+.admin-user-row.is-blocked {
+    border-color: rgba(239, 68, 68, 0.4);
+    background: rgba(239, 68, 68, 0.06);
+}
+
+.admin-user-avatar {
+    flex-shrink: 0;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    object-fit: cover;
+    background: var(--lux-700);
+    border: 1px solid var(--lux-700);
+}
+
+.admin-user-info {
+    flex: 1;
+    min-width: 0;
+}
+.admin-user-name {
+    font-size: 0.78rem;
+    font-weight: 800;
+    color: var(--lux-50);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.admin-user-username {
+    font-size: 0.68rem;
+    font-weight: 600;
+    color: var(--lux-500);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* (المرحلة 2) سبب الحظر (لو موجود) - ظاهر بس تحت اسم الحساب لما
+   is_blocked = true، بلون أحمر مميز يفرّقه عن باقي السطور الرمادية */
+.admin-user-blocked-reason {
+    font-size: 0.62rem;
+    font-weight: 700;
+    color: #fb7171;
+    margin-top: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* شارة صغيرة اختيارية بتوضح هل آخر موقع معروف للمستخدم كان جوه
+   النطاق الجغرافي ولا لأ (is_inside_bounds من profiles) - سياق إضافي
+   يساعد الأدمن يقرر بسرعة، مش قابلة للتعديل من هنا */
+.admin-user-bounds-badge {
+    flex-shrink: 0;
+    font-size: 0.62rem;
+    font-weight: 800;
+    padding: 3px 8px;
+    border-radius: 999px;
+    white-space: nowrap;
+}
+.admin-user-bounds-badge.is-inside {
+    color: #34d399;
+    background: rgba(52, 211, 153, 0.12);
+}
+.admin-user-bounds-badge.is-outside {
+    color: var(--lux-500);
+    background: var(--lux-700);
+}
+
+/* ------------------------------------------------------------------
+   10.7) صف اختيار واحد في فورم إضافة/تعديل سؤال يومي (المرحلة 6) -
+   راديو تحديد الإجابة الصح + حقل نص الاختيار جنب بعض
+   ------------------------------------------------------------------ */
+.admin-question-option-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.admin-question-option-radio {
+    flex-shrink: 0;
+    width: 18px;
+    height: 18px;
+    accent-color: var(--gold-500);
+    cursor: pointer;
+}
+
+/* (المرحلة 2) حاوية أزرار/تحكمات الصف (توجل التفعيل + زرار الحظر)
+   جنب بعض - flex-shrink: 0 عشان تفضل بعرضها الطبيعي وتسيب المساحة
+   لـ .admin-user-info تنكمش هي اللي بتاخد أي ضغط في العرض على الشاشات
+   الصغيرة (بفضل flex-wrap على .admin-user-row، الحاوية دي بتنزل سطر
+   جديد لوحدها لو المساحة ضاقت، بدل ما تتقطع) */
+.admin-user-actions {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-inline-start: auto;
+}
+
+/* Toggle Switch (is_verified_override) - checkbox مخفي + تنسيق بصري
+   كامل، نفس تقنية "Switch" القياسية لكن بألوان هوية المشروع */
+.admin-toggle-switch {
+    flex-shrink: 0;
+    position: relative;
+    display: inline-block;
+    width: 42px;
+    height: 24px;
+}
+.admin-toggle-switch input {
+    position: absolute;
+    opacity: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    cursor: pointer;
+    z-index: 1;
+}
+.admin-toggle-switch-track {
+    position: absolute;
+    inset: 0;
+    background: var(--lux-700);
+    border: 1px solid var(--lux-600);
+    border-radius: 999px;
+    transition: background-color 0.25s ease, border-color 0.25s ease;
+}
+.admin-toggle-switch-thumb {
+    position: absolute;
+    top: 2px;
+    inset-inline-start: 2px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--lux-400);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+    transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.25s ease;
+}
+/* الحالة المفعّلة: التراك ذهبي والـ Thumb بيتحرك لأقصى اليسار (RTL) */
+.admin-toggle-switch input:checked ~ .admin-toggle-switch-track {
+    background: linear-gradient(135deg, var(--gold-400), var(--gold-600));
+    border-color: var(--gold-500);
+}
+.admin-toggle-switch input:checked ~ .admin-toggle-switch-thumb {
+    background: var(--lux-950);
+    transform: translateX(-18px);
+}
+/* في LTR (لو الصفحة استخدمت dir="ltr" لأي سبب) الاتجاه المنطقي
+   لـ inset-inline-start بيتقلب تلقائياً، فبنعكس اتجاه الحركة كمان */
+html[dir='ltr'] .admin-toggle-switch input:checked ~ .admin-toggle-switch-thumb {
+    transform: translateX(18px);
+}
+.admin-toggle-switch input:focus-visible ~ .admin-toggle-switch-track {
+    outline: 2px solid var(--gold-500);
+    outline-offset: 2px;
+}
+/* حالة "بيتم الحفظ دلوقتي" - تعطيل بصري مؤقت للسويتش لحد ما رد
+   Supabase يوصل (منع ضغطات متكررة أثناء الطلب) */
+.admin-toggle-switch.is-saving {
+    opacity: 0.55;
+    pointer-events: none;
+}
+
+/* (المرحلة 2) زرار حظر/إلغاء حظر - أحمر (خطر) في حالة "حظر"، وذهبي
+   محايد في حالة "إلغاء الحظر" (إجراء إيجابي/تراجع، مش هدام) */
+.admin-block-btn {
+    flex-shrink: 0;
+    font-size: 0.66rem;
+    font-weight: 800;
+    white-space: nowrap;
+    padding: 6px 12px;
+    border-radius: 999px;
+    border: 1px solid rgba(239, 68, 68, 0.45);
+    background: rgba(239, 68, 68, 0.12);
+    color: #fb7171;
+    cursor: pointer;
+    transition: background-color 0.2s ease, border-color 0.2s ease, opacity 0.2s ease;
+}
+.admin-block-btn:hover {
+    background: rgba(239, 68, 68, 0.22);
+}
+.admin-block-btn.is-blocked {
+    border-color: var(--gold-500);
+    background: rgba(212, 175, 55, 0.12);
+    color: var(--gold-400);
+}
+.admin-block-btn.is-blocked:hover {
+    background: rgba(212, 175, 55, 0.22);
+}
+.admin-block-btn.is-saving,
+.admin-block-btn:disabled {
+    opacity: 0.55;
+    pointer-events: none;
+}
+
+/* ------------------------------------------------------------------
+   10.4) (المرحلة 4) ويدجت البانر العلوي في لوحة الأدمن
+   ------------------------------------------------------------------ */
+
+/* زرار رفع صورة - نفس هوية admin-save-btn البصرية بس بحدود بدل خلفية
+   مليانة، عشان يفضل "إجراء ثانوي" لحد ما يتحفظ فعلياً بزرار الحفظ
+   الرئيسي */
+.admin-upload-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: inherit;
+    font-size: 0.76rem;
+    font-weight: 700;
+    color: var(--gold-400);
+    background: rgba(212, 175, 55, 0.08);
+    border: 1px solid rgba(212, 175, 55, 0.35);
+    border-radius: 12px;
+    padding: 9px 14px;
+    cursor: pointer;
+    transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+.admin-upload-btn:hover {
+    background: rgba(212, 175, 55, 0.16);
+}
+.admin-upload-btn svg {
+    width: 15px;
+    height: 15px;
+    flex-shrink: 0;
+}
+.admin-upload-btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+/* نسخة أعرض من admin-notify-clear-btn (النص جنب الأيقونة، مش دائرة
+   أيقونة بس) - مستخدمة لزرار "إزالة الصورة" */
+.admin-notify-clear-btn--wide {
+    width: auto;
+    height: auto;
+    border-radius: 999px;
+    padding: 8px 12px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    gap: 4px;
+}
+
+/* معاينة حية للبانر - بتحاكي شكله الفعلي فوق الصفحة الرئيسية (نفس
+   التدرّج والزوايا المستديرة) عشان الأدمن يشوف اللي هيتنشر بالظبط قبل
+   ما يضغط "حفظ ونشر" */
+.admin-banner-preview {
+    position: relative;
+    /* [تعديل] نفس عرض حاوية التطبيق الفعلي بالظبط (max-w-md في
+       index.html = 448px) وبتتوسّط بنفس الطريقة - عشان القصّ
+       (object-fit: cover) يبان في المعاينة زي ما هيبان بالظبط في
+       الصفحة الرئيسية، أياً كان عرض شاشة الأدمن نفسه */
+    max-width: 448px;
+    margin-inline: auto;
+    min-height: 84px;
+    border-radius: 22px;
+    overflow: hidden;
+    background: linear-gradient(135deg, var(--lux-800), var(--lux-900));
+    border: 1px solid var(--lux-700);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+}
+.admin-banner-preview-img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+.admin-banner-preview-img.hidden {
+    display: none;
+}
+.admin-banner-preview-text {
+    position: relative;
+    z-index: 1;
+    margin: 0;
+    /* [تعديل] نفس الـ padding بالظبط اللي على .home-banner-text في
+       التطبيق الفعلي (16px 18px)، بدل الـ 14px الموحدة اللي كانت هنا */
+    width: 100%;
+    padding: 16px 18px;
+    font-size: 0.85rem;
+    font-weight: 800;
+    color: var(--lux-50);
+    text-shadow: 0 1px 6px rgba(0, 0, 0, 0.6);
+    word-break: break-word;
+}
+.admin-banner-preview-text:empty {
+    display: none;
+    padding: 0;
+}
+.admin-banner-preview-empty {
+    position: relative;
+    z-index: 1;
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: var(--lux-500);
+}
+/* لو فيه صورة أو نص فعلاً، بنخفي رسالة "مفيش بانر" تلقائياً عن طريق
+   كلاس has-content بيتضاف/بيتشال من JS (شوف updateBannerPreview) */
+.admin-banner-preview.has-content .admin-banner-preview-empty {
+    display: none;
+}
+
+/* احترام تفضيل تقليل الحركة */
+@media (prefers-reduced-motion: reduce) {
+    .admin-toggle-switch-thumb,
+    .admin-toggle-switch-track,
+    .admin-save-btn,
+    .admin-range-slider::-webkit-slider-thumb {
+        transition: none !important;
+    }
+}
+
+
+/* ==================================================================
+   (المرحلة 4) البانر العلوي في الصفحة الرئيسية - index.html
+   ------------------------------------------------------------------
+   مُدار بالكامل من js/banner.js (initHomeBanner) - بيتحدث لحظياً عن
+   طريق الاشتراك في Realtime على جدول home_banner. مخفي افتراضياً
+   (class="hidden") لحد ما نتأكد إن فيه بانر مفعّل فعلاً (is_active
+   = true) عشان منسيبش مساحة فاضية أو ومضة قبل ما البيانات توصل.
+   ================================================================== */
+.home-banner {
+    position: relative;
+    border-radius: 22px;
+    overflow: hidden;
+    box-shadow: 0 8px 24px -10px rgba(0, 0, 0, 0.5);
+    border: 1px solid var(--lux-800);
+    background: linear-gradient(135deg, var(--lux-800), var(--lux-900));
+    min-height: 84px;
+    display: flex;
+    align-items: center;
+}
+.home-banner.hidden {
+    display: none;
+}
+.home-banner-img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+/* طبقة تعتيم خفيفة فوق الصورة عشان النص يفضل مقروء فوق أي صورة، أياً
+   كانت ألوانها */
+.home-banner-img::after { content: ''; }
+.home-banner-overlay {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg, rgba(0, 0, 0, 0.05), rgba(0, 0, 0, 0.55));
+}
+.home-banner-text {
+    position: relative;
+    z-index: 1;
+    margin: 0;
+    width: 100%;
+    padding: 16px 18px;
+    font-size: 0.85rem;
+    font-weight: 800;
+    color: #ffffff;
+    text-shadow: 0 1px 6px rgba(0, 0, 0, 0.6);
+    text-align: center;
+    line-height: 1.5;
+}
+/* بانر نص بس (من غير صورة) - خلفية متدرجة ذهبية/داكنة بدل الصورة،
+   بنفس هوية باقي كروت التطبيق الفاخرة */
+.home-banner.is-text-only {
+    background: linear-gradient(120deg, var(--brand-700, #0f766e), var(--brand-600), var(--gold-600));
+}
+.home-banner.is-text-only .home-banner-overlay {
+    display: none;
+}
+/* ==================================================================
+   وضع الزائر (Guest Mode) - geofence.js
+   ------------------------------------------------------------------
+   .guest-locked: بتتحط تلقائيًا على أي عنصر عليه data-requires-membership
+   لما window.isGuestMode = true (شوف lockGuestRestrictedElements في
+   geofence.js)، وكمان على عداد الخطوات نفسه (setStepsCounterMutedVisual).
+   .guest-mode-active: كلاس عام على body لأي تعتيم/تنسيق أوسع مرتبط
+   بوضع الزائر ككل (مش عنصر بعينه).
+   ================================================================== */
+.guest-locked {
+    position: relative;
+    opacity: 0.45;
+    filter: grayscale(0.6);
+    cursor: not-allowed !important;
+    /* (إصلاح - باج حقيقي): كانت هنا pointer-events: none، وده كان
+       بيمنع العنصر من إنه يبقى Event Target خالص - أي كليك عليه كان
+       بيوصل لعنصر تاني وراه (أو مايوصلش لحاجة أصلاً)، فمستمع الـ
+       Capture الجديد في geofence.js (اللي بيدور على .closest('.guest-locked'))
+       كان مستحيل يشتغل مهما كان صح. لازم العنصر يفضل قابل للاستقبال
+       (pointer-events: auto الافتراضي) عشان يوصله الحدث أصلاً، والمنع
+       الفعلي بقى مسؤولية الـ JS (preventDefault) مش الـ CSS */
+    transition: opacity 0.2s ease, filter 0.2s ease;
+}
+
+/* أيقونة قفل صغيرة أعلى العنصر المقفول، عشان تبقى الحالة واضحة بصريًا
+   من غير ما نحتاج نلمس أي Markup تاني غير data-requires-membership.
+   (تعديل - باج بصري): الإيموجي 🔒 القديم كان بيبان "رخيص" وسط هوية
+   Dark Luxury المبنية بالكامل على أيقونات SVG فاخرة (شكله ولونه كمان
+   بيختلف من جهاز لجهاز حسب نظام التشغيل). استبدلناه بدايرة خلفية
+   (::after) + أيقونة SVG حقيقية ملوّنة بالذهبي عن طريق mask-image
+   (::before) - نفس تقنية تلوين الأيقونات القياسية، فبتاخد أي لون من
+   متغيرات التطبيق تلقائيًا بدل ما تفضل عالقة بلون الإيموجي الثابت */
+.guest-locked::after {
+    content: '';
+    position: absolute;
+    top: -6px;
+    inset-inline-end: -6px;
+    width: 20px;
+    height: 20px;
+    background: var(--lux-950);
+    border: 1px solid var(--gold-500);
+    border-radius: 999px;
+    box-shadow: 0 0 6px 0 rgba(212, 175, 55, 0.35);
+    pointer-events: none;
+    /* أنيميشن دخول خفيف أول ما العنصر يتقفل بدل ما يظهر فجأة */
+    animation: guestLockBadgeIn 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.guest-locked::before {
+    content: '';
+    position: absolute;
+    top: -6px;
+    inset-inline-end: -6px;
+    width: 20px;
+    height: 20px;
+    z-index: 1;
+    pointer-events: none;
+    background-color: var(--gold-400);
+    -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='5' y='11' width='14' height='9' rx='2'/%3E%3Cpath d='M8 11V7a4 4 0 0 1 8 0v4'/%3E%3C/svg%3E");
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='5' y='11' width='14' height='9' rx='2'/%3E%3Cpath d='M8 11V7a4 4 0 0 1 8 0v4'/%3E%3C/svg%3E");
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+    -webkit-mask-position: center;
+    mask-position: center;
+    -webkit-mask-size: 11px 11px;
+    mask-size: 11px 11px;
+    animation: guestLockBadgeIn 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes guestLockBadgeIn {
+    from { opacity: 0; transform: scale(0.4); }
+    to   { opacity: 1; transform: scale(1); }
+}
+
+/* (إصلاح - طلب صريح): كان هنا تعتيم عام (opacity: 0.7) على منصّة
+   التتويج (.champ-podium-frame) وتبويبات البطولة (.champ-tabs) لما
+   وضع الزائر مفعّل - بس التعتيم ده مكانش مرتبط بأي قفل فعلي أصلاً:
+   مفيش أي عنصر جوه تبويب لوحة الصدارة عليه data-requires-membership،
+   وget_leaderboard()/public_profiles مقروءة لأي حد بغض النظر عن وجود
+   حساب. يعني الزائر كان شايف الليدربورد "شكله مقفول" بصريًا من غير أي
+   سبب حقيقي، مع إن المفروض يقدر يتابع المنافسة بحرية زي أي زائر -
+   القيد الحقيقي الوحيد إنه مايقدرش يحل الأسئلة/يكسب نقاط (وده لسه
+   متطبّق بشكل منفصل تمامًا عن طريق data-requires-membership على
+   الزراير الفعلية، مش هنا). اتشال التعتيم بالكامل.
+
+/* ==================================================================
+   12) هوية التطبيق القابلة للتحكم (app_identity) - ويدجت الاسم/الصورة
+   في لوحة الأدمن (initAppIdentityWidget في js/admin.js). posts.js
+   بيقرا نفس الجدول ده (SELECT عام) ويستخدم display_name/avatar_url
+   بدل النص الثابت "سِكّاوي" والحرف "س" في هيدر كل كارت منشور.
+   ================================================================== */
+
+/* معاينة الأفاتار الحالي/المقصوص - نفس مقاس ولون خلفية
+   .post-card-app-avatar (اللي بيبان فعلاً في الكروت) بس <img> مش <span>
+   لما تكون فيه صورة مرفوعة فعلاً */
+.identity-avatar-preview {
+    object-fit: cover;
+    border: 1px solid var(--lux-800);
+}
+
+/* حقل نص عادي (سطر واحد) - نفس هوية admin-number-input بصرياً بس
+   محاذاة النص لليمين (RTL) بدل النص في النص، عشان مناسب لاسم مش رقم */
+.admin-text-input {
+    font-family: inherit;
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: var(--lux-50);
+    background: var(--lux-800);
+    border: 1px solid var(--lux-700);
+    border-radius: 12px;
+    padding: 10px 12px;
+    text-align: right;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.admin-text-input:focus {
+    outline: none;
+    border-color: var(--gold-500);
+    box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.15);
+}
+.admin-text-input::placeholder {
+    color: var(--lux-500);
+    font-weight: 500;
+}
+
+/* (المجموعة 4) input[type="date"] بياخد نفس هوية admin-text-input
+   تلقائيًا لأنه بياخد نفس الكلاس - color-scheme: dark بس عشان أيقونة
+   التقويم الافتراضية بتاعة المتصفح تبان واضحة فوق خلفية غامقة بدل ما
+   تبقى سودة على سودة */
+input[type="date"].admin-text-input {
+    color-scheme: dark;
+}
+
+/* منطقة القص الدائري - بتظهر بس بعد اختيار صورة جديدة (initAppIdentityWidget
+   بيشيل/يضيف كلاس hidden). الصندوق مقاس ثابت (Cropper.js محتاج حاوية بأبعاد
+   واضحة) والدائرة المتراكبة فوقه (identity-crop-box::after) بس دليل بصري
+   لمنطقة القص النهائية - القص الفعلي بيحصل عن طريق Cropper نفسه
+   (aspectRatio: 1) وقت "اعتماد القص" */
+.identity-crop-area {
+    padding-top: 0.25rem;
+}
+.identity-crop-box {
+    position: relative;
+    width: 100%;
+    max-width: 22rem;
+    height: 16rem;
+    margin: 0 auto;
+    overflow: hidden;
+    border-radius: 1rem;
+    background: var(--lux-950, #05070c);
+    border: 1px solid var(--lux-800);
+}
+.identity-crop-box img {
+    display: block;
+    /* Cropper.js بياخد التحكم في الأبعاد فعلياً بعد التهيئة - القيمة دي
+       بس Fallback لحظة قبل ما الـ JS يخلص التهيئة */
+    max-width: 100%;
+}
+
+/* ==================================================================
+   11) منشورات "سِكّاوي" (فيسبوك-ستايل) - المرحلة 5 من خطة لوحة تحكم
+   الأدمن. js/posts.js بيرسم الكروت بالكلاسات دي (.post-card،
+   .post-like-btn، .is-liked، .is-guest-mode، .post-comment-*..إلخ) -
+   من غيرها المنشورات بتظهر بلا أي تنسيق.
+
+   منقولة من نسخة inline كانت مؤقتاً في index.html، بنفس المحتوى
+   بالظبط - غير إن القيم الثابتة (#D4AF37، #F2D77E، #0b0e14..) هنا
+   استُبدلت بمتغيرات نظام الألوان المعرّفة فوق في القسم (1) عشان تفضل
+   متسقة مع باقي التطبيق ويشتغل معاها تبديل المود الداكن/الفاتح
+   تلقائياً زي أي مكوّن تاني.
+   ================================================================== */
+
+/* كارت المنشور نفسه - نفس منطق admin-card (حدود شعرية + ظل soft-card)
+   عشان يفضل متسق بصرياً مع باقي كروت التطبيق */
+.post-card {
+    position: relative;
+    background: var(--lux-900);
+    border: 1px solid var(--lux-800);
+    border-radius: 1.25rem;
+    padding: 1rem 1.1rem 0.85rem;
+    box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.45), 0 4px 12px -2px rgba(0, 0, 0, 0.25);
+}
+
+/* هيدر الكارت - أفاتار دائري بحرف "س" بدرجات الذهبي (باسم التطبيق
+   نفسه، مفيش صاحب منشور حقيقي) + اسم التطبيق والوقت */
+.post-card-header {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    margin-bottom: 0.65rem;
+}
+.post-card-app-avatar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: 9999px;
+    flex-shrink: 0;
+    font-weight: 900;
+    font-size: 1.15rem;
+    color: var(--lux-950);
+    background: linear-gradient(135deg, var(--gold-300), var(--gold-500));
+}
+.post-card-header-text {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+    min-width: 0;
+}
+.post-card-app-name {
+    font-weight: 800;
+    font-size: 0.85rem;
+    color: var(--lux-50);
+}
+.post-card-time {
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: var(--lux-500);
+}
+
+/* نص ولو صورة المنشور */
+.post-card-content {
+    font-size: 0.85rem;
+    line-height: 1.6;
+    color: var(--lux-50);
+    margin: 0 0 0.75rem;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+.post-card-image {
+    display: block;
+    width: 100%;
+    max-height: 26rem;
+    object-fit: cover;
+    border-radius: 0.85rem;
+    margin-bottom: 0.75rem;
+    border: 1px solid var(--lux-800);
+}
+
+/* شريط اللايك/الكومنت */
+.post-card-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding-top: 0.6rem;
+    border-top: 1px solid var(--lux-800);
+}
+.post-like-btn,
+.post-comment-toggle-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    flex: 1;
+    justify-content: center;
+    padding: 0.45rem 0.5rem;
+    border-radius: 0.65rem;
+    background: transparent;
+    color: var(--lux-400);
+    font-size: 0.75rem;
+    font-weight: 700;
+    transition: color 0.2s ease, background-color 0.2s ease;
+}
+.post-like-btn svg,
+.post-comment-toggle-btn svg {
+    width: 1.15rem;
+    height: 1.15rem;
+}
+.post-like-btn:hover,
+.post-comment-toggle-btn:hover {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--lux-50);
+}
+/* حالة "عامل لايك بالفعل" - نفس الذهبي المستخدم في باقي حالات "مفعّل"
+   بالتطبيق (زرار التاب النشط، إطار قص الأفاتار..إلخ) */
+.post-like-btn.is-liked { color: var(--gold-500); }
+.post-like-count,
+.post-comment-count { font-variant-numeric: tabular-nums; }
+
+/* زائر مش مسجّل دخول - الأزرار تفضل ظاهرة (يقدر يشوف العدد)، والضغط
+   عليها بيطلع توست "محتاج حساب" بدل ما يتجاهل الضغطة بصمت (شوف
+   bindPostCardEvents في posts.js) - cursor: not-allowed هنا بقى
+   بيعكس السلوك الفعلي (فيه رد فعل، بس ممنوع) بدل default العادي.
+   وقسم الكومنتات بيتقفل خالص */
+.is-guest-mode .post-like-btn,
+.is-guest-mode .post-comment-toggle-btn {
+    cursor: not-allowed;
+}
+.is-guest-mode .post-like-btn:hover,
+.is-guest-mode .post-comment-toggle-btn:hover {
+    background: transparent;
+    color: var(--lux-400);
+}
+.is-guest-mode .post-comments-section { display: none !important; }
+
+/* قسم الكومنتات */
+.post-comments-section {
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--lux-800);
+}
+.post-comments-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    margin: 0 0 0.65rem;
+    padding: 0;
+    list-style: none;
+    max-height: 18rem;
+    overflow-y: auto;
+}
+.post-comments-empty {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--lux-500);
+    text-align: center;
+    padding: 0.4rem 0;
+}
+.post-comment-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+}
+/* تظليل مؤقت للرد اللي اتفتح عن طريق إشعار "رد على تعليقك" - نبضة
+   خلفية ذهبية خفيفة بتخف تدريجياً، نفس فلسفة bellShake (حركة قصيرة
+   بتتشال بالجافاسكريبت بعد ما تخلص - شوف handleOpenCommentFromNotification
+   في posts.js) بدل ما تفضل شغالة إلى الأبد */
+.post-comment-row.is-highlighted .post-comment-bubble {
+    animation: commentHighlightFade 1.8s ease-out;
+}
+@keyframes commentHighlightFade {
+    0%   { background: rgba(232, 193, 88, 0.35); }
+    100% { background: var(--lux-800); }
+}
+/* [الجزء هـ] رد متداخل - أفاتار أصغر شوية + مفيش حاجة تانية، الإزاحة
+   نفسها بتيجي من padding/border-right بتاعة .post-comment-replies
+   الحاوية ليه (مش من الـ row نفسها) */
+.post-comment-row.is-reply .post-comment-avatar {
+    width: 1.55rem;
+    height: 1.55rem;
+}
+.post-comment-avatar {
+    width: 1.85rem;
+    height: 1.85rem;
+    border-radius: 9999px;
+    flex-shrink: 0;
+    object-fit: cover;
+}
+/* [الجزء هـ] عمود عمودي واحد بيلمّ الفقاعة + شريط اللايك/الرد/الحذف +
+   فورم الرد (لو مفتوح) + قائمة الردود (لو فيه) - بديل ما كانت الفقاعة
+   لوحدها Sibling مباشر لزرار الحذف جوه .post-comment-row */
+.post-comment-body {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+}
+.post-comment-bubble {
+    background: var(--lux-800);
+    border-radius: 0.85rem;
+    padding: 0.45rem 0.7rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+}
+.post-comment-author {
+    font-size: 0.7rem;
+    font-weight: 800;
+    color: var(--gold-500);
+}
+/* صورة/اسم صاحب الكومنت بقوا قابلين للضغط لفتح بروفايله العام - شوف
+   buildCommentElement في posts.js. مفيش تغيير شكل واضح على الصورة
+   (بس المؤشر) عشان الدايرة الصغيرة أصلاً واضح إنها صورة شخص، لكن الاسم
+   بياخد underline خفيف عند الـ hover عشان يتحس إنه رابط فعلي */
+.post-comment-clickable {
+    cursor: pointer;
+}
+.post-comment-author.post-comment-clickable:hover {
+    text-decoration: underline;
+}
+.post-comment-text {
+    font-size: 0.78rem;
+    line-height: 1.5;
+    color: var(--lux-50);
+    overflow-wrap: anywhere;
+}
+
+/* [الجزء هـ] شريط لايك/رد/حذف - تحت الفقاعة مباشرة */
+.post-comment-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+    padding: 0 0.15rem;
+}
+.post-comment-time {
+    font-size: 0.68rem;
+    font-weight: 600;
+    color: var(--lux-500);
+    flex-shrink: 0;
+}
+.post-comment-like-btn,
+.post-comment-reply-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    font-size: 0.68rem;
+    font-weight: 700;
+    color: var(--lux-500);
+    transition: color 0.2s ease;
+}
+.post-comment-like-btn svg { width: 0.85rem; height: 0.85rem; }
+.post-comment-like-btn:hover,
+.post-comment-reply-btn:hover { color: var(--lux-50); }
+.post-comment-like-btn.is-liked { color: var(--gold-500); }
+.post-comment-like-btn:disabled { cursor: default; opacity: 0.6; }
+.post-comment-like-count { font-variant-numeric: tabular-nums; }
+
+.post-comment-delete-btn {
+    flex-shrink: 0;
+    width: 1.4rem;
+    height: 1.4rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 9999px;
+    color: var(--lux-500);
+    font-size: 0.7rem;
+    transition: color 0.2s ease, background-color 0.2s ease;
+}
+.post-comment-delete-btn:hover {
+    color: #f87171;
+    background: rgba(248, 113, 113, 0.12);
+}
+
+/* [الجزء هـ] فورم الرد المصغّر - نفس منطق post-comment-form بس مقاسات
+   أصغر، وبيتخفي/يظهر بكلاس hidden لما تدوس "رد" */
+.post-comment-reply-form {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+.post-comment-reply-input {
+    flex: 1;
+    min-width: 0;
+    background: var(--lux-800);
+    border: 1px solid var(--lux-700);
+    border-radius: 9999px;
+    padding: 0.35rem 0.75rem;
+    font-size: 0.75rem;
+    color: var(--lux-50);
+}
+.post-comment-reply-input:focus {
+    outline: none;
+    border-color: var(--gold-500);
+}
+.post-comment-reply-input::placeholder { color: var(--lux-500); }
+.post-comment-reply-submit-btn {
+    flex-shrink: 0;
+    width: 1.85rem;
+    height: 1.85rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 9999px;
+    background: linear-gradient(135deg, var(--gold-300), var(--gold-500));
+    color: var(--lux-950);
+}
+.post-comment-reply-submit-btn svg { width: 0.85rem; height: 0.85rem; }
+
+/* [الجزء هـ] قائمة الردود - متداخلة جوه الكومنت الأساسي، بإزاحة لجهة
+   اليمين (border-right بدل margin عشان يفضل واضح إنها "تحت" الكومنت
+   الأب حتى لو القائمة فاضية/مخفية) - مستوى واحد بس (مفيش
+   .post-comment-replies جوه رد أصلاً - شوف buildCommentElement) */
+.post-comment-replies {
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+    margin: 0.3rem 0 0;
+    padding: 0.1rem 0.85rem 0 0;
+    border-right: 2px solid var(--lux-800);
+    list-style: none;
+}
+.post-comment-replies:empty { display: none; }
+
+/* فورم إضافة كومنت */
+.post-comment-form {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+.post-comment-input {
+    flex: 1;
+    min-width: 0;
+    background: var(--lux-800);
+    border: 1px solid var(--lux-700);
+    border-radius: 9999px;
+    padding: 0.5rem 0.9rem;
+    font-size: 0.8rem;
+    color: var(--lux-50);
+}
+.post-comment-input:focus {
+    outline: none;
+    border-color: var(--gold-500);
+}
+.post-comment-input::placeholder { color: var(--lux-500); }
+.post-comment-submit-btn {
+    flex-shrink: 0;
+    width: 2.2rem;
+    height: 2.2rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 9999px;
+    background: linear-gradient(135deg, var(--gold-300), var(--gold-500));
+    color: var(--lux-950);
+    transition: opacity 0.2s ease;
+}
+.post-comment-submit-btn svg { width: 1rem; height: 1rem; }
+.post-comment-submit-btn:disabled { opacity: 0.5;
+}
+
+/* ==================================================================
+   13) إحصائيات وحماية بنك الأسئلة اليومية (المجموعة 2) - js/admin.js
+   (loadQuestionAnswerStats / renderQuestionsActiveWarning / سجل
+   تعديلات الأسئلة عن طريق logQuestionAction / loadQuestionAuditLog).
+   ================================================================== */
+
+/* شارة نسبة الإجابة الصح لكل سؤال - جنب وسم "ظاهر اليوم" في نفس صف
+   السؤال. تلوين إرشادي بس (مش تحذير أمان زي --dq-timer-danger
+   الأساسي): أخضر = نسبة كويسة، ذهبي = متوسطة، أحمر مكتوم = السؤال صعب
+   فعليًا على أغلب اللي جاوبوه (--dq-timer-danger نفسه مستخدم برضو في
+   admin-status-text[data-state='error'] فوق، فمفيش تعارض هنا) */
+.admin-question-stat-badge {
+    display: inline-flex;
+    align-items: center;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 0.65rem;
+    font-weight: 700;
+    padding: 0.2rem 0.55rem;
+    border-radius: 9999px;
+    border: 1px solid var(--lux-700);
+    color: var(--lux-400);
+    background: var(--lux-800);
+    white-space: nowrap;
+}
+.admin-question-stat-badge[data-tier="good"] {
+    color: #34d399;
+    border-color: rgba(52, 211, 153, 0.35);
+    background: rgba(52, 211, 153, 0.08);
+}
+.admin-question-stat-badge[data-tier="mid"] {
+    color: var(--gold-400);
+    border-color: rgba(212, 175, 55, 0.35);
+    background: rgba(212, 175, 55, 0.08);
+}
+.admin-question-stat-badge[data-tier="low"] {
+    color: var(--dq-timer-danger);
+    border-color: rgba(217, 83, 79, 0.35);
+    background: rgba(217, 83, 79, 0.08);
+}
+
+/* بانر "الأسئلة المفعّلة قلّت" - فوق شريط البحث/الفلترة مباشرة، بيبان
+   بس عند الحاجة (#questionsActiveWarning.hidden هي الحالة الافتراضية).
+   حدود/خلفية حمراء خفيفة تنبيهية من غير ما تبقى صارخة أو تقاطع الشغل */
+.admin-inline-warning {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.6rem;
+    padding: 0.65rem 0.9rem;
+    border-radius: 0.85rem;
+    border: 1px solid rgba(217, 83, 79, 0.35);
+    background: rgba(217, 83, 79, 0.08);
+    color: #f3b0ad;
+    font-size: 0.75rem;
+    font-weight: 700;
+    line-height: 1.55;
+}
+.admin-inline-warning svg {
+    width: 1.15rem;
+    height: 1.15rem;
+    flex-shrink: 0;
+    margin-top: 0.05rem;
+    color: var(--dq-timer-danger);
+}
+.admin-inline-warning.hidden { display: none; }
+
+/* سجل تعديلات الأسئلة (Audit Log) - قائمة نص للقراءة بس، بدون أزرار
+   تفاعل، أحدث عملية فوق (شوف loadQuestionAuditLog) */
+.admin-audit-log-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    max-height: 16rem;
+    overflow-y: auto;
+}
+.admin-audit-log-item {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.6rem;
+    padding: 0.55rem 0.7rem;
+    border-radius: 0.6rem;
+    background: var(--lux-800);
+    border: 1px solid var(--lux-700);
+    font-size: 0.72rem;
+}
+.admin-audit-log-item-text {
+    color: var(--lux-50);
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.admin-audit-log-item-time {
+    color: var(--lux-500);
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 0.65rem;
+    flex-shrink: 0;
+}
+
+/* ==================================================================
+   14) شارات استلام/مشاهدة رسايل شات الدعم (✓/✓✓) + كارت معلومات الرسالة
+   (المرحلة 9) - js/support-chat.js (buildTicksHtml/showMessageInfoPopover).
+   الشارات نفسها متبنية بالكامل بـ Tailwind inline (كلاسات text-lux-500/
+   text-gold-400 في الـ SVG)، فمحتاجين هنا بس أنيميشن ظهور خفيف لكارت
+   المعلومات لما يتفتح بالضغطة المطولة - نفس روح screenFadeSlideIn فوق.
+   ================================================================== */
+
+#supportMsgInfoOverlay > div {
+    animation: supportMsgInfoPopIn 0.18s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+@keyframes supportMsgInfoPopIn {
+    from { opacity: 0; transform: scale(0.92) translateY(6px); }
+    to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+    #supportMsgInfoOverlay > div {
+        animation: none !important;
+    }
+}
+
+/* ==================================================================
+   15) مؤشر "بيكتب…" الحي في شات الدعم (Realtime Broadcast) -
+   js/support-chat.js (showTypingIndicator/hideTypingIndicator +
+   sendTypingState). 3 نقط بترقص فوق وتحت بالتبادل بفرق توقيت بسيط بين
+   كل نقطة والتانية، جوه فقاعة شكلها مطابق لفقاعة رسالة عادية بالظبط
+   (نفس كلاسات اللون في buildMessageBubbleHtml).
+   ================================================================== */
+.support-typing-dots {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.28rem;
+}
+.support-typing-dots span {
+    width: 0.4rem;
+    height: 0.4rem;
+    border-radius: 9999px;
+    background: currentColor;
+    animation: supportTypingBounce 1.2s infinite ease-in-out;
+}
+.support-typing-dots span:nth-child(1) { animation-delay: 0s; }
+.support-typing-dots span:nth-child(2) { animation-delay: 0.18s; }
+.support-typing-dots span:nth-child(3) { animation-delay: 0.36s; }
+
+@keyframes supportTypingBounce {
+    0%, 60%, 100% { transform: translateY(0); opacity: 0.45; }
+    30% { transform: translateY(-3px); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .support-typing-dots span {
+        animation: none !important;
+        opacity: 0.85;
+    }
+}
+/* ==================================================================
+   نقطة "أونلاين الآن" الخضراء فوق صورة البروفايل (زي فيسبوك بالظبط) -
+   شوف js/presence.js (presenceDotHtml/loadAndApplyPresence) للمنطق
+   الكامل. العنصر بيتحط جوه أي حاوية عندها position:relative حوالين
+   أي <img> بروفايل (بروفايلي، بروفايل عام، لوحة الصدارة، شات الدعم،
+   قائمة الأصدقاء، ...إلخ).
+
+   مهم: .is-online مش مجرد تبديل بصري - هي انعكاس مباشر لرد فعلي جاي
+   من get_presence_for_users على السيرفر (شوف
+   sql/phase-X-friend-presence.sql)، اللي بترفض ترجع أي بيانات أونلاين
+   لحد مش صاحب الصورة نفسه/صديقه المقبول/الأدمن. يعني الحالة الافتراضية
+   (display:none) هي فعليًا الحالة "الآمنة" لأي زائر أو مستخدم مش صديق،
+   مش بس تجميل واجهة.
+   ================================================================== */
+.presence-dot {
+    display: none;
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    width: 0.8em;
+    height: 0.8em;
+    min-width: 10px;
+    min-height: 10px;
+    font-size: 1rem;
+    border-radius: 9999px;
+    background: #22c55e;
+    border: 2px solid var(--lux-950);
+    box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.35);
+    z-index: 3;
+    pointer-events: none;
+}
+.presence-dot.is-online {
+    display: block;
+}
+
+/* تعديل مقاس لصور البروفايل الكبيرة (بروفايلي/بروفايل عام/بودیوم
+   التوب 3) - font-size أكبر يكبّر النقطة نفسها (شوف width/height فوق
+   المبنية بـ em) وسمك برواز أوضح شوية عشان تتناسب مع صورة أكبر */
+.presence-dot.presence-dot-lg {
+    font-size: 1.4rem;
+    border-width: 3px;
+}
+
+/* حاوية بودیوم التوب 3 (podium-avatar-wrap) متعرّفاش أصلاً position
+   relative في أي مكان تاني - لازم نضيفها هنا عشان presence-dot تتموضع
+   صح جواها بدل ما تطلع بره حدود الصورة */
+.podium-avatar-wrap {
+    position: relative;
+    display: inline-block;
+}

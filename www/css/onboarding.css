@@ -1,0 +1,1099 @@
+/* ==================================================================
+   سِكّاوي | css/onboarding.css
+   ------------------------------------------------------------------
+   تنسيقات شاشات الترحيب التفاعلية (Onboarding) اللي بتظهر لأول
+   مرة بس للمستخدم قبل ما يدخل التطبيق (8 سلايدات محتوى + سلايد
+   الأخيرة). منطق الإظهار/الإخفاء والتنقل بين السلايدات موجود في
+   js/onboarding.js - الملف ده بس مسؤول عن الشكل.
+
+   ملاحظة: زي css/style.css بالظبط، ده "تكميلي" فوق Tailwind CDN
+   ومش بديل عنه - أغلب الـ Layout شغال بـ Utility Classes مباشرة
+   جوه index.html، والملف ده بيغطي بس الحاجات اللي Tailwind
+   الأساسي مش بيقدر يعملها (Glassmorphism الحقيقي، الـ Gradient
+   Text، تحجيم الـ Swiper، وأنيميشن الكأس التوقيعي في آخر سلايد).
+
+   تحديث: كل أيقونات السلايدات (1-9) بقت SVG/CSS مرسومة بالكامل جوّه
+   المشروع - مفيش ولا Lottie ولا أي رابط خارجي تاني، فالـ Onboarding
+   بقى مستقل 100% عن الشبكة ومتناسق بصرياً مع باقي هوية "سِكّاوي".
+   ================================================================== */
+
+/* ------------------------------------------------------------------
+   1) الحاوية الرئيسية + الإضاءة المحيطة (Ambient Glow)
+   ------------------------------------------------------------------ */
+#onboardingOverlay {
+    font-family: 'Cairo', sans-serif;
+    background-color: #05060A;
+}
+
+/* (إصلاح - باج حقيقي): بيتحط على <body> طول ما #onboardingOverlay
+   ظاهر (initOnboarding()/showAuthGate() في js/onboarding.js) - بيمنع
+   أي سكرول على الصفحة تماماً حتى لو واجهة التطبيق اللي وراء الـ Overlay
+   (موجودة بالكامل في الـ DOM من أول تحميل الصفحة) أطول من الشاشة.
+   position:fixed + width:100% إضافي (مش overflow:hidden بس) عشان يمنع
+   كمان "الارتداد" المطاطي (rubber-band bounce) بتاع سفاري iOS وقت
+   السحب لفوق/تحت - وهو السبب الحقيقي وراء "علامة السكرول اللي بتطلع
+   وتنزل" رغم إن المستخدم واقف على شاشة ثابتة ظاهريًا */
+body.onb-scroll-lock {
+    overflow: hidden !important;
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100dvh;
+}
+
+#onboardingOverlay .onb-glow-1,
+#onboardingOverlay .onb-glow-2 {
+    position: absolute;
+    width: 340px;
+    height: 340px;
+    border-radius: 50%;
+    filter: blur(90px);
+    opacity: 0.4;
+    pointer-events: none;
+    z-index: 0;
+    transition: background-color 0.7s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ------------------------------------------------------------------
+   2) كروت الزجاج (Glassmorphism) - نفس روح الهوية بتاعة "سِكّاوي"
+   في باقي التطبيق (bg-lux-900 + border ذهبي خفيف) لكن بإحساس
+   شفافية أعمق يناسب شاشة ترحيب بملء الشاشة
+   ------------------------------------------------------------------ */
+#onboardingOverlay .onb-glass-card {
+    background: linear-gradient(160deg, rgba(255, 255, 255, 0.10) 0%, rgba(255, 255, 255, 0.025) 100%);
+    backdrop-filter: blur(26px);
+    -webkit-backdrop-filter: blur(26px);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    box-shadow:
+        0 25px 45px -10px rgba(0, 0, 0, 0.55),
+        inset 0 1px 1px 0 rgba(255, 255, 255, 0.25);
+}
+
+#onboardingOverlay .onb-glass-btn {
+    background: rgba(255, 255, 255, 0.07);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    transition: all 0.2s ease;
+}
+
+#onboardingOverlay .onb-glass-btn:active {
+    transform: scale(0.96);
+}
+
+/* ------------------------------------------------------------------
+   3) نصوص متدرّجة (Gradient Text) - لون مختلف لكل سلايد، بيتماشى
+   مع لون الإضاءة المحيطة بتاعته (data-accent في index.html)
+   ------------------------------------------------------------------ */
+#onboardingOverlay .onb-grad-1 { background: linear-gradient(135deg, #EAF2FF 0%, #60A5FA 55%, #1D4ED8 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+#onboardingOverlay .onb-grad-2 { background: linear-gradient(135deg, #F5EBFF 0%, #C084FC 55%, #7E22CE 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+#onboardingOverlay .onb-grad-3 { background: linear-gradient(135deg, #E8FFF5 0%, #34D399 55%, #047857 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+#onboardingOverlay .onb-grad-4 { background: linear-gradient(135deg, #FFF6D1 0%, #E8C158 50%, #B8942A 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+#onboardingOverlay .onb-grad-5 { background: linear-gradient(135deg, #E3FBFF 0%, #22D3EE 55%, #0E7490 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+#onboardingOverlay .onb-grad-6 { background: linear-gradient(135deg, #FFE9EC 0%, #FB7185 55%, #BE123C 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+#onboardingOverlay .onb-grad-7 { background: linear-gradient(135deg, #FFF6D1 0%, #F2D77E 50%, #D4AF37 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+#onboardingOverlay .onb-grad-8 { background: linear-gradient(135deg, #FFF6E0 0%, #FBBF24 55%, #B45309 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+
+/* 3.1) ظل خفيف على كل نصوص السلايدات (العناوين المتدرّجة + الوصف +
+   عداد "٠٨ / ٠٩") - عشان تفضل واضحة مهما كانت الخلفية وراها فاتحة
+   أو متغيّرة الألوان. مقصود يكون خفيف جداً (شفافية قليلة + بلور صغير)
+   عشان يوضّح من غير ما يبان كظل صريح تقيل على النص */
+#onboardingOverlay .onb-grad-1,
+#onboardingOverlay .onb-grad-2,
+#onboardingOverlay .onb-grad-3,
+#onboardingOverlay .onb-grad-4,
+#onboardingOverlay .onb-grad-5,
+#onboardingOverlay .onb-grad-6,
+#onboardingOverlay .onb-grad-7,
+#onboardingOverlay .onb-grad-8 {
+    filter: drop-shadow(0 2px 5px rgba(0, 0, 0, 0.4));
+}
+#onboardingOverlay .swiper-slide p.text-lux-300,
+#onboardingOverlay .swiper-slide span.text-lux-400 {
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
+}
+
+/* ------------------------------------------------------------------
+   4) تحجيم الـ Swiper وشكل الكروت (Cards Stack Effect)
+   ------------------------------------------------------------------ */
+#onboardingOverlay .onbSwiper {
+    width: 100%;
+    max-width: 360px;
+    height: 66vh;
+    max-height: 560px;
+    padding: 10px 0;
+}
+
+#onboardingOverlay .swiper-slide {
+    border-radius: 32px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+
+/* ------------------------------------------------------------------
+   5) نقاط الترقيم المخصصة (Pagination Bullets) - نفس لون السلايد
+   النشطة عن طريق --onb-active-accent (بيتحدّث من JS)
+   ------------------------------------------------------------------ */
+#onboardingOverlay {
+    --onb-active-accent: #D4AF37;
+}
+
+#onboardingOverlay .onb-bullet {
+    width: 7px;
+    height: 7px;
+    border-radius: 9999px;
+    background-color: rgba(255, 255, 255, 0.22);
+    transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+    cursor: pointer;
+}
+
+#onboardingOverlay .onb-bullet-active {
+    width: 24px;
+    background: var(--onb-active-accent);
+    box-shadow: 0 0 10px var(--onb-active-accent);
+}
+
+/* ------------------------------------------------------------------
+   6) أيقونات السلايدات (1-6) - رسوم SVG/CSS مرسومة بالكامل بدل
+   أي رابط خارجي (كانت Lottie من lottiefiles.com قبل كده)، عشان
+   تفضل شغالة 100% مهما حصل للشبكة، وكل واحدة بتاخد لون سلايدها
+   (نفس تدرّجات onb-grad-N بالظبط) - بنفس فلسفة كأس سلايد 7 بالظبط
+   بس بحجم أصغر ومن غير الـ Sparkles المحجوزة للحظة الختامية بس
+   ------------------------------------------------------------------ */
+#onboardingOverlay .onb-icon-wrap {
+    position: relative;
+    width: 215px;
+    height: 215px;
+}
+
+#onboardingOverlay .onb-icon-halo {
+    position: absolute;
+    inset: -30px;
+    border-radius: 50%;
+    background: radial-gradient(circle, var(--onb-icon-halo, rgba(212, 175, 55, 0.4)) 0%, rgba(212, 175, 55, 0) 70%);
+    animation: onbHaloPulse 2.6s ease-in-out infinite;
+}
+
+#onboardingOverlay .onb-icon-svg {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    height: 100%;
+    filter: drop-shadow(0 8px 20px rgba(0, 0, 0, 0.4));
+    animation: onbTrophyEnter 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) both,
+               onbTrophyFloat 3.8s ease-in-out 0.8s infinite;
+    transform-origin: 50% 85%;
+}
+
+/* ------------------------------------------------------------------
+   7) لمسات حركية مخصصة لكل سلايد - مش مجرد "دخول + تعويم" عام،
+   كل أيقونة بتتحرك بطريقة بتعبّر عن اللي بيتشرح في السلايد بتاعها:
+   تاج بيلمع بأشعة دايرة حواليه، ميدالية بتتأرجح زي ما هي معلّقة
+   فعلاً، أعمدة الصدارة بتكبر لفوق زي عداد نقاط، جزمة بتتمايل مشي،
+   دمبل بيترفع زي عدة "بايسبس"، وكاميرا بتومض فلاش مع قلب لايك
+   طاير - كل ده جوه نفس الـ SVG، من غير أي مكتبة خارجية
+   ------------------------------------------------------------------ */
+
+/* -- سلايد 1: تاج + أشعة دايرة حواليه بتلف ببطء + جوهرة بتنبض -- */
+#onboardingOverlay .onb-crown-rays {
+    transform-box: fill-box;
+    transform-origin: 50% 50%;
+    animation: onbSpinSlow 16s linear infinite;
+}
+
+#onboardingOverlay .onb-crown-gem {
+    transform-box: fill-box;
+    transform-origin: 50% 50%;
+    animation: onbGemPulse 1.8s ease-in-out infinite;
+}
+
+@keyframes onbSpinSlow {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+}
+
+@keyframes onbGemPulse {
+    0%, 100% { transform: scale(1);    opacity: 0.35; }
+    50%      { transform: scale(1.3);  opacity: 0.65; }
+}
+
+#onboardingOverlay .onb-crown-shine {
+    animation: onbCrownShine 3.4s ease-in-out infinite;
+}
+
+@keyframes onbCrownShine {
+    0%, 100% { opacity: 0.08; }
+    50%      { opacity: 0.34; }
+}
+
+/* -- سلايد 2: بطاقة استوري نصية - أسطر النص بتتكتب واحد ورا التاني
+   + مؤشر كتابة بيرمش + قلب تفاعل طاير -- */
+#onboardingOverlay .onb-story-line {
+    transform-box: fill-box;
+    transform-origin: 0% 50%;
+    animation: onbLineReveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+#onboardingOverlay .onb-story-cursor {
+    animation: onbCursorBlink 0.9s steps(1) 0.9s infinite;
+}
+
+#onboardingOverlay .onb-cam-heart {
+    animation: onbHeartFloat 2.6s ease-in-out 0.9s infinite;
+}
+
+@keyframes onbLineReveal {
+    0%   { transform: scaleX(0); opacity: 0; }
+    100% { transform: scaleX(1); opacity: 1; }
+}
+
+@keyframes onbCursorBlink {
+    0%, 49%   { opacity: 1; }
+    50%, 100% { opacity: 0; }
+}
+
+@keyframes onbHeartFloat {
+    0%   { transform: translateY(0) scale(0.5);   opacity: 0; }
+    18%  { transform: translateY(-6px) scale(1);  opacity: 1; }
+    75%  { transform: translateY(-32px) scale(1); opacity: 0.85; }
+    100% { transform: translateY(-42px) scale(0.7); opacity: 0; }
+}
+
+/* -- سلايد 3: ميدالية بتتأرجح زي ما هي معلّقة فعلاً + نجمة بتلمع -- */
+#onboardingOverlay .onb-medal-swing {
+    transform-box: view-box;
+    transform-origin: 60px 60px;
+    animation: onbMedalSway 3.2s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+
+#onboardingOverlay .onb-medal-star {
+    transform-box: fill-box;
+    transform-origin: 50% 50%;
+    animation: onbStarGlow 2s ease-in-out infinite;
+}
+
+@keyframes onbMedalSway {
+    0%, 100% { transform: rotate(-7deg); }
+    50%      { transform: rotate(7deg); }
+}
+
+@keyframes onbStarGlow {
+    0%, 100% { opacity: 0.8; transform: scale(1); }
+    50%      { opacity: 1;   transform: scale(1.16); }
+}
+
+/* -- سلايد 4: أعمدة الصدارة بتكبر لفوق (زي عداد نقاط) + نجمة بتنزل
+   فوق العمود الأول + لمعة ذهبية بتمر عليه -- */
+#onboardingOverlay .onb-podium-bar {
+    transform-box: fill-box;
+    transform-origin: 50% 100%;
+    animation: onbBarGrow 0.55s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+#onboardingOverlay .onb-podium-star {
+    transform-box: fill-box;
+    transform-origin: 50% 50%;
+    animation: onbStarFadeIn 0.6s ease-out 0.55s both,
+               onbStarGlowSoft 3s ease-in-out 1.15s infinite;
+}
+
+#onboardingOverlay .onb-podium-shine {
+    transform-box: view-box;
+    transform-origin: 50% 50%;
+    animation: onbShimmerSweep 3.2s ease-in-out 1.3s infinite;
+}
+
+#onboardingOverlay .onb-podium-star-shine {
+    transform-box: fill-box;
+    transform-origin: 50% 50%;
+    animation: onbStarFadeIn 0.6s ease-out 0.55s both,
+               onbStarShineTwinkle 2.4s ease-in-out 1.3s infinite;
+}
+
+@keyframes onbStarShineTwinkle {
+    0%, 100% { opacity: 0.25; }
+    50%      { opacity: 0.75; }
+}
+
+@keyframes onbBarGrow {
+    from { transform: scaleY(0); }
+    to   { transform: scaleY(1); }
+}
+
+@keyframes onbStarFadeIn {
+    0%   { opacity: 0; }
+    100% { opacity: 1; }
+}
+
+@keyframes onbStarGlowSoft {
+    0%, 100% { filter: drop-shadow(0 0 0 rgba(232,193,88,0)); }
+    50%      { filter: drop-shadow(0 0 6px rgba(232,193,88,0.75)); }
+}
+
+@keyframes onbShimmerSweep {
+    0%   { transform: translateX(-24px) rotate(20deg); opacity: 0; }
+    12%  { opacity: 0.55; }
+    50%  { opacity: 0.35; }
+    88%  { opacity: 0; }
+    100% { transform: translateX(24px) rotate(20deg); opacity: 0; }
+}
+
+/* -- سلايد 5: شخصية ماشية بمفاصل حقيقية - كل طرف بقى قطعتين (فخذ+ساق،
+   عضد+ساعد) وكل قطعة بتلف حوالين مفصلها الخاص (ورك/ركبة، كتف/مرفق)،
+   بتوقيت مختلف عن بعض عشان الركبة تنثني فعلياً وقت الخطوة (swing) وتفرد
+   وقت الالتصاق بالأرض (stance) -- ده اللي بيدي إحساس "مشية واقعية" مش
+   مجرد عصايتين بتتمايل يمين وشمال -- */
+#onboardingOverlay .onb-walk-front-thigh {
+    transform-box: view-box;
+    transform-origin: 60px 65px;
+    animation: onbThighA 0.9s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
+}
+#onboardingOverlay .onb-walk-back-thigh {
+    transform-box: view-box;
+    transform-origin: 60px 65px;
+    animation: onbThighA 0.9s cubic-bezier(0.45, 0.05, 0.55, 0.95) -0.45s infinite;
+}
+#onboardingOverlay .onb-walk-front-shin {
+    transform-box: view-box;
+    transform-origin: 60px 85px;
+    animation: onbShinA 0.9s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
+}
+#onboardingOverlay .onb-walk-back-shin {
+    transform-box: view-box;
+    transform-origin: 60px 85px;
+    animation: onbShinA 0.9s cubic-bezier(0.45, 0.05, 0.55, 0.95) -0.45s infinite;
+}
+
+#onboardingOverlay .onb-walk-back-arm {
+    transform-box: view-box;
+    transform-origin: 60px 33px;
+    animation: onbArmUpperA 0.9s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
+}
+#onboardingOverlay .onb-walk-front-arm {
+    transform-box: view-box;
+    transform-origin: 60px 33px;
+    animation: onbArmUpperA 0.9s cubic-bezier(0.45, 0.05, 0.55, 0.95) -0.45s infinite;
+}
+#onboardingOverlay .onb-walk-back-forearm {
+    transform-box: view-box;
+    transform-origin: 60px 48px;
+    animation: onbForearmA 0.9s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
+}
+#onboardingOverlay .onb-walk-front-forearm {
+    transform-box: view-box;
+    transform-origin: 60px 48px;
+    animation: onbForearmA 0.9s cubic-bezier(0.45, 0.05, 0.55, 0.95) -0.45s infinite;
+}
+
+#onboardingOverlay .onb-walk-torso,
+#onboardingOverlay .onb-walk-head {
+    transform-box: view-box;
+    transform-origin: 60px 60px;
+    animation: onbWalkBob 0.45s ease-in-out infinite;
+}
+
+#onboardingOverlay .onb-line-1 { animation: onbLineFlow 1.3s ease-in-out infinite; }
+#onboardingOverlay .onb-line-2 { animation: onbLineFlow 1.3s ease-in-out 0.18s infinite; }
+#onboardingOverlay .onb-line-3 { animation: onbLineFlow 1.3s ease-in-out 0.36s infinite; }
+
+/* ظل الأرض بيهتز بخفة مع إيقاع المشي نفسه (0.9s زي onbThighA) بدل
+   ما يفضل ثابت تحت شخصية بتتحرك فوقه - تفصيلة صغيرة بس بتخلي
+   الرسمة كلها حاسس إنها واقفة على أرض حقيقية */
+#onboardingOverlay .onb-walk-ground-shadow {
+    transform-box: fill-box;
+    transform-origin: 50% 50%;
+    animation: onbWalkShadowSync 0.9s ease-in-out infinite;
+}
+
+@keyframes onbWalkShadowSync {
+    0%, 50%, 100% { transform: scaleX(1);    opacity: 0.26; }
+    25%           { transform: scaleX(0.92); opacity: 0.22; }
+    75%           { transform: scaleX(0.96); opacity: 0.24; }
+}
+
+/* دوران الورك: من الخلف لقدام وبالعكس، بتوقف نسبي عند الطرفين (زي لحظة
+   ارتكاز القدم على الأرض) بدل حركة بندول ميكانيكية بسرعة ثابتة */
+@keyframes onbThighA {
+    0%   { transform: rotate(18deg); }
+    25%  { transform: rotate(-2deg); }
+    50%  { transform: rotate(-22deg); }
+    75%  { transform: rotate(-2deg); }
+    100% { transform: rotate(18deg); }
+}
+
+/* دوران الركبة النسبي: بتنثني بقوة وقت رفع القدم عن الأرض (swing) عشان
+   متلمسش الأرض، وبتفرد شبه كامل وقت الارتكاز (stance) - ده الفرق
+   الحقيقي بين "مشية واقعية" و"رجل بتتلف كعصايه واحدة".
+
+   تصحيح مهم: الركبة كانت بتنثني بقوة عند 15% (يعني وقت ما الفخذ لسه
+   في مرحلة "الارتكاز/الدفع للخلف" - onbThighA بيكون وقتها بين +18°
+   و-2°)، أي إن القدم كانت "بتتلخبط" وهي المفروض ملتصقة بالأرض بتدفع
+   الجسم لقدام - وده اللي بيدي إحساس بصري إن الشخصية بترجع لورا. الحل:
+   تأخير لحظة الانثناء الأقصى لحد ما الفخذ يبقى فعلاً في مرحلة الـ
+   swing (بعد الـ toe-off عند 50%، لحد ما يرجع يفرد قبل الـ
+   heel-strike عند 100%) - كده الركبة بتتحرك بالظبط وقت رفع القدم عن
+   الأرض فعلاً، مش وقت الدفع منها */
+@keyframes onbShinA {
+    0%   { transform: rotate(2deg); }
+    25%  { transform: rotate(-4deg); }
+    50%  { transform: rotate(-6deg); }
+    65%  { transform: rotate(-40deg); }
+    85%  { transform: rotate(-10deg); }
+    100% { transform: rotate(2deg); }
+}
+
+/* الدراع بتتحرك بعكس رجل نفس الجهة تمامًا (توازن مشية طبيعي) وبمدى أضيق */
+@keyframes onbArmUpperA {
+    0%   { transform: rotate(14deg); }
+    25%  { transform: rotate(-1deg); }
+    50%  { transform: rotate(-16deg); }
+    75%  { transform: rotate(-1deg); }
+    100% { transform: rotate(14deg); }
+}
+
+@keyframes onbForearmA {
+    0%   { transform: rotate(4deg); }
+    25%  { transform: rotate(-10deg); }
+    50%  { transform: rotate(4deg); }
+    75%  { transform: rotate(14deg); }
+    100% { transform: rotate(4deg); }
+}
+
+@keyframes onbWalkBob {
+    0%, 100% { transform: translateY(0); }
+    50%      { transform: translateY(-2.2px); }
+}
+
+@keyframes onbLineFlow {
+    0%   { opacity: 0;    transform: translateX(6px); }
+    35%  { opacity: 0.9;  transform: translateX(0); }
+    75%  { opacity: 0.5; }
+    100% { opacity: 0;    transform: translateX(-8px); }
+}
+
+/* -- سلايد 6: دمبل بيترفع زي عدة تمرين البايسبس + الأوزان بتنبض
+   طاقة بالتبادل -- */
+#onboardingOverlay .onb-dumbbell-lift {
+    transform-box: view-box;
+    transform-origin: 60px 98px;
+    animation: onbLift 3.4s ease-in-out infinite;
+}
+
+#onboardingOverlay .onb-weight-l { animation: onbWeightPulse 3.4s ease-in-out infinite; }
+#onboardingOverlay .onb-weight-r { animation: onbWeightPulse 3.4s ease-in-out 0.5s infinite; }
+
+@keyframes onbLift {
+    0%, 100% { transform: rotate(-5deg); }
+    50%      { transform: rotate(5deg); }
+}
+
+@keyframes onbWeightPulse {
+    0%, 100% { filter: brightness(1); }
+    50%      { filter: brightness(1.12); }
+}
+
+/* حاوية الكأس الحقيقي (Lottie) - نفس مقاس وموقع الكأس الاحتياطي
+   بالظبط، عشان أي تبديل بينهم (حالة فشل التحميل) ميغيّرش أي حاجة في
+   تخطيط الصفحة */
+.onb-trophy-lottie {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    height: 100%;
+}
+.onb-trophy-lottie svg { display: block; }
+
+/* الكأس الاحتياطي (SVG/CSS) - مخفي افتراضياً، js/onboarding.js بيظهره
+   (بيضيف onb-trophy-fallback-active) بس لو الـ Lottie فشل يحمّل أو
+   يشتغل */
+.onb-trophy-fallback {
+    display: none;
+}
+.onb-trophy-fallback.onb-trophy-fallback-active {
+    display: block;
+}
+
+/* حاوية شخصية الماشي الحقيقية (Lottie) - سلايد 2 بس. نفس مقاس
+   وموقع onb-icon-wrap (190×190) بالظبط، عشان أي تبديل بينها وبين
+   الأيقونة الاحتياطية (حالة فشل التحميل) ميغيّرش أي حاجة في التخطيط،
+   بنفس فلسفة onb-trophy-lottie تماماً */
+.onb-walk-lottie {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    border-radius: 12px;
+    filter: drop-shadow(0 8px 20px rgba(0, 0, 0, 0.4));
+}
+.onb-walk-lottie svg { display: block; }
+
+/* الأيقونة الاحتياطية (SVG/CSS) - مخفية افتراضياً، js/onboarding.js
+   بيظهرها (بيضيف onb-walk-fallback-active) بس لو الـ Lottie فشل
+   يحمّل/يشتغل */
+.onb-walk-fallback {
+    display: none;
+}
+.onb-walk-fallback.onb-walk-fallback-active {
+    display: block;
+}
+
+/* حاوية علامات الاستفهام الحقيقية (Lottie) - سلايد 3 بس. نفس مقاس
+   وموقع onb-icon-wrap (215×215) بالظبط، عشان أي تبديل بينها وبين
+   الأيقونة الاحتياطية (حالة فشل التحميل) ميغيّرش أي حاجة في التخطيط،
+   بنفس فلسفة onb-walk-lottie تماماً */
+.onb-quiz-lottie {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    height: 100%;
+    filter: drop-shadow(0 8px 20px rgba(0, 0, 0, 0.4));
+}
+.onb-quiz-lottie svg { display: block; }
+
+/* الأيقونة الاحتياطية (SVG/CSS) - مخفية افتراضياً، js/onboarding.js
+   بيظهرها (بيضيف onb-quiz-fallback-active) بس لو الـ Lottie فشل
+   يحمّل/يشتغل */
+.onb-quiz-fallback {
+    display: none;
+}
+.onb-quiz-fallback.onb-quiz-fallback-active {
+    display: block;
+}
+
+/* حاوية الدبوس/الموقع الحقيقي (Lottie) - سلايد 4 بس. نفس مقاس
+   وموقع onb-icon-wrap (215×215) بالظبط، عشان أي تبديل بينها وبين
+   الأيقونة الاحتياطية (حالة فشل التحميل) ميغيّرش أي حاجة في التخطيط.
+   الكانفاس الأصلي بتاع الملف (1080×1200) مش مربع (أطول شوية من
+   عرضه)، فـ "meet" الافتراضي بيحافظ على أبعاده الأصلية جوه المربع
+   من غير قص أو تمطيط - بنفس فلسفة onb-walk-lottie/onb-quiz-lottie */
+.onb-location-lottie {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    height: 100%;
+    filter: drop-shadow(0 8px 20px rgba(0, 0, 0, 0.4));
+}
+.onb-location-lottie svg { display: block; }
+
+/* الأيقونة الاحتياطية (SVG/CSS) - مخفية افتراضياً، js/onboarding.js
+   بيظهرها (بيضيف onb-location-fallback-active) بس لو الـ Lottie فشل
+   يحمّل/يشتغل */
+.onb-location-fallback {
+    display: none;
+}
+.onb-location-fallback.onb-location-fallback-active {
+    display: block;
+}
+
+/* حاوية البار تشارت الحقيقية (Lottie) - سلايد 5 بس. نفس مقاس وموقع
+   onb-icon-wrap (215×215) بالظبط، عشان أي تبديل بينها وبين الأيقونة
+   الاحتياطية (حالة فشل التحميل) ميغيّرش أي حاجة في التخطيط - بنفس
+   فلسفة onb-quiz-lottie/onb-location-lottie. الفرق هنا: الرسمة
+   الفعلية بتاخد جزء بس من كانفاس الملف الأصلي (500×500) والباقي
+   فاضي، فلو سيبناها على preserveAspectRatio الافتراضي (meet) مش
+   هتملى الحاوية. الحل: overflow:hidden على الحاوية + scale()
+   وtransform-origin على مركز الرسمة الفعلي (من غير ما نغيّر أي حاجة
+   في بيانات الـ Lottie نفسها أو نأثر على موقع/مقاس onb-icon-wrap).
+   (نسخة Gemini الحالية): بعد حساب bounding box كل الـ layers، الرسمة
+   بقت بتاخد تقريباً x:[71,430] y:[88,400] من الـ 500×500 (أكبر بكتير
+   من النسخة القديمة اللي كانت [127,375]x[137,350])، ومركزها لسه
+   ~50% أفقي / ~47% رأسي. بما إن الرسمة نفسها بقت كبيرة، الزوم
+   المطلوب فوقها بسيط جداً دلوقتي: scale(1.2) + origin 50% 47% بتخلي
+   المحتوى ياخد ~85-90% من مساحة onb-icon-wrap من غير ما يتقص أي جزء
+   منه حتى في أقصى لحظة حركة (البادچ اللي بيرقص فوق) */
+.onb-rank-lottie {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    filter: drop-shadow(0 8px 20px rgba(0, 0, 0, 0.4));
+}
+.onb-rank-lottie svg {
+    display: block;
+    transform: scale(1.2);
+    transform-origin: 50% 47%;
+}
+
+/* الأيقونة الاحتياطية (SVG/CSS) - مخفية افتراضياً، js/onboarding.js
+   بيظهرها (بيضيف onb-rank-fallback-active) بس لو الـ Lottie فشل
+   يحمّل/يشتغل */
+.onb-rank-fallback {
+    display: none;
+}
+.onb-rank-fallback.onb-rank-fallback-active {
+    display: block;
+}
+
+/* حاوية عملة النقاط الحقيقية (Lottie) - سلايد 6 بس. نفس مقاس وموقع
+   onb-icon-wrap بالظبط، عشان أي تبديل بينها وبين الأيقونة الاحتياطية
+   (حالة فشل التحميل) ميغيّرش أي حاجة في التخطيط - بنفس فلسفة
+   onb-rank-lottie/onb-quiz-lottie تماماً */
+.onb-points-lottie {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    height: 100%;
+    filter: drop-shadow(0 8px 20px rgba(0, 0, 0, 0.4));
+}
+.onb-points-lottie svg { display: block; }
+
+/* الأيقونة الاحتياطية (SVG/CSS) - مخفية افتراضياً، js/onboarding.js
+   بيظهرها (بيضيف onb-points-fallback-active) بس لو الـ Lottie فشل
+   يحمّل/يشتغل */
+.onb-points-fallback {
+    display: none;
+}
+.onb-points-fallback.onb-points-fallback-active {
+    display: block;
+}
+
+/* حاوية أيقونة "الكتابة" الحقيقية (Lottie) - سلايد 8 بس. نفس فلسفة
+   onb-points-lottie/onb-rank-lottie بالظبط: نفس مقاس وموقع onb-icon-wrap
+   عشان أي تبديل بينها وبين الأيقونة الاحتياطية ميغيّرش أي حاجة في التخطيط */
+.onb-writing-lottie {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    height: 100%;
+    filter: drop-shadow(0 8px 20px rgba(0, 0, 0, 0.4));
+}
+.onb-writing-lottie svg { display: block; }
+
+/* الأيقونة الاحتياطية (SVG/CSS) - مخفية افتراضياً، js/onboarding.js
+   بيظهرها (بيضيف onb-writing-fallback-active) بس لو الـ Lottie فشل
+   يحمّل/يشتغل */
+.onb-writing-fallback {
+    display: none;
+}
+.onb-writing-fallback.onb-writing-fallback-active {
+    display: block;
+}
+
+/* ------------------------------------------------------------------
+   8) توقيع نهاية الرحلة: كأس البطولة المتحركة (سلايد 7 بس)
+   ده العنصر المميز/التوقيعي للـ Onboarding كله - مبني SVG/CSS
+   بالكامل (مش Lottie) عشان يفضل شغال 100% مهما حصل للشبكة، خصوصاً
+   إنه أهم لحظة بصرية في الرحلة كلها (لحظة "خلاص بقيت بطل")
+   ------------------------------------------------------------------ */
+/* onbTrophyBob بتستخدم خاصية translate المستقلة (مش transform)
+   عشان تتجمع مع perspective/transform-style بتاعة الحاوية من غير
+   ما تلغي أي حاجة تانية - طفو رأسي هادي ودايم شغال طول عمر الكأس */
+.onb-trophy-wrap {
+    position: relative;
+    width: 220px;
+    height: 220px;
+    perspective: 700px;
+    animation: onbTrophyBob 3s ease-in-out 1.1s infinite;
+}
+
+@keyframes onbTrophyBob {
+    0%, 100% { translate: 0 0; }
+    50%      { translate: 0 -8px; }
+}
+
+.onb-trophy-halo {
+    position: absolute;
+    inset: -30px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(212, 175, 55, 0.45) 0%, rgba(212, 175, 55, 0) 70%);
+    animation: onbHaloPulse 2.6s ease-in-out infinite;
+}
+
+@keyframes onbHaloPulse {
+    0%, 100% { transform: scale(0.9); opacity: 0.7; }
+    50% { transform: scale(1.12); opacity: 1; }
+}
+
+/* حلقة "وصول الكأس" - دايرة ضوء بتتوسع وتخف لمرة واحدة بس، متزامنة
+   مع لحظة استقرار onbTrophyEnter (تبدأ بعد ما الكأس يقرب يهدى -
+   حوالي 0.85s) - إحساس "اللحظة دي مهمة" من غير أي خدعة دوران وهمية.
+   opacity: 0 في البداية والنهاية (مش display:none) عشان الأنيميشن
+   يبقى قابل لإعادة التشغيل بسلاسة لو احتجنا نعيده لاحقاً */
+.onb-trophy-burst {
+    position: absolute;
+    inset: 38px;
+    border-radius: 50%;
+    border: 2px solid rgba(242, 215, 126, 0.9);
+    opacity: 0;
+    animation: onbTrophyBurst 1.4s cubic-bezier(0.2, 0.8, 0.3, 1) 0.85s 1 both;
+}
+
+@keyframes onbTrophyBurst {
+    0%   { transform: scale(0.55); opacity: 0; border-width: 3px; }
+    35%  { opacity: 0.85; }
+    100% { transform: scale(1.85); opacity: 0; border-width: 0.5px; }
+}
+
+/* onbTrophyEnter بيستخدم خاصية transform الكلاسيكية (نطة دخول
+   بمرونة/Overshoot زي جسم معدني ثقيل وقع واستقر، شغالة لمرة واحدة
+   بس)، وonbTrophySway بعدها بتستخدم خاصية rotate المستقلة (مدعومة
+   في كل المتصفحات الحديثة) بدل الاعتماد على scaleX اللي كانت بتفلطح
+   الكأس لحد شبه الاختفاء وتبان "مكسورة" - ده اللي بيخلي الاتنين
+   يشتغلوا مع بعض من غير ما وحدة تلغي التانية؛ مايل بسيط هادي حوالين
+   قاعدة الكأس، بيحس المستخدم إنه شكل بطولة واقف بفخر مش بيلف بشكل
+   مصطنع */
+.onb-trophy-svg {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    height: 100%;
+    transform-style: preserve-3d;
+    transform-origin: 50% 88%;
+    animation: onbTrophyEnter 1s cubic-bezier(0.34, 1.56, 0.64, 1) both,
+               onbTrophySway 5.5s ease-in-out 1s infinite,
+               onbTrophyBreathe 5.5s ease-in-out 1s infinite;
+}
+
+@keyframes onbTrophyEnter {
+    0%   { transform: translateY(70px) scale(0.35) rotateY(-8deg); opacity: 0; }
+    55%  { transform: translateY(-10px) scale(1.08) rotateY(4deg); opacity: 1; }
+    72%  { transform: translateY(4px) scale(0.97) rotateY(-2deg); }
+    88%  { transform: translateY(-2px) scale(1.015) rotateY(1deg); }
+    100% { transform: translateY(0) scale(1) rotateY(0deg); }
+}
+
+/* مايل هادي جداً حوالين قاعدة الكأس (rotate مستقلة، مش transform)
+   - إحساس "واقف بفخر وشوية حياة فيه" من غير أي دوران كامل مصطنع */
+@keyframes onbTrophySway {
+    0%, 100% { rotate: -2.4deg; }
+    50%      { rotate: 2.4deg; }
+}
+
+/* نفَس خفيف جداً في الحجم (scale مستقلة برضه) بيرافق المايل - فرق
+   بسيط جداً (1.5%) كفاية يدي إحساس "معدن حي" من غير ما يبان مبالغ
+   فيه أو يلفت النظر عن باقي الرسمة */
+@keyframes onbTrophyBreathe {
+    0%, 100% { scale: 1; }
+    50%      { scale: 1.015; }
+}
+
+/* ظل الأرض بيرافق نفس إيقاع الطفو والمايل بنَفَس هادي جداً - بدل ما
+   كان بيتقفل لحد شبه الصفر وقت "خدعة الدوران" القديمة (كان بيبان
+   وكأنه بيتقطع فجأة) */
+#onboardingOverlay .onb-trophy-ground-shadow {
+    transform-box: fill-box;
+    transform-origin: 50% 50%;
+    animation: onbTrophyShadowBreathe 3s ease-in-out 1.1s infinite;
+}
+
+@keyframes onbTrophyShadowBreathe {
+    0%, 100% { transform: scaleX(1);    opacity: 0.3; }
+    50%      { transform: scaleX(0.9); opacity: 0.24; }
+}
+
+/* حلقة الضوء الخلفية بتنبض اتساع/شفافية بس (بدل ما "تلف" فعلياً -
+   دايرة موحّدة اللون مفيش فرق بصري لو لفّت أصلاً) - بتدي إحساس عمق
+   ثلاثي من غير أي حركة وهمية مالهاش تأثير حقيقي على العين */
+#onboardingOverlay .onb-trophy-orbit {
+    transform-box: fill-box;
+    transform-origin: 50% 50%;
+    animation: onbOrbitPulse 4.6s ease-in-out infinite;
+}
+
+@keyframes onbOrbitPulse {
+    0%, 100% { transform: scaleY(0.2); opacity: 0.16; }
+    50%      { transform: scaleY(0.58); opacity: 0.4; }
+}
+
+/* بريق حقيقي (نجوم SVG رباعية) بيظهر ويختفي بتوقيت وحجم ودوران
+   مختلف لكل نجمة، بمواقع موزّعة حوالين الكأس مش الثلاثة القدامى بس */
+.onb-sparkle {
+    position: absolute;
+    z-index: 2;
+    width: 16px;
+    height: 16px;
+    opacity: 0;
+    filter: drop-shadow(0 0 4px rgba(242, 215, 126, 0.9));
+    animation: onbSparkle 2.2s ease-in-out infinite;
+}
+
+.onb-sparkle-1 { top: 6%;    left: 4%;   width: 20px; height: 20px; animation-delay: 1.1s; }
+.onb-sparkle-2 { top: 2%;    right: 8%;  width: 13px; height: 13px; animation-delay: 1.7s; }
+.onb-sparkle-3 { bottom: 20%; left: -3%; width: 15px; height: 15px; animation-delay: 2.3s; }
+.onb-sparkle-4 { top: 46%;   right: -2%; width: 12px; height: 12px; animation-delay: 2.9s; }
+
+@keyframes onbSparkle {
+    0%, 100% { opacity: 0;   transform: scale(0.3) rotate(0deg); }
+    50%      { opacity: 1;   transform: scale(1) rotate(35deg); }
+}
+
+.onb-trophy-star {
+    transform-box: fill-box;
+    transform-origin: 50% 50%;
+    animation: onbStarGlow 2.2s ease-in-out 1s infinite;
+}
+
+/* شعاعين لمعان بزاوية وسرعة مختلفة عن بعض - بيعدّوا فوق جسم الكأس
+   بشكل غير متزامن عشان يحسّسوا بمعدن حقيقي بيعكس الضوء من كذا اتجاه،
+   مش خط واحد ميكانيكي بيتكرر بنفس الشكل -- */
+.onb-trophy-shine {
+    transform-box: view-box;
+    transform-origin: 50% 50%;
+    animation: onbTrophyShine 3.4s ease-in-out 1.4s infinite;
+}
+
+.onb-trophy-shine-2 {
+    transform-box: view-box;
+    transform-origin: 50% 50%;
+    animation: onbTrophyShine2 4.6s ease-in-out 2.6s infinite;
+}
+
+@keyframes onbTrophyShine {
+    0%   { transform: translateX(-34px) rotate(24deg); opacity: 0; }
+    10%  { opacity: 0.55; }
+    24%  { opacity: 0; }
+    100% { opacity: 0; transform: translateX(34px) rotate(24deg); }
+}
+
+@keyframes onbTrophyShine2 {
+    0%   { transform: translateX(28px) rotate(-18deg); opacity: 0; }
+    14%  { opacity: 0.4; }
+    30%  { opacity: 0; }
+    100% { opacity: 0; transform: translateX(-28px) rotate(-18deg); }
+}
+
+/* احترام تفضيل تقليل الحركة (Reduced Motion) - نوقف الأنيميشنز غير
+   الضرورية للمستخدمين اللي فعّلين الإعداد ده من نظام تشغيلهم */
+@media (prefers-reduced-motion: reduce) {
+    #onboardingOverlay .onb-icon-halo,
+    #onboardingOverlay .onb-icon-svg,
+    #onboardingOverlay .onb-crown-rays,
+    #onboardingOverlay .onb-crown-gem,
+    #onboardingOverlay .onb-crown-shine,
+    #onboardingOverlay .onb-story-line,
+    #onboardingOverlay .onb-story-cursor,
+    #onboardingOverlay .onb-cam-heart,
+    #onboardingOverlay .onb-medal-swing,
+    #onboardingOverlay .onb-medal-star,
+    #onboardingOverlay .onb-podium-bar,
+    #onboardingOverlay .onb-podium-star,
+    #onboardingOverlay .onb-podium-star-shine,
+    #onboardingOverlay .onb-podium-shine,
+    #onboardingOverlay .onb-walk-torso,
+    #onboardingOverlay .onb-walk-head,
+    #onboardingOverlay .onb-walk-front-thigh,
+    #onboardingOverlay .onb-walk-back-thigh,
+    #onboardingOverlay .onb-walk-front-shin,
+    #onboardingOverlay .onb-walk-back-shin,
+    #onboardingOverlay .onb-walk-front-arm,
+    #onboardingOverlay .onb-walk-back-arm,
+    #onboardingOverlay .onb-walk-front-forearm,
+    #onboardingOverlay .onb-walk-back-forearm,
+    #onboardingOverlay .onb-walk-ground-shadow,
+    #onboardingOverlay .onb-line-1,
+    #onboardingOverlay .onb-line-2,
+    #onboardingOverlay .onb-line-3,
+    #onboardingOverlay .onb-dumbbell-lift,
+    #onboardingOverlay .onb-weight-l,
+    #onboardingOverlay .onb-weight-r,
+    #onboardingOverlay .onb-energy-spark,
+    .onb-trophy-wrap,
+    .onb-trophy-halo,
+    .onb-trophy-burst,
+    .onb-trophy-svg,
+    .onb-trophy-shine,
+    .onb-trophy-shine-2,
+    .onb-trophy-star,
+    #onboardingOverlay .onb-trophy-ground-shadow,
+    #onboardingOverlay .onb-trophy-orbit,
+    .onb-sparkle {
+        animation: none !important;
+    }
+    /* مع وقف الحركة، بنضمن إن الأعمدة والنجمة والشخصية يفضلوا ظاهرين
+       بحجمهم الطبيعي بدل ما يفضلوا مختفيين عند 0% (نقطة البداية
+       بتاعة onbBarGrow / onbStarFadeIn / onbWalk...) */
+    #onboardingOverlay .onb-podium-bar,
+    #onboardingOverlay .onb-podium-star,
+    #onboardingOverlay .onb-podium-star-shine,
+    #onboardingOverlay .onb-walk-front-thigh,
+    #onboardingOverlay .onb-walk-back-thigh,
+    #onboardingOverlay .onb-walk-front-shin,
+    #onboardingOverlay .onb-walk-back-shin,
+    #onboardingOverlay .onb-walk-front-arm,
+    #onboardingOverlay .onb-walk-back-arm,
+    #onboardingOverlay .onb-walk-front-forearm,
+    #onboardingOverlay .onb-walk-back-forearm,
+    #onboardingOverlay .onb-story-line {
+        transform: none !important;
+        opacity: 1 !important;
+    }
+    .onb-trophy-svg {
+        transform: none !important;
+        rotate: none !important;
+        scale: none !important;
+        opacity: 1 !important;
+    }
+    .onb-trophy-wrap {
+        translate: none !important;
+    }
+    .onb-trophy-burst,
+    #onboardingOverlay .onb-trophy-orbit {
+        opacity: 0 !important;
+    }
+    #onboardingOverlay .onb-story-cursor {
+        opacity: 1 !important;
+    }
+}
+
+/* ------------------------------------------------------------------
+   6.5) صفحة الدخول/التسجيل الكاملة (#onbAuthFormDock) - عنصر مستقل
+   بملء الشاشة (position: absolute; inset: 0) فوق كروت السلايدات
+   مباشرة، بنفس خلفية #onboardingOverlay بالظبط (#05060A) عشان تغطّي
+   الكروت تغطية كاملة لما تكون ظاهرة بالكامل. onboarding.js بيتحكم في
+   ظهورها عن طريق كلاسين:
+     1) "hidden" (تبديل display: none <-> flex - نفس فلسفة باقي
+        عناصر الترحيب، شوف revealAuthForm/returnToChoiceView)
+     2) "onb-auth-page-visible" (بيتضاف بعد فريمين من إزالة hidden،
+        عشان المتصفح يسجّل حالة البداية (opacity: 0 / translateY) الأول
+        قبل ما الـ transition يشتغل - لو ضفناه في نفس اللحظة، الحركة
+        مش هتبان خالص لأن المتصفح هيدمج التغييرين في فريم واحد)
+   النتيجة: الصفحة بتنزلق لفوق وتتلاشى للظهور (إحساس "فتح صفحة جديدة"
+   حقيقي)، وتعكس نفس الحركة بالظبط للرجوع - بدل ما تظهر/تختفي فجأة
+   ------------------------------------------------------------------ */
+#onboardingOverlay .onb-auth-page {
+    /* (إصلاح - باج حقيقي): كانت الخلفية أسود صلب (#05060A) بيغطي
+       تمامًا الأضواء الملوّنة (#onbGlow1/#onbGlow2) الموجودة أصلاً جوه
+       نفس #onboardingOverlay فوق - فصفحة الدخول كانت بتبان "سودة" 100%
+       بدل ما تكون بلور ملوّن زي باقي شاشات الترحيب، رغم إنها نفسها
+       الصفحة الوحيدة المفروض تظهر (مفيش صفحة تانية منفصلة في الكود -
+       شوف lastKnownDockTarget في auth.js وshowAuthGate في onboarding.js).
+       دلوقتي بنسيب الخلفية شفافة جزئيًا مع بلور عشان الأضواء تبان من
+       وراها، فالصفحة بقت متسقة بصريًا مع باقي السلايدات */
+    background: rgba(5, 6, 10, 0.55);
+    backdrop-filter: blur(30px);
+    -webkit-backdrop-filter: blur(30px);
+    opacity: 0;
+    transform: translateY(28px) scale(0.97);
+    transition: opacity 0.38s cubic-bezier(0.22, 1, 0.36, 1),
+                transform 0.38s cubic-bezier(0.22, 1, 0.36, 1);
+    pointer-events: none;
+}
+
+#onboardingOverlay .onb-auth-page.onb-auth-page-visible {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    pointer-events: auto;
+}
+
+/* احترام تفضيل تقليل الحركة (Reduced Motion) لصفحة الدخول كمان - نفس
+   فلسفة باقي أنيميشنز الترحيب فوق */
+@media (prefers-reduced-motion: reduce) {
+    #onboardingOverlay .onb-auth-page {
+        transition: opacity 0.15s linear;
+        transform: none !important;
+    }
+}
+
+/* ==================================================================
+   7) ثيم فورم تسجيل الدخول/إنشاء الحساب (#authModal) - نفس ثيم شاشات
+   الترحيب بالضبط (كروت زجاجية + تدرّج ذهبي)، مش مقصورة على
+   #onboardingOverlay عشان الفورم ده هو *الوحيد* المستخدم في كل
+   أماكن الدخول بالتطبيق (جوه آخر سلايد في الترحيب، وكمان كمودال
+   منبثق مستقل لأي دخول لاحق بعد ما المستخدم يخلّص الترحيب أول مرة
+   - زي بعد تسجيل خروج مثلاً). الثيم القديم (كارت غامق مصمت
+   bg-lux-900) اتلغى تماماً؛ الشكلين (جوه الترحيب وبرّاه) بيستخدموا
+   نفس الـ HTML الحقيقي بالظبط (js/auth.js بينقل نفس عنصر #authModal
+   بين المكانين عن طريق dockTarget - مفيش تكرار في الفورم أو منطقه).
+   ================================================================== */
+
+/* امتداد لكلاسات الزجاج/التدرّج الذهبي المعرّفة فوق تحت #onboardingOverlay
+   بس، عشان تشتغل بره الترحيب كمان (لما #authModal يبقى مودال مستقل
+   منبثق بعد ما شاشات الترحيب تكون خلصت خالص) */
+#authModal .onb-glass-card,
+.onb-glass-card.auth-modal-card {
+    background: linear-gradient(160deg, rgba(255, 255, 255, 0.10) 0%, rgba(255, 255, 255, 0.025) 100%);
+    backdrop-filter: blur(26px);
+    -webkit-backdrop-filter: blur(26px);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    box-shadow:
+        0 25px 45px -10px rgba(0, 0, 0, 0.55),
+        inset 0 1px 1px 0 rgba(255, 255, 255, 0.25);
+}
+
+#authModal .onb-grad-7,
+.onb-grad-7.auth-modal-title {
+    background: linear-gradient(135deg, #FFF6D1 0%, #F2D77E 50%, #D4AF37 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+/* غلاف #authModal - وضعين بس، بيتبدّلوا من JS (showAuthModal/hideAuthModal
+   في js/auth.js) حسب مكان الفورم الحالي:
+
+   1) authModalPopup: الوضع الافتراضي/القديم - مودال منبثق فوق كل حاجة
+      بخلفية معتمة، بيُستخدم بعد ما شاشات الترحيب تخلّص (زي الدخول تاني
+      بعد تسجيل خروج).
+   2) authModalEmbedded: وضع "مدموج" جوه سلايد الترحيب الأخيرة نفسها
+      (#onbAuthFormSlot) - من غير أي خلفية معتمة أو تموضع ثابت، عشان
+      يبان كإنه امتداد طبيعي من نفس الكارت بدل نافذة منفصلة فوقه */
+#authModal.authModalPopup {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    background: rgba(5, 6, 10, 0.82);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+}
+
+#authModal.authModalEmbedded {
+    position: static;
+    inset: auto;
+    z-index: auto;
+    display: block;
+    padding: 0;
+    background: transparent;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+}
+
+#authModal.hidden {
+    display: none;
+}
+
+/* حقول الفورم (اسم مستخدم/كلمة مرور/الاسم/تاريخ الميلاد/التليفون) -
+   زجاجية شفافة بدل الصندوق الغامق المصمت اللي كان مستخدم قبل كده */
+.onb-auth-input {
+    width: 100%;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    color: #FDF7E3;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.onb-auth-input::placeholder {
+    color: rgba(255, 255, 255, 0.4);
+}
+
+.onb-auth-input:focus {
+    outline: none;
+    border-color: rgba(212, 175, 55, 0.6);
+    box-shadow: 0 0 0 2px rgba(212, 175, 55, 0.5);
+}
+
+/* حاوية الفورم المدموج جوه سلايد الترحيب - Scrollbar رفيع بيتماشى مع
+   الثيم الذهبي بدل الشريط الرمادي الافتراضي بتاع المتصفح، عشان فورم
+   إنشاء الحساب (اللي فيه حقول كتير) يقدر يتمرر بارتياح جوه الكارت
+   من غير ما يكسر حجم السلايد الثابت */
+.onb-auth-form-slot {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(212, 175, 55, 0.45) transparent;
+}
+
+.onb-auth-form-slot::-webkit-scrollbar {
+    width: 5px;
+}
+
+.onb-auth-form-slot::-webkit-scrollbar-thumb {
+    background-color: rgba(212, 175, 55, 0.45);
+    border-radius: 9999px;
+}

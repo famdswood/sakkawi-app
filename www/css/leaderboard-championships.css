@@ -1,0 +1,1170 @@
+/* ==================================================================
+   سِكّاوي | css/leaderboard-championships.css
+   ------------------------------------------------------------------
+   المرحلة 2: هيكل الواجهة والتصميم لصفحة "الترتيب والبطولات"
+   (Leaderboard Championships) - Dark Luxury Style.
+
+   هذا الملف كان مربوطاً بالفعل في index.html (<link rel="stylesheet"
+   href="css/leaderboard-championships.css">) وكل الـ HTML/JS في
+   index.html و js/profiles.js جاهزين ومربوطين على أساس إن الكلاسات
+   هنا موجودة - لكن الملف نفسه ماكانش موجود فعلياً على السيرفر، فكان
+   السيرفر بيرجّع index.html (text/html) بدل الـ CSS، وده اللي كان
+   بيسبب رفض المتصفح لتحميله بالكامل (MIME type mismatch) وبالتالي
+   ظهور تبويب الليدربورد من غير أي تنسيقات (زي ما ظاهر في السكرين شوت).
+   الملف ده هو الحل: إنشاء الملف الفعلي بكل الكلاسات المطلوبة.
+
+   المحتوى:
+   1) تبويبات نوع البطولة (.champ-tabs / .champ-tab)
+   2) شريط التايمر التنازلي (.champ-countdown)
+   3) إطار + منصة التتويج للتوب 3 (.champ-podium-frame / .champ-podium)
+   4) شريط الإحصائيات المزدوج (.dual-stat-badge)
+   5) كروت باقي المتصدرين الزجاجية (.rank-card) + أسهم تغيير الترتيب
+   6) شريط "مركزك الحالي" المثبت (.self-rank-bar)
+
+   يعتمد بالكامل على متغيرات الألوان المعرّفة في css/style.css
+   (--lux-*, --gold-*, --brand-*) عشان يفضل متسق مع باقي التطبيق
+   ويتبدل تلقائياً مع المود الداكن/الفاتح.
+   ================================================================== */
+
+/* ------------------------------------------------------------------
+   0) متغيرات مساعدة خاصة بهذا الملف فقط
+   ------------------------------------------------------------------ */
+:root {
+    --champ-silver-300: #E8ECF1;
+    --champ-silver-500: #B9C2CE;
+    --champ-silver-700: #7C8798;
+    --champ-bronze-300: #E7A468;
+    --champ-bronze-500: #C6773B;
+    --champ-bronze-700: #8A4F24;
+
+    /* (جديد) ثيم الألوان لكل فترة بطولة - يومي/أسبوعي/شهري (شوف قسم 9
+       في آخر الملف). الأسبوعي عمداً مالوش متغيرات هنا لأنه بيستخدم
+       نفس --gold-* الافتراضي الموجود أصلاً في كل الملف (هو "الدرجة
+       الوسطى" اللي التصميم كله مبني عليها من الأول) */
+    --champ-daily-300: #7DEDDD;
+    --champ-daily-400: #2DD4C4;
+    --champ-daily-500: #14b8a6;
+    --champ-daily-600: #0d9488;
+    --champ-daily-rgb: 20, 184, 166;
+
+    --champ-monthly-300: #FFC784;
+    --champ-monthly-400: #D97706;
+    --champ-monthly-500: #B45309;
+    --champ-monthly-600: #78350F;
+    --champ-monthly-rgb: 217, 119, 6;
+}
+
+/* ==================================================================
+   1) تبويبات نوع البطولة (يومية / أسبوعية / شهرية)
+   ================================================================== */
+.champ-tabs {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.3rem;
+    background: var(--lux-900);
+    border: 1px solid rgba(212, 175, 55, 0.12);
+    border-radius: 1.1rem;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
+}
+
+.champ-tab {
+    position: relative;
+    flex: 1 1 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.2rem;
+    padding: 0.55rem 0.35rem 0.5rem;
+    border-radius: 0.85rem;
+    color: var(--lux-500);
+    font-size: 0.68rem;
+    font-weight: 800;
+    line-height: 1.1;
+    text-align: center;
+    background: transparent;
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: color 0.25s ease, background 0.25s ease, border-color 0.25s ease,
+                box-shadow 0.25s ease, transform 0.15s ease;
+}
+
+.champ-tab-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.15rem;
+    height: 1.15rem;
+    opacity: 0.75;
+    transition: opacity 0.25s ease, filter 0.25s ease;
+}
+.champ-tab-icon svg {
+    width: 100%;
+    height: 100%;
+}
+
+.champ-tab:not(.champ-tab-soon):hover {
+    color: var(--gold-400);
+    background: rgba(212, 175, 55, 0.06);
+}
+.champ-tab:not(.champ-tab-soon):active {
+    transform: scale(0.97);
+}
+
+/* حالة التبويب النشط - إضاءة/Glow ذهبي جذاب */
+.champ-tab.is-active {
+    color: var(--lux-950);
+    background: linear-gradient(160deg, var(--gold-400), var(--gold-600));
+    border-color: var(--gold-300);
+    box-shadow: 0 4px 14px -2px rgba(212, 175, 55, 0.55), 0 0 0 1px rgba(212, 175, 55, 0.25) inset;
+}
+.champ-tab.is-active .champ-tab-icon {
+    opacity: 1;
+    filter: drop-shadow(0 0 4px rgba(255, 255, 255, 0.5));
+}
+
+/* حالة "قريباً" - معطّل بصرياً، بدون تفاعل */
+.champ-tab-soon {
+    cursor: not-allowed;
+    opacity: 0.55;
+}
+.champ-tab-soon-badge {
+    position: absolute;
+    top: -0.4rem;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--lux-700);
+    color: var(--lux-400);
+    font-size: 0.55rem;
+    font-weight: 800;
+    padding: 0.1rem 0.4rem;
+    border-radius: 999px;
+    border: 1px solid rgba(212, 175, 55, 0.2);
+    white-space: nowrap;
+}
+
+/* ==================================================================
+   2) شريط التايمر التنازلي (Countdown Timer Bar)
+   ================================================================== */
+.champ-countdown {
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+    padding: 0.85rem 1rem;
+    border-radius: 1.25rem;
+    background:
+        radial-gradient(120% 160% at 0% 0%, rgba(212, 175, 55, 0.16), transparent 60%),
+        var(--lux-900);
+    border: 1px solid rgba(212, 175, 55, 0.18);
+    box-shadow: 0 8px 24px -12px rgba(0, 0, 0, 0.55);
+    transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.champ-countdown-icon {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: 999px;
+    color: var(--gold-400);
+    background: rgba(212, 175, 55, 0.12);
+}
+.champ-countdown-icon svg {
+    width: 1.35rem;
+    height: 1.35rem;
+}
+
+.champ-countdown-body {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+
+.champ-countdown-label {
+    font-size: 0.68rem;
+    font-weight: 800;
+    color: var(--lux-400);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.champ-countdown-clock {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    direction: ltr; /* الأرقام دايماً بترتيب ساعات:دقائق:ثواني من الشمال لليمين حتى في RTL */
+    justify-content: flex-end;
+}
+
+.champ-time-box {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-width: 2.5rem;
+    padding: 0.25rem 0.3rem;
+}
+
+.champ-time-value {
+    font-family: 'Cairo', sans-serif;
+    font-size: 1.05rem;
+    font-weight: 900;
+    line-height: 1.1;
+    color: var(--gold-300);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.02em;
+}
+
+.champ-time-caption {
+    font-size: 0.55rem;
+    font-weight: 700;
+    color: var(--lux-500);
+    margin-top: 0.05rem;
+}
+
+.champ-time-sep {
+    font-weight: 900;
+    color: var(--gold-500);
+    padding-bottom: 0.75rem;
+    animation: champColonBlink 1s steps(1) infinite;
+}
+@keyframes champColonBlink {
+    0%, 49%   { opacity: 1; }
+    50%, 100% { opacity: 0.25; }
+}
+
+/* آخر دقيقة قبل انتهاء البطولة - تنبيه بصري بدون استخدام أحمر (اللون
+   الأحمر --dq-timer-danger محجوز حصرياً لمؤقت السؤال اليومي حسب تعليق
+   css/style.css) - هنا بنعتمد على توهج كهرماني/ذهبي أقوى + نبضة أسرع */
+.champ-countdown.is-urgent {
+    border-color: rgba(232, 193, 88, 0.55);
+    box-shadow: 0 0 0 1px rgba(232, 193, 88, 0.35), 0 8px 28px -10px rgba(232, 193, 88, 0.5);
+    animation: champUrgentPulse 1s ease-in-out infinite;
+}
+.champ-countdown.is-urgent .champ-time-box {
+    background: rgba(232, 193, 88, 0.14);
+    border: 1px solid rgba(232, 193, 88, 0.5);
+    border-radius: 0.6rem;
+}
+.champ-countdown.is-urgent .champ-time-value {
+    color: var(--gold-300);
+}
+.champ-countdown.is-urgent .champ-countdown-icon {
+    color: var(--gold-300);
+    background: rgba(232, 193, 88, 0.22);
+}
+@keyframes champUrgentPulse {
+    0%, 100% { transform: scale(1); }
+    50%      { transform: scale(1.015); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .champ-countdown-icon,
+    .champ-time-sep,
+    .champ-countdown.is-urgent {
+        animation: none !important;
+    }
+}
+
+/* ==================================================================
+   3) إطار + منصة تتويج التوب 3 (Top 3 Podium)
+   ================================================================== */
+.champ-podium-frame {
+    padding: 1.1rem 0.9rem 0;
+    border-radius: 1.5rem;
+    background:
+        radial-gradient(140% 100% at 50% 0%, rgba(212, 175, 55, 0.10), transparent 65%),
+        var(--lux-900);
+    border: 1px solid rgba(212, 175, 55, 0.14);
+    box-shadow: 0 14px 34px -18px rgba(0, 0, 0, 0.6);
+    overflow: hidden;
+}
+
+.champ-podium-frame-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0 0.15rem 0.9rem;
+}
+
+.champ-podium-frame-title {
+    font-size: 0.95rem;
+    font-weight: 900;
+    color: var(--lux-50);
+}
+
+.champ-podium-frame-sub {
+    font-size: 0.68rem;
+    font-weight: 700;
+    color: var(--gold-400);
+}
+
+.champ-podium {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    align-items: end;
+    gap: 0.5rem;
+    padding-bottom: 0;
+}
+
+/* ------------------------------------------------------------------
+   3.1) كارت لاعب واحد في المنصة (فضي / ذهبي / برونزي)
+   ------------------------------------------------------------------ */
+.podium-card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 1.5rem 0.4rem 0;
+    border-radius: 1.1rem 1.1rem 0 0;
+    text-align: center;
+    /* [تعديل - إصلاح تجاوب]: عناصر الـ CSS Grid افتراضياً min-width:auto
+       (يعني بتاخد عرضها الطبيعي من محتواها كحد أدنى، حتى لو أوسع من
+       عمود الـ 1fr بتاعها) - وده كان بيخلي الكارت يفيض برّه عموده لو
+       شريط الإحصائيات (.dual-stat-badge) فيه أرقام طويلة. min-width:0
+       بيسمح للكارت فعلياً ينكمش لعرض عموده الحقيقي */
+    min-width: 0;
+}
+
+.podium-medal,
+.podium-crown {
+    position: absolute;
+    top: -0.35rem;
+    width: 1.6rem;
+    height: 1.6rem;
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.4));
+}
+.podium-crown {
+    width: 2rem;
+    height: 2rem;
+    top: -0.75rem;
+    color: var(--gold-400);
+    filter: drop-shadow(0 0 8px rgba(232, 193, 88, 0.7));
+    animation: crownFloat 2.6s ease-in-out infinite;
+}
+@keyframes crownFloat {
+    0%, 100% { transform: translateY(0); }
+    50%      { transform: translateY(-3px); }
+}
+@media (prefers-reduced-motion: reduce) {
+    .podium-crown { animation: none !important; }
+}
+
+.podium-avatar-wrap {
+    position: relative;
+    width: 3.4rem;
+    height: 3.4rem;
+    margin-bottom: 0.5rem;
+}
+.podium-avatar-wrap-lg {
+    width: 4.5rem;
+    height: 4.5rem;
+}
+
+.podium-avatar {
+    width: 100%;
+    height: 100%;
+    border-radius: 999px;
+    object-fit: cover;
+    background: var(--lux-800);
+    cursor: pointer;
+}
+
+.podium-name {
+    font-size: 0.72rem;
+    font-weight: 800;
+    color: var(--lux-50);
+    max-width: 100%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    cursor: pointer;
+}
+.podium-name-gold {
+    font-size: 0.85rem;
+    color: var(--gold-300);
+}
+
+.podium-title {
+    font-size: 0.6rem;
+    font-weight: 700;
+    color: var(--gold-500);
+    margin-top: 0.1rem;
+    letter-spacing: 0.01em;
+}
+
+/* شريط الإحصائيات المزدوج داخل كارت المنصة */
+.podium-card .dual-stat-badge {
+    margin-top: 0.5rem;
+    transform: scale(0.92);
+}
+
+/* الأعمدة (Stands) اللي بتديك إحساس منصة حقيقية بارتفاعات مختلفة */
+.podium-stand {
+    width: 100%;
+    margin-top: 0.75rem;
+    border-radius: 0.7rem 0.7rem 0 0;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding-top: 0.3rem;
+    font-size: 1.35rem;
+    font-weight: 900;
+}
+.podium-stand-silver {
+    height: 3rem;
+    background: linear-gradient(180deg, var(--champ-silver-500), var(--champ-silver-700));
+    box-shadow: inset 0 2px 6px rgba(255, 255, 255, 0.25);
+    color: #1F2733;
+    text-shadow: 0 1px 1px rgba(255, 255, 255, 0.2);
+}
+.podium-stand-gold {
+    height: 4.25rem;
+    background: linear-gradient(180deg, var(--gold-400), var(--gold-600));
+    box-shadow: inset 0 2px 8px rgba(255, 255, 255, 0.3), 0 0 24px rgba(212, 175, 55, 0.45);
+    color: #4A2F06;
+    text-shadow: 0 1px 1px rgba(255, 255, 255, 0.25);
+}
+.podium-stand-bronze {
+    height: 2.25rem;
+    background: linear-gradient(180deg, var(--champ-bronze-500), var(--champ-bronze-700));
+    box-shadow: inset 0 2px 6px rgba(255, 255, 255, 0.2);
+    color: var(--champ-bronze-300);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+
+/* ------------------------------------------------------------------
+   3.2) لمسات فخامة إضافية لكل مركز (خلفية الكارت نفسه + الـ Glow)
+   ------------------------------------------------------------------ */
+.podium-silver {
+    background: linear-gradient(180deg, rgba(185, 194, 206, 0.12), transparent 70%);
+}
+.podium-silver .podium-medal { color: var(--champ-silver-300); }
+
+.podium-bronze {
+    background: linear-gradient(180deg, rgba(198, 119, 59, 0.14), transparent 70%);
+}
+.podium-bronze .podium-medal { color: var(--champ-bronze-300); }
+
+.podium-gold {
+    background: linear-gradient(180deg, rgba(212, 175, 55, 0.22), transparent 75%);
+    border-radius: 1.1rem 1.1rem 0 0;
+    padding-top: 1.9rem;
+    z-index: 1;
+}
+.podium-gold .podium-avatar {
+    box-shadow: 0 0 0 3px var(--lux-900), 0 0 0 5px var(--gold-400), 0 0 22px rgba(212, 175, 55, 0.6);
+}
+.podium-silver .podium-avatar {
+    box-shadow: 0 0 0 3px var(--lux-900), 0 0 0 4px var(--champ-silver-500);
+}
+.podium-bronze .podium-avatar {
+    box-shadow: 0 0 0 3px var(--lux-900), 0 0 0 4px var(--champ-bronze-500);
+}
+
+/* ==================================================================
+   4) شريط الإحصائيات المزدوج (Dual-Stat Badge) - "خطوات | نقاط"
+   ================================================================== */
+.dual-stat-badge {
+    display: inline-flex;
+    align-items: center;
+    /* [تعديل - إصلاح تجاوب]: flex-wrap:wrap بدل الافتراضي (nowrap) -
+       أرقام الخطوات/النقاط ممكن تطول جداً (خطوات شهرية زي "450,230"
+       مثلاً)، وعلى شاشة ضيقة جداً كان ممكن الرقم يتقص فعلياً (يختفي
+       جزء منه) لأن .champ-podium-frame الأب عليه overflow:hidden.
+       دلوقتي لو الرقمين + الأيقونتين مش هيدخلوا في سطر واحد، بيلفوا
+       لسطر تاني بدل ما يتقصوا أو يخرجوا برّه الكارت */
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.3rem 0.6rem;
+    border-radius: 999px;
+    background: var(--lux-800);
+    border: 1px solid rgba(212, 175, 55, 0.14);
+}
+
+.dual-stat-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    font-size: 0.66rem;
+    font-weight: 800;
+    color: var(--lux-400);
+    white-space: nowrap;
+}
+.dual-stat-item svg {
+    width: 0.8rem;
+    height: 0.8rem;
+    flex-shrink: 0;
+    color: var(--brand-500);
+}
+/* أيقونة النقاط (النجمة) بتاخد الذهبي بدل التركواز عشان تفرق بصرياً */
+.dual-stat-item:last-child svg {
+    color: var(--gold-400);
+}
+
+.dual-stat-divider {
+    width: 1px;
+    height: 0.75rem;
+    background: rgba(212, 175, 55, 0.2);
+}
+
+.dual-stat-badge-gold {
+    background: rgba(212, 175, 55, 0.14);
+    border-color: rgba(212, 175, 55, 0.35);
+}
+.dual-stat-badge-gold .dual-stat-item {
+    color: var(--gold-200, var(--gold-300));
+}
+
+.dual-stat-badge-compact {
+    padding: 0.22rem 0.5rem;
+    gap: 0.4rem;
+}
+.dual-stat-badge-compact .dual-stat-item {
+    font-size: 0.62rem;
+}
+
+/* نسخة الشريط داخل #selfRankBar - شفافة أكتر عشان تندمج مع خلفية الكارت */
+.dual-stat-badge-onbar {
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(255, 255, 255, 0.1);
+}
+
+/* ==================================================================
+   5) باقي المتصدرين (المراكز 4 - 50) - كروت زجاجية
+   ================================================================== */
+.rank-card {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.65rem 0.85rem;
+    border-radius: 1.1rem;
+    background: rgba(20, 23, 31, 0.55);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    cursor: pointer;
+    transition: transform 0.15s ease, border-color 0.2s ease, background 0.2s ease;
+}
+html:not(.dark) .rank-card {
+    background: rgba(255, 255, 255, 0.55);
+    border-color: rgba(20, 23, 31, 0.06);
+}
+.rank-card:hover {
+    border-color: rgba(212, 175, 55, 0.3);
+}
+.rank-card:active {
+    transform: scale(0.985);
+}
+
+.rank-card-number {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.7rem;
+    height: 1.7rem;
+    border-radius: 999px;
+    background: rgba(212, 175, 55, 0.12);
+    border: 1px solid rgba(212, 175, 55, 0.3);
+    text-align: center;
+    font-size: 0.72rem;
+    font-weight: 900;
+    color: var(--gold-400);
+    font-variant-numeric: tabular-nums;
+}
+
+.rank-card-avatar {
+    flex-shrink: 0;
+    width: 2.6rem;
+    height: 2.6rem;
+    border-radius: 999px;
+    object-fit: cover;
+    background: var(--lux-800);
+    border: 1px solid rgba(212, 175, 55, 0.15);
+}
+
+.rank-card-info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+}
+
+.rank-card-name {
+    font-size: 0.78rem;
+    font-weight: 800;
+    color: var(--lux-50);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* صف المستخدم الحالي نفسه ضمن باقي القائمة - إبراز واضح بدون ما يكسر تناسق باقي الصفوف */
+.rank-card-self {
+    background: linear-gradient(90deg, rgba(212, 175, 55, 0.14), rgba(20, 23, 31, 0.55));
+    border-color: rgba(212, 175, 55, 0.45);
+    box-shadow: 0 0 0 1px rgba(212, 175, 55, 0.15) inset;
+}
+.rank-card-self .rank-card-number {
+    background: linear-gradient(160deg, var(--gold-400), var(--gold-600));
+    border-color: var(--gold-300);
+    color: var(--lux-950);
+}
+.rank-card-self .rank-card-avatar {
+    border-color: var(--gold-500);
+}
+
+/* أسهم تغيير الترتيب (▲ / ▼ / =) - جاهزة للاستخدام لما يتضاف مصدر
+   بيانات "الترتيب السابق" (شوف ملاحظة renderLeaderboardRemainingList
+   في js/profiles.js) */
+.rank-arrow {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.35rem;
+    height: 1.35rem;
+    border-radius: 999px;
+    font-size: 0.65rem;
+}
+.rank-arrow svg {
+    width: 0.75rem;
+    height: 0.75rem;
+}
+.rank-arrow-up {
+    color: var(--brand-500);
+    background: rgba(20, 184, 166, 0.14);
+}
+.rank-arrow-down {
+    color: var(--gold-500);
+    background: rgba(212, 175, 55, 0.14);
+    transform: rotate(180deg);
+}
+.rank-arrow-same {
+    color: var(--lux-500);
+    background: rgba(125, 122, 133, 0.14);
+}
+
+/* ==================================================================
+   6) شريط "مركزك الحالي" المثبت (Sticky Self-Rank Bar)
+   ------------------------------------------------------------------
+   ملحوظة (تحديث لاحق): كان الشريط ده متسكّر تماماً (display: none
+   !important) بعد طلب صريح سابق - كان بياخد جزء محسوس من مساحة
+   الشاشة ومشتّت أثناء تصفح القائمة وقتها كان ظاهر لأي حد طول الوقت.
+
+   (تحديث أحدث - طلب صريح جديد): رجّعناه تاني، لكن بشرط مختلف خالص:
+   الليدربورد بقى بيوقف عرضه عند أول 10 بس (شوف LEADERBOARD_DISPLAY_LIMIT
+   في js/leaderboard.js)، والشريط ده بقى بيظهر بس لو ترتيب المستخدم
+   الحالي *بره* أول 10 دول (مفيش صفه ظاهر في القائمة نفسها أصلاً في
+   الحالة دي)، وبيتقفل تلقائي تاني لو ترتيبه ضمن أول 10 (لأن صفه هيبان
+   في القائمة نفسها ومفيش داعي تكرار). التحكم في الإظهار/الإخفاء ده
+   بقى شغل JS (كلاس .hidden بيتبدّل في renderSelfRankBar) - مش CSS
+   ثابت زي الأول، فمفيش داعي display:none!important تاني هنا.
+   ================================================================== */
+
+.self-rank-bar {
+    position: fixed;
+    bottom: 4.35rem; /* فوق شريط التنقل السفلي مباشرة */
+    left: 50%;
+    transform: translateX(-50%);
+    width: 100%;
+    max-width: 28rem; /* max-w-md */
+    padding: 0 0.75rem;
+    z-index: 35;
+    pointer-events: none;
+}
+
+.self-rank-bar-inner {
+    pointer-events: auto;
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    padding: 0.65rem 0.9rem;
+    border-radius: 1.35rem;
+    background: linear-gradient(100deg, rgba(20, 23, 31, 0.92), rgba(20, 23, 31, 0.8));
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border: 1px solid rgba(212, 175, 55, 0.3);
+    box-shadow: 0 12px 30px -10px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(212, 175, 55, 0.08) inset;
+}
+html:not(.dark) .self-rank-bar-inner {
+    background: linear-gradient(100deg, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.85));
+}
+
+.self-rank-position {
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-width: 2.6rem;
+}
+.self-rank-number {
+    font-size: 1.15rem;
+    font-weight: 900;
+    color: var(--gold-400);
+    line-height: 1.05;
+    font-variant-numeric: tabular-nums;
+}
+.self-rank-label {
+    font-size: 0.55rem;
+    font-weight: 800;
+    color: var(--lux-500);
+}
+
+.self-rank-avatar {
+    flex-shrink: 0;
+    width: 2.75rem;
+    height: 2.75rem;
+    border-radius: 999px;
+    object-fit: cover;
+    background: var(--lux-800);
+    border: 2px solid var(--gold-500);
+    box-shadow: 0 0 12px rgba(212, 175, 55, 0.4);
+}
+
+.self-rank-stats {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.28rem;
+}
+
+.self-rank-gap {
+    font-size: 0.66rem;
+    font-weight: 700;
+    color: var(--lux-400);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* حالة كون المستخدم الحالي هو صاحب المركز الأول فعلاً */
+.self-rank-bar.is-topper .self-rank-bar-inner {
+    border-color: var(--gold-400);
+    box-shadow: 0 12px 30px -10px rgba(212, 175, 55, 0.45), 0 0 0 1px rgba(212, 175, 55, 0.25) inset;
+}
+.self-rank-bar.is-topper .self-rank-gap {
+    color: var(--gold-300);
+    font-weight: 800;
+}
+
+/* ==================================================================
+   7) استجابة الشاشات الصغيرة جداً (أقل من 360px)
+   ================================================================== */
+@media (max-width: 360px) {
+    .champ-tab {
+        font-size: 0.62rem;
+        padding: 0.5rem 0.2rem 0.45rem;
+    }
+    .champ-time-box {
+        min-width: 2.15rem;
+    }
+    .champ-time-value {
+        font-size: 0.9rem;
+    }
+    .podium-name-gold {
+        font-size: 0.75rem;
+    }
+}
+
+/* ==================================================================
+   8) المرحلة 5: الحركة والـ Polish النهائي
+      (Animations, Skeleton Loaders, Responsive & Accessibility Polish)
+   ------------------------------------------------------------------
+   آخر مرحلة في صفحة "الترتيب والبطولات". كل الكلاسات هنا إضافية
+   بالكامل وبتتضاف/بتتشال ديناميكياً من js/leaderboard.js (شوف قسم
+   المرحلة 5 هناك) - من غير ما تلمس أو تكسر أي حاجة من المراحل السابقة.
+
+   المحتوى:
+   8.1) Keyframes مشتركة (دخول تدريجي، بريق/Shimmer، نبض خفيف)
+   8.2) دخول تدريجي متتالي (Staggered Entrance) لكروت باقي المتصدرين
+        ومنصّة التتويج، وللتنقل بين التبويبات
+   8.3) بريق/توهج حركي لكروت التوب 3 (Glow / Shimmer)
+   8.4) نبض خفيف مستمر لشريط التايمر التنازلي (بالإضافة لحالة
+        is-urgent الموجودة من المرحلة 2)
+   8.5) Skeleton Loaders حقيقية (بأبعاد ثابتة تمنع أي Layout Shift)
+        لمنصّة التتويج + شريط Shimmer فوق كروت باقي القائمة وقت التحميل
+   8.6) دخول انسيابي لشريط "مركزك الحالي" أول ما يظهر فعلياً
+   8.7) تحسينات أداء السكرول والتفاعل باللمس
+   8.8) تجاوب كامل + مساحة آمنة (Safe Area) للشريط المثبت أسفل الشاشة
+   8.9) احترام كامل لـ prefers-reduced-motion على كل حركة أُضيفت هنا
+   ================================================================== */
+
+/* ------------------------------------------------------------------
+   8.1) Keyframes مشتركة
+   ------------------------------------------------------------------ */
+@keyframes champFadeInUp {
+    from { opacity: 0; transform: translateY(12px) scale(0.98); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes champShimmerSweep {
+    0%   { transform: translateX(-120%); }
+    100% { transform: translateX(220%); }
+}
+@keyframes champTextShimmer {
+    to { background-position: -200% center; }
+}
+@keyframes champHaloSpin {
+    to { transform: rotate(360deg); }
+}
+@keyframes champTimeBoxBreathe {
+    0%, 100% { box-shadow: 0 0 0 rgba(212, 175, 55, 0); }
+    50%      { box-shadow: 0 0 10px rgba(212, 175, 55, 0.22); }
+}
+@keyframes champCountdownBreathe {
+    0%, 100% { transform: scale(1); }
+    50%      { transform: scale(1.006); }
+}
+@keyframes champGoldAvatarGlow {
+    0%, 100% { box-shadow: 0 0 0 3px var(--lux-900), 0 0 0 5px var(--gold-400), 0 0 14px rgba(212, 175, 55, 0.45); }
+    50%      { box-shadow: 0 0 0 3px var(--lux-900), 0 0 0 5px var(--gold-300), 0 0 28px rgba(212, 175, 55, 0.85); }
+}
+@keyframes champSilverAvatarGlow {
+    0%, 100% { box-shadow: 0 0 0 3px var(--lux-900), 0 0 0 4px var(--champ-silver-500); }
+    50%      { box-shadow: 0 0 0 3px var(--lux-900), 0 0 0 4px var(--champ-silver-300), 0 0 14px rgba(185, 194, 206, 0.55); }
+}
+@keyframes champBronzeAvatarGlow {
+    0%, 100% { box-shadow: 0 0 0 3px var(--lux-900), 0 0 0 4px var(--champ-bronze-500); }
+    50%      { box-shadow: 0 0 0 3px var(--lux-900), 0 0 0 4px var(--champ-bronze-300), 0 0 12px rgba(198, 119, 59, 0.5); }
+}
+
+/* ------------------------------------------------------------------
+   8.2) الدخول التدريجي المتتالي (Staggered Entrance Animation)
+   ------------------------------------------------------------------
+   .champ-pop-in بتتضاف من leaderboard.js على أي عنصر عايز "يدخل"
+   الشاشة بحركة سلسة - أول تحميل، تبديل تبويب، أو رجوع من حالة
+   Skeleton للبيانات الحقيقية. متغير CSS --stagger-index (بيتحدد
+   Inline من الـ JS لكل عنصر) بيحسب تأخير بسيط متصاعد لكل عنصر عشان
+   يدخلوا واحد ورا التاني بدل ما يظهروا كلهم دفعة واحدة.
+*/
+.champ-pop-in {
+    animation: champFadeInUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+    animation-delay: calc(var(--stagger-index, 0) * 45ms);
+}
+
+/* كروت باقي المتصدرين - سقف أقصى للتأخير الكلي (10 عناصر) حتى لو
+   القائمة فيها 50 عنصر، عشان آخر الكروت ما تستناش وقت طويل قبل ظهورها */
+.rank-card.champ-pop-in {
+    animation-delay: calc(min(var(--stagger-index, 0), 10) * 40ms);
+}
+
+/* ------------------------------------------------------------------
+   8.3) بريق/توهج حركي لكروت التوب 3 (Glow / Shimmer)
+   ------------------------------------------------------------------ */
+.podium-gold .podium-avatar   { animation: champGoldAvatarGlow 2.4s ease-in-out infinite; }
+.podium-silver .podium-avatar { animation: champSilverAvatarGlow 3s ease-in-out infinite; }
+.podium-bronze .podium-avatar { animation: champBronzeAvatarGlow 3.4s ease-in-out infinite; }
+
+/* اسم صاحب المركز الأول - بريق نصّي متحرك (Text Shimmer) خفيف */
+.podium-name-gold {
+    background: linear-gradient(90deg, var(--gold-300) 0%, #FFF7D6 45%, var(--gold-300) 100%);
+    background-size: 220% auto;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    animation: champTextShimmer 3.6s linear infinite;
+}
+
+/* هالة دوّارة خفيفة حوالين صورة المركز الأول فقط - إبراز إضافي بسيط بدون ما يبان صارخ أو يكسر تناسق باقي المراكز */
+.podium-gold .podium-avatar-wrap::before {
+    content: '';
+    position: absolute;
+    inset: -4px;
+    z-index: -1;
+    border-radius: 999px;
+    background: conic-gradient(from 0deg, transparent 0deg, rgba(255, 247, 214, 0.9) 22deg, transparent 55deg, transparent 360deg);
+    animation: champHaloSpin 2.6s linear infinite;
+    opacity: 0.7;
+}
+
+/* ------------------------------------------------------------------
+   8.4) نبض خفيف مستمر لشريط التايمر التنازلي
+   ------------------------------------------------------------------
+   حركة إضافية هادئة جداً شغالة طول الوقت (مش بس آخر دقيقة زي
+   is-urgent من المرحلة 2) لإضفاء حس خفيف بالحماس/السرعة. مفيش أي
+   تعارض مع نبضة الإلحاح الأقوى: .champ-countdown.is-urgent فوق نفس
+   الـ Selector لكن بـ Specificity أعلى، فبتغلبها تلقائياً وقت آخر دقيقة.
+*/
+.champ-countdown {
+    animation: champCountdownBreathe 3.6s ease-in-out infinite;
+}
+.champ-time-box {
+    animation: champTimeBoxBreathe 2.4s ease-in-out infinite;
+}
+
+/* ------------------------------------------------------------------
+   8.5) Skeleton Loaders حقيقية أثناء التحميل (منع أي Layout Shift)
+   ------------------------------------------------------------------
+   .champ-skel بتتضاف من renderLeaderboardLoadingState() في
+   leaderboard.js على عناصر منصّة التتويج (اسم/نقاط/خطوات) بدل نص "..."
+   الجامد القديم - بتحول العنصر لشريط رمادي بلمعة Shimmer متحركة بنفس
+   أبعاد العنصر الحقيقي تقريباً، فمفيش أي "قفزة" في الحجم لما البيانات
+   الحقيقية توصل وتحل محلها (clearLeaderboardLoadingState/
+   renderLeaderboardPodium بتشيل الكلاس فوراً قبل رسم القيمة الحقيقية).
+*/
+.champ-skel {
+    position: relative;
+    display: inline-block;
+    min-width: 3.2rem;
+    height: 0.85rem;
+    border-radius: 0.35rem;
+    color: transparent !important;
+    background: rgba(255, 255, 255, 0.08);
+    overflow: hidden;
+    vertical-align: middle;
+}
+html:not(.dark) .champ-skel {
+    background: rgba(20, 23, 31, 0.08);
+}
+.champ-skel::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    transform: translateX(-120%);
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.22), transparent);
+    animation: champShimmerSweep 1.5s ease-in-out infinite;
+}
+html:not(.dark) .champ-skel::after {
+    background: linear-gradient(90deg, transparent, rgba(20, 23, 31, 0.12), transparent);
+}
+
+/* أبعاد مخصصة لكل نوع عنصر Skeleton داخل منصّة التتويج */
+.podium-name.champ-skel { width: 4.4rem; height: 0.8rem; }
+.dual-stat-item .champ-skel { width: 2.1rem; height: 0.7rem; }
+
+/* اسم المركز الأول بيستخدم Text-Clip Gradient أصلاً (شوف 8.3) - لازم
+   نلغي الـ background-clip: text وقت الـ Skeleton، وإلا خلفية
+   الـ Shimmer هتتقص على شكل الحروف نفسها (أو تختفي تماماً لو النص
+   فاضي) بدل ما تبان كشريط كامل */
+.podium-name-gold.champ-skel {
+    width: 5.2rem;
+    height: 0.95rem;
+    background: rgba(212, 175, 55, 0.16);
+    -webkit-background-clip: border-box;
+    background-clip: border-box;
+    animation: none;
+}
+
+/* شريط Shimmer إضافي فوق كروت الـ Skeleton في باقي القائمة (فوق
+   Tailwind animate-pulse الموجود أصلاً في الـ Markup من المرحلة 4 -
+   بيدّي إحساس "تحميل حقيقي" بدل نبضة الشفافية البسيطة بس) */
+.rank-card[aria-hidden="true"] {
+    position: relative;
+    overflow: hidden;
+}
+.rank-card[aria-hidden="true"]::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    transform: translateX(-120%);
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.06), transparent);
+    animation: champShimmerSweep 1.6s ease-in-out infinite;
+}
+
+/* ------------------------------------------------------------------
+   8.6) دخول انسيابي لشريط "مركزك الحالي" أول ما يظهر فعلياً
+   ------------------------------------------------------------------ */
+.self-rank-bar-in .self-rank-bar-inner {
+    animation: champFadeInUp 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* ------------------------------------------------------------------
+   8.7) تحسينات أداء السكرول والتفاعل باللمس
+   ------------------------------------------------------------------ */
+#leaderboardList {
+    contain: layout style paint;
+}
+.rank-card {
+    contain: layout paint;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+}
+.champ-tab,
+.podium-avatar,
+.podium-name,
+.rank-arrow {
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+}
+
+/* ------------------------------------------------------------------
+   8.8) تجاوب كامل + مساحة آمنة (Safe Area) للشريط المثبت أسفل الشاشة
+   ------------------------------------------------------------------ */
+.self-rank-bar {
+    /* env(safe-area-inset-bottom) بتضيف مساحة إضافية تلقائياً بس على
+       الأجهزة اللي محتاجاها فعلاً (زي آيفون بزرار الهوم السفلي الافتراضي) -
+       بدون ما تأثر بأي حاجة على باقي الأجهزة (بترجع 0px) */
+    bottom: calc(4.35rem + env(safe-area-inset-bottom, 0px));
+}
+
+@media (max-width: 380px) {
+    .self-rank-avatar {
+        width: 2.4rem;
+        height: 2.4rem;
+    }
+    .self-rank-number {
+        font-size: 1rem;
+    }
+    .self-rank-bar-inner {
+        padding: 0.55rem 0.75rem;
+        gap: 0.55rem;
+    }
+    .podium-avatar-wrap {
+        width: 3rem;
+        height: 3rem;
+    }
+    .podium-avatar-wrap-lg {
+        width: 3.9rem;
+        height: 3.9rem;
+    }
+    /* [تعديل - إصلاح تجاوب]: تصغير خط شريط الإحصائيات + المسافة بين
+       العناصر جوه كروت المنصة تحديداً على الشاشات الضيقة، عشان رقم
+       زي "450,230" يفضل في سطر واحد قدر الإمكان بدل ما يعتمد على
+       اللف (flex-wrap) اللي اتضاف كحل أخير بس */
+    .podium-card .dual-stat-item {
+        font-size: 0.58rem;
+        gap: 0.15rem;
+    }
+    .podium-card .dual-stat-badge {
+        gap: 0.3rem;
+        padding: 0.25rem 0.4rem;
+    }
+}
+
+/* شاشات أوسع (تابلت/ديسكتوب) - الحاوية نفسها متسقّفة عمداً بـ max-w-md
+   (تصميم Mobile-First ثابت زي باقي التطبيق)، فبنكتفي هنا بلمسة راحة
+   بسيطة لمساحات لمس/فأرة أكبر بدل تكبير كل حاجة بشكل يكسر التصميم */
+@media (min-width: 640px) {
+    .rank-card {
+        padding: 0.75rem 1rem;
+    }
+    .champ-tab {
+        padding: 0.65rem 0.4rem 0.6rem;
+    }
+}
+
+/* ------------------------------------------------------------------
+   8.9) احترام كامل لـ prefers-reduced-motion على كل حركة أُضيفت هنا
+   ------------------------------------------------------------------
+   ملحوظة: دي إضافة لنفس الـ @media Query الموجود من المرحلة 2/3.2
+   (مش بديل ليها) - عشان كل التعطيلات تتجمع في مكان واحد منطقي هنا في
+   آخر الملف بدل ما تتوزع في أكتر من مكان.
+*/
+@media (prefers-reduced-motion: reduce) {
+    .champ-pop-in,
+    .rank-card.champ-pop-in,
+    .self-rank-bar-in .self-rank-bar-inner,
+    .podium-gold .podium-avatar,
+    .podium-silver .podium-avatar,
+    .podium-bronze .podium-avatar,
+    .podium-name-gold,
+    .podium-gold .podium-avatar-wrap::before,
+    .champ-countdown,
+    .champ-time-box,
+    .champ-skel::after,
+    .rank-card[aria-hidden="true"]::after {
+        animation: none !important;
+    }
+    .champ-pop-in,
+    .rank-card.champ-pop-in {
+        opacity: 1 !important;
+        transform: none !important;
+    }
+}
+
+/* ==================================================================
+   9) ثيم الألوان لكل فترة بطولة (يومي = تركواز / أسبوعي = الذهبي
+   الافتراضي (بدون تغيير) / شهري = ذهبي أغمق وأغنى مع توهج أقوى)
+   ------------------------------------------------------------------
+   بيتفعّل عن طريق كلاس theme-today / theme-week / theme-month على
+   #leaderboardMainContent (شوف updatePeriodTheme في js/leaderboard.js).
+   عمداً بيأثر بس على العناصر "حوالين" الترتيب (التابات، شريط العداد،
+   إطار المنصة) - مش على شكل المنصة/الميداليات نفسها (دهب/فضة/برونز)
+   ولا كروت باقي المتصدرين، عشان تفضل لغة "المركز" منفصلة تماماً عن
+   لغة "الفترة" ومايتلخبطوش في بعض.
+
+   theme-week مالوش أي Override هنا عمداً (خالي تماماً) لأن الألوان
+   الافتراضية في كل الملف فوق أصلاً ذهبية - هي بقت "الدرجة الوسطى".
+
+   ملحوظة عن :not(.is-urgent): بنستثني حالة "آخر دقيقة" من كل تخصيصات
+   الثيم بتاعة .champ-countdown عمداً، عشان التحذير الكهرماني (الموجود
+   فوق في قسم 2) يفضل واضح وثابت بنفس شكله بغض النظر عن ثيم الفترة -
+   التحذير أهم بصرياً من هوية الفترة في آخر لحظة.
+   ================================================================== */
+
+/* --- 9.1) التاب النشط --- */
+#leaderboardMainContent.theme-today .champ-tab.is-active {
+    background: linear-gradient(160deg, var(--champ-daily-400), var(--champ-daily-600));
+    border-color: var(--champ-daily-300);
+    box-shadow: 0 4px 14px -2px rgba(var(--champ-daily-rgb), 0.55), 0 0 0 1px rgba(var(--champ-daily-rgb), 0.25) inset;
+}
+
+#leaderboardMainContent.theme-month .champ-tab.is-active {
+    background: linear-gradient(160deg, var(--champ-monthly-400), var(--champ-monthly-600));
+    border-color: var(--champ-monthly-300);
+    box-shadow: 0 4px 16px -2px rgba(var(--champ-monthly-rgb), 0.6),
+                0 0 0 1px rgba(var(--champ-monthly-rgb), 0.3) inset,
+                0 0 22px rgba(var(--champ-monthly-rgb), 0.35);
+}
+
+/* --- 9.2) شريط العداد التنازلي (باستثناء حالة is-urgent - شوف الملحوظة فوق) --- */
+#leaderboardMainContent.theme-today .champ-countdown:not(.is-urgent) {
+    background: radial-gradient(120% 160% at 0% 0%, rgba(var(--champ-daily-rgb), 0.16), transparent 60%), var(--lux-900);
+    border-color: rgba(var(--champ-daily-rgb), 0.18);
+}
+#leaderboardMainContent.theme-today .champ-countdown:not(.is-urgent) .champ-countdown-icon {
+    color: var(--champ-daily-400);
+    background: rgba(var(--champ-daily-rgb), 0.12);
+}
+#leaderboardMainContent.theme-today .champ-countdown:not(.is-urgent) .champ-time-value {
+    color: var(--champ-daily-300);
+}
+#leaderboardMainContent.theme-today .champ-countdown:not(.is-urgent) .champ-time-sep {
+    color: var(--champ-daily-500);
+}
+
+#leaderboardMainContent.theme-month .champ-countdown:not(.is-urgent) {
+    background: radial-gradient(120% 160% at 0% 0%, rgba(var(--champ-monthly-rgb), 0.22), transparent 60%), var(--lux-900);
+    border-color: rgba(var(--champ-monthly-rgb), 0.24);
+}
+#leaderboardMainContent.theme-month .champ-countdown:not(.is-urgent) .champ-countdown-icon {
+    color: var(--champ-monthly-300);
+    background: rgba(var(--champ-monthly-rgb), 0.16);
+}
+#leaderboardMainContent.theme-month .champ-countdown:not(.is-urgent) .champ-time-value {
+    color: var(--champ-monthly-300);
+}
+#leaderboardMainContent.theme-month .champ-countdown:not(.is-urgent) .champ-time-sep {
+    color: var(--champ-monthly-500);
+}
+
+/* --- 9.3) إطار منصة التتويج (بس الإطار نفسه والعنوان الفرعي - مش
+   الكروت جوه ولا الميداليات) --- */
+#leaderboardMainContent.theme-today .champ-podium-frame {
+    background: radial-gradient(140% 100% at 50% 0%, rgba(var(--champ-daily-rgb), 0.10), transparent 65%), var(--lux-900);
+    border-color: rgba(var(--champ-daily-rgb), 0.16);
+}
+#leaderboardMainContent.theme-today .champ-podium-frame-sub {
+    color: var(--champ-daily-400);
+}
+
+#leaderboardMainContent.theme-month .champ-podium-frame {
+    background: radial-gradient(140% 100% at 50% 0%, rgba(var(--champ-monthly-rgb), 0.16), transparent 65%), var(--lux-900);
+    border-color: rgba(var(--champ-monthly-rgb), 0.22);
+    box-shadow: 0 14px 34px -18px rgba(0, 0, 0, 0.6), 0 0 24px rgba(var(--champ-monthly-rgb), 0.12);
+}
+#leaderboardMainContent.theme-month .champ-podium-frame-sub {
+    color: var(--champ-monthly-400);
+}
