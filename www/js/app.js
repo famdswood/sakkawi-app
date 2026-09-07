@@ -188,6 +188,51 @@ function initTabNavigation() {
 }
 
 /**
+ * [تعديل - إصلاح زرار الرجوع بعد الانتقال لـ Capacitor]: زرار الرجوع
+ * الفعلي بتاع أندرويد جوه Capacitor مش بيتصرف زي WebView عادي (webview.
+ * goBack())، لازم نستمع لحدث 'backButton' بشكل صريح عن طريق
+ * @capacitor/app وإلا التطبيق بيقفل فجأة أول ما يلاقي مفيش تاريخ يرجع
+ * له في الصفحة. الكود ده بيشتغل بس جوه التطبيق الحقيقي (مش في المتصفح
+ * وقت التطوير بـ Live Server، عشان window.Capacitor مش موجود هناك).
+ *
+ * المنطق:
+ * 1) لو لسه فيه تاريخ يرجع له (زي التبويبات المسجّلة بـ history.
+ *    pushState في switchTab فوق) -> نرجّعه عادي (history.back()).
+ * 2) لو وصلنا لبداية التاريخ (تبويب الرئيسية الافتراضي) -> بدل ما
+ *    نقفل التطبيق على طول، نطلب "دوس تاني للخروج" خلال ثانيتين (نفس
+ *    نمط واتساب) عشان نمنع خروج بالغلط.
+ *
+ * ملحوظة: ده بيغطي التبويبات التلاتة الرئيسية بس حاليًا (زي التعليق في
+ * switchTab فوق). لو حابب تغطي الشاشات الفرعية (الأوسمة، الإعدادات،
+ * الاستوريز..) كمان، الحل إنك تعمل history.pushState بنفس الطريقة كل
+ * ما تفتح أي شاشة فرعية/مودال من دول، وهتتغطى تلقائيًا هنا من غير أي
+ * تعديل إضافي في الكود ده.
+ */
+function initHardwareBackButton() {
+    if (!window.Capacitor?.isNativePlatform?.()) return;
+
+    const { App } = Capacitor.Plugins;
+    let lastBackPressTime = 0;
+
+    App.addListener('backButton', ({ canGoBack }) => {
+        if (canGoBack) {
+            window.history.back();
+            return;
+        }
+
+        const now = Date.now();
+        if (now - lastBackPressTime < 2000) {
+            App.exitApp();
+        } else {
+            lastBackPressTime = now;
+            document.dispatchEvent(new CustomEvent('app:toast', {
+                detail: { message: 'دوس تاني للخروج من التطبيق' },
+            }));
+        }
+    });
+}
+
+/**
  * جسر تنقّل عام بين التابات لأي وحدة تانية عايزة توديك تاب معين (زي
  * notifications.js لما تفتح إشعار "فتحت وسام جديد" وعايزة توديك لتبويب
  * بروفايلي فين دولاب الأوسمة) - بنستخدم حدث مخصص 'app:switch-tab' بدل
@@ -860,6 +905,7 @@ function initApp() {
     initOnboarding().then((authIntent) => {
         initSharedUIBridge();
         initTabNavigation();
+        initHardwareBackButton();
         initCrossModuleTabNavigation();
         initHeaderProfileLink();
         initStepsCounter();

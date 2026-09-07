@@ -477,4 +477,69 @@ function autoInit() {
     }
 }
 
+/* ==================================================================
+   🔗 [جديد] تكامل مع StepCounter Plugin الأصلي (تتبّع الخلفية الحقيقي)
+   ------------------------------------------------------------------
+   بيشتغل بس جوه تطبيق Capacitor الحقيقي (مش في المتصفح وقت التطوير).
+   بيدمج عدد الخطوات اللي اتسجل من الحساس الأصلي في الخلفية مع نفس
+   نظام localStorage (STORAGE_KEY) اللي باقي التطبيق بيقرا منه، عشان
+   الليدربورد ومزامنة Supabase يشتغلوا زي ما هما بالظبط من غير تعديل.
+   ================================================================== */
+
+/**
+ * بيسأل الـ Plugin الأصلي "كام خطوة اتسجلت من الحساس الحقيقي؟"، وبيدمج
+ * الرقم ده مع الحالة المحلية (stepCount) لو الرقم الجديد أكبر (الحساس
+ * الأصلي هو المصدر الأدق دايمًا وقت التشغيل جوه APK حقيقي).
+ */
+async function syncFromNativeStepCounter() {
+    if (!window.Capacitor?.isNativePlatform?.()) return;
+
+    try {
+        const { StepCounter } = Capacitor.Plugins;
+
+        // نتأكد الإذن متاخد الأول (على أندرويد 10+ لازم إذن صريح)
+        const permResult = await StepCounter.requestPermissions();
+        if (!permResult?.granted) {
+            notifySensorUnavailable(
+                'تم رفض إذن التعرف على النشاط (Activity Recognition). محتاج توافق عليه عشان عداد الخطوات يشتغل حتى والتطبيق مقفول.',
+                'native-permission-denied'
+            );
+            return;
+        }
+
+        // نشغّل الخدمة الأمامية (لو شغّالة أصلاً، النداء ده آمن ومفيهوش أي تأثير)
+        await StepCounter.startTracking();
+
+        // نجيب عدد خطوات اليوم من الحساس الأصلي
+        const { steps: nativeSteps, date: nativeDate } = await StepCounter.getStepsToday();
+
+        ensureStillSameDay();
+
+        // ندمج بس لو الرقم الأصلي أكبر من المحفوظ محليًا (الحساس
+        // الأصلي بيفضل شغّال في الخلفية، يعني ممكن يكون سبقنا بخطوات
+        // حصلت والتطبيق كان مقفول)
+        if (nativeDate === currentDayKey && nativeSteps > stepCount) {
+            const delta = nativeSteps - stepCount;
+            stepCount = nativeSteps;
+            persistDailyState();
+            document.dispatchEvent(new CustomEvent('sensors:steps-update', {
+                detail: { steps: stepCount, delta, date: currentDayKey, source: 'native' }
+            }));
+        }
+    } catch (err) {
+        console.warn('[sensors.js] تعذر المزامنة مع StepCounter الأصلي:', err);
+    }
+}
+
+// مزامنة فورية أول ما التطبيق يفتح
+document.addEventListener('DOMContentLoaded', syncFromNativeStepCounter);
+
+// ومزامنة تانية كل ما التطبيق يرجع للمقدمة (المستخدم فتح التطبيق تاني
+// بعد ما كان في الخلفية أو مقفول) - عشان يلحق أي خطوات اتسجلت وهو غايب
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+        syncFromNativeStepCounter();
+    }
+});
+
 autoInit();

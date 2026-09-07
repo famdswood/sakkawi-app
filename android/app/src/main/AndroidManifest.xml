@@ -33,9 +33,28 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths"></meta-data>
         </provider>
+
+        <service
+            android:name=".StepCounterForegroundService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="health" />
     </application>
 
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- [جديد] لازم على أندرويد 10+ (API 29+) عشان نقدر نوصل لحساس عدّ الخطوات -->
+    <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
+
+    <!-- [جديد] لازم عشان نقدر نشغّل Foreground Service خالص -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+
+    <!-- [جديد] لازم على أندرويد 14+ (API 34+) - نوع الخدمة "health" مخصص
+         لتطبيقات تتبع اللياقة/الصحة زي عداد الخطوات -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_HEALTH" />
+
+    <!-- [جديد] لازم على أندرويد 13+ (API 33+) عشان نقدر نعرض إشعار الخدمة الثابت -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 </manifest>
