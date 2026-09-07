@@ -23,6 +23,8 @@
 #onboardingOverlay {
     font-family: 'Cairo', sans-serif;
     background-color: #05060A;
+    max-width: 420px;
+    margin-inline: auto;
 }
 
 /* (إصلاح - باج حقيقي): بيتحط على <body> طول ما #onboardingOverlay
@@ -41,13 +43,36 @@ body.onb-scroll-lock {
     height: 100dvh;
 }
 
+/* (إصلاح - باج حقيقي 2): #onboardingOverlay عرضه 420px بالظبط (شوف
+   القاعدة فوق)، لكن #appShell (إطار التطبيق الأساسي اللي وراه في
+   index.html، شوف "Mobile Wrapper Frame") عرضه max-w-md بتاع Tailwind
+   = 448px - يعني أعرض بـ 28px (14px كل جنب). بما إن #appShell كان لسه
+   ظاهر في الـ DOM وراء الـ Overlay طول وقت شاشة الترحيب (زي ما موضّح
+   فوق)، كانت حافته (border-x) بتبان بارزة من جنبين شاشة الترحيب - ده
+   بالظبط "الفريم" اللي كان بيبان من ورا السلايدات. الحل: نخفي #appShell
+   بالكامل (visibility:hidden بدل display:none عشان منعملش أي reflow
+   لقياساته وقت التبديل) طول ما نفس الكلاس اللي بيقفل السكرول
+   (onb-scroll-lock) موجود على <body> - يعني بالظبط طول عرض شاشة
+   الترحيب، وبيرجع يظهر تلقائي أول ما finish()/cleanup() في
+   onboarding.js يشيلوا الكلاس ده. */
+body.onb-scroll-lock #appShell {
+    visibility: hidden;
+}
+
+/* تحديث أداء (خطة تبسيط الـ Onboarding - مرحلة 3): كان الـ blur هنا
+   90px، وتكلفته عالية على أي جهاز مش هاي-إند حتى وهو دايرتين بس.
+   دلوقتي بعد ما بقت كل صفحة ترحيب (.onb-page تحت) مستقلة بملء الشاشة
+   وبتجيب لون هويتها من خلفية gradient خاصة بيها (مفيش فيها أي blur
+   خالص)، بقى دور الدايرتين دول مجرد "تسريب إضاءة خفيف من ورا" مش
+   المصدر الأساسي للون زي الأول - فقللنا الـ blur لـ 45px، فرق مش
+   هيتحس بصرياً لأنها أصلاً هالة ناعمة، لكنه فرق كبير جداً على الأداء */
 #onboardingOverlay .onb-glow-1,
 #onboardingOverlay .onb-glow-2 {
     position: absolute;
     width: 340px;
     height: 340px;
     border-radius: 50%;
-    filter: blur(90px);
+    filter: blur(45px);
     opacity: 0.4;
     pointer-events: none;
     z-index: 0;
@@ -55,10 +80,20 @@ body.onb-scroll-lock {
 }
 
 /* ------------------------------------------------------------------
-   2) كروت الزجاج (Glassmorphism) - نفس روح الهوية بتاعة "سِكّاوي"
-   في باقي التطبيق (bg-lux-900 + border ذهبي خفيف) لكن بإحساس
-   شفافية أعمق يناسب شاشة ترحيب بملء الشاشة
-   ------------------------------------------------------------------ */
+   2) كروت الزجاج (Glassmorphism)
+   ------------------------------------------------------------------
+   تحديث (خطة تبسيط الـ Onboarding - مرحلة 3): الكلاس ده كان أصلاً
+   مطبّق على كل سلايد من سلايدات الـ Swiper (اللي بقت .onb-page
+   دلوقتي) وده اللي كان بيسبب المشكلة - Swiper بيسيب أكتر من سلايد
+   موجود في الـ DOM في نفس اللحظة (Cards Stack effect)، يعني أكتر من
+   نسخة blur(26px) شغالة مع بعض. دلوقتي .onb-page (تحت في القسم
+   الجديد 2.5) بقت صفحة كاملة الشاشة بخلفية gradient بسيطة من غير أي
+   backdrop-filter خالص - يعني الكلاس ده اتشال تماماً من صفحات
+   الترحيب نفسها.
+   الكلاس فضل موجود هنا بس لأنه لسه مستخدم في مكانين تانيين مش ليهم
+   نفس مشكلة الأداء (نسخة واحدة بس ظاهرة في كل مرة، مش متكدسة فوق
+   بعض): كارت فورم الدخول المدموج جوه آخر صفحة ترحيب (.onb-auth-form-slot)،
+   ومودال #authModal المستقل اللي بيظهر بعد ما الترحيب يخلص */
 #onboardingOverlay .onb-glass-card {
     background: linear-gradient(160deg, rgba(255, 255, 255, 0.10) 0%, rgba(255, 255, 255, 0.025) 100%);
     backdrop-filter: blur(26px);
@@ -82,22 +117,95 @@ body.onb-scroll-lock {
 }
 
 /* ------------------------------------------------------------------
+   2.5) صفحات الترحيب (.onb-page) - ملء الشاشة، وحدة واحدة بس ظاهرة
+   في كل لحظة (مرحلة 3 من خطة التبسيط)
+   ------------------------------------------------------------------
+   كل صفحة كانت قبل كده ".swiper-slide" جوه كروت متكدسة فوق بعض
+   (Swiper Cards Stack) وكل واحدة فيها فريم زجاجي (.onb-glass-card
+   فوق) - بقت دلوقتي ".onb-page" مستقلة تماماً بملء الشاشة، هوية
+   ألوانها جايه من متغيّر --accent اللي محدد Inline على كل صفحة في
+   index.html (style="--accent:#...")، عن طريق gradient بسيط بدل أي
+   backdrop-filter. الـ gradient نفسه رخيص جداً على الأداء عكس
+   الـ blur، وبما إن صفحة واحدة بس ظاهرة (مش تسعة كلهم مع بعض) يبقى
+   مفيش أي تكديس خالص.
+
+   ملحوظة لمرحلة الـ JS (4): التبديل بين الصفحات بيبقى بإضافة/شيل
+   كلاس "onb-page-active" بس (toggle)، مفيش أي حسابات transform أو
+   drag تتحسب مع كل حركة - العنصر الجديد بس هو اللي بياخد الكلاس. */
+#onboardingOverlay .onb-page {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    max-width: 420px;
+    margin-inline: auto;
+    padding-top: max(1.25rem, env(safe-area-inset-top));
+    padding-bottom: max(1.25rem, env(safe-area-inset-bottom));
+    box-sizing: border-box;
+
+    /* خلفية اعتمادها الأساسي على --accent بتاع الصفحة - Fallback أول
+       (لون صلب) لأي متصفح مش فاهم color-mix()، وبعده القيمة الحقيقية
+       اللي بتدمج اللون مع الشفافية - المتصفحات اللي مش فاهماها هتتجاهل
+       السطر ده وتفضل واقفة عند الـ Fallback فوقه */
+    background: #05060A;
+    background: radial-gradient(ellipse 120% 55% at 50% 26%, color-mix(in srgb, var(--accent, #D4AF37) 22%, transparent) 0%, transparent 62%) #05060A;
+
+    z-index: 2;
+    opacity: 0;
+    transform: translateY(8px);
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 0.22s cubic-bezier(0.22, 1, 0.36, 1),
+                transform 0.22s cubic-bezier(0.22, 1, 0.36, 1),
+                visibility 0s linear 0.22s;
+}
+
+#onboardingOverlay .onb-page-active {
+    opacity: 1;
+    transform: translateY(0);
+    visibility: visible;
+    pointer-events: auto;
+    transition: opacity 0.22s cubic-bezier(0.22, 1, 0.36, 1),
+                transform 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    #onboardingOverlay .onb-page {
+        transition: opacity 0.15s linear, visibility 0s linear 0.15s;
+        transform: none !important;
+    }
+    #onboardingOverlay .onb-page-active {
+        transition: opacity 0.15s linear;
+    }
+}
+
+/* ------------------------------------------------------------------
    3) نصوص متدرّجة (Gradient Text) - لون مختلف لكل سلايد، بيتماشى
    مع لون الإضاءة المحيطة بتاعته (data-accent في index.html)
    ------------------------------------------------------------------ */
-#onboardingOverlay .onb-grad-1 { background: linear-gradient(135deg, #EAF2FF 0%, #60A5FA 55%, #1D4ED8 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-#onboardingOverlay .onb-grad-2 { background: linear-gradient(135deg, #F5EBFF 0%, #C084FC 55%, #7E22CE 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-#onboardingOverlay .onb-grad-3 { background: linear-gradient(135deg, #E8FFF5 0%, #34D399 55%, #047857 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-#onboardingOverlay .onb-grad-4 { background: linear-gradient(135deg, #FFF6D1 0%, #E8C158 50%, #B8942A 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-#onboardingOverlay .onb-grad-5 { background: linear-gradient(135deg, #E3FBFF 0%, #22D3EE 55%, #0E7490 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-#onboardingOverlay .onb-grad-6 { background: linear-gradient(135deg, #FFE9EC 0%, #FB7185 55%, #BE123C 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-#onboardingOverlay .onb-grad-7 { background: linear-gradient(135deg, #FFF6D1 0%, #F2D77E 50%, #D4AF37 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-#onboardingOverlay .onb-grad-8 { background: linear-gradient(135deg, #FFF6E0 0%, #FBBF24 55%, #B45309 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+#onboardingOverlay .onb-grad-1 { background: linear-gradient(135deg, #EAF2FF 0%, #60A5FA 55%, #1D4ED8 100%); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent; }
+#onboardingOverlay .onb-grad-2 { background: linear-gradient(135deg, #F5EBFF 0%, #C084FC 55%, #7E22CE 100%); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent; }
+#onboardingOverlay .onb-grad-3 { background: linear-gradient(135deg, #E8FFF5 0%, #34D399 55%, #047857 100%); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent; }
+#onboardingOverlay .onb-grad-4 { background: linear-gradient(135deg, #FFF6D1 0%, #E8C158 50%, #B8942A 100%); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent; }
+#onboardingOverlay .onb-grad-5 { background: linear-gradient(135deg, #E3FBFF 0%, #22D3EE 55%, #0E7490 100%); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent; }
+#onboardingOverlay .onb-grad-6 { background: linear-gradient(135deg, #FFE9EC 0%, #FB7185 55%, #BE123C 100%); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent; }
+#onboardingOverlay .onb-grad-7 { background: linear-gradient(135deg, #FFF6D1 0%, #F2D77E 50%, #D4AF37 100%); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent; }
+#onboardingOverlay .onb-grad-8 { background: linear-gradient(135deg, #FFF6E0 0%, #FBBF24 55%, #B45309 100%); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent; }
 
 /* 3.1) ظل خفيف على كل نصوص السلايدات (العناوين المتدرّجة + الوصف +
    عداد "٠٨ / ٠٩") - عشان تفضل واضحة مهما كانت الخلفية وراها فاتحة
    أو متغيّرة الألوان. مقصود يكون خفيف جداً (شفافية قليلة + بلور صغير)
-   عشان يوضّح من غير ما يبان كظل صريح تقيل على النص */
+   عشان يوضّح من غير ما يبان كظل صريح تقيل على النص
+
+   (إصلاح - باج حقيقي): "انكسار الألوان" اللي كان بيبان في تدرّج
+   العناوين في كل سلايد سببه إن العنصر نفسه كان شايل مع بعض
+   background-clip:text (اللي بيقص التدرّج على شكل الحروف بالظبط)
+   و filter:drop-shadow في نفس الوقت. الاتنين مع بعض بيخلّوا المتصفح
+   (خصوصاً على GPU compositing) يفشل يطبّق القص صح لحظة أي repaint/
+   transition (زي فيد إن السلايد بيحصله opacity/transform)، فيبان
+   العنوان لحظتها كمستطيل لون صلب مكسور بدل النص المتدرّج - مش تدرّج
+   الألوان نفسه غلط. الحل: نستخدم text-shadow بدل filter؛ نفس الشكل
+   البصري بالظبط بس من غير ما يعارض قص الخلفية، لأن text-shadow
+   بيتحسب على شكل الحروف مباشرة مش على box التدرّج كله */
 #onboardingOverlay .onb-grad-1,
 #onboardingOverlay .onb-grad-2,
 #onboardingOverlay .onb-grad-3,
@@ -106,7 +214,7 @@ body.onb-scroll-lock {
 #onboardingOverlay .onb-grad-6,
 #onboardingOverlay .onb-grad-7,
 #onboardingOverlay .onb-grad-8 {
-    filter: drop-shadow(0 2px 5px rgba(0, 0, 0, 0.4));
+    text-shadow: 0 2px 5px rgba(0, 0, 0, 0.4);
 }
 #onboardingOverlay .swiper-slide p.text-lux-300,
 #onboardingOverlay .swiper-slide span.text-lux-400 {
@@ -162,6 +270,28 @@ body.onb-scroll-lock {
    (نفس تدرّجات onb-grad-N بالظبط) - بنفس فلسفة كأس سلايد 7 بالظبط
    بس بحجم أصغر ومن غير الـ Sparkles المحجوزة للحظة الختامية بس
    ------------------------------------------------------------------ */
+/* (إصلاح - باج حقيقي): كل سلايد كان بنيته 3 عناصر flex منفصلة
+   (هيدر - أيقونة بـ my-auto - نص) جوه container واحد justify-between.
+   ده كان بيخلّي المسافة بين الأيقونة والنص تتمدّد لوحدها حسب طول
+   الشاشة (لأن justify-between بيوزّع الفراغ بين التلاتة عناصر مع
+   بعض)، فعلى الشاشات الطويلة كان النص بينزل لتحت جداً وبعيد عن
+   الأيقونة، وأحياناً بيوصل لحد ما يتلامس مع شريط النقاط/زرار "التالي"
+   تحت. دلوقتي الأيقونة والنص اتلمّوا جوه ".onb-slide-body" واحد بياخد
+   كل المساحة المتبقية بعد الهيدر (flex-1) ويوسّط المجموعة دي كوحدة
+   واحدة (justify-content:center) - يعني النص بيفضل لاصق تحت الأيقونة
+   دايماً بمسافة ثابتة (gap) مهما كان طول الشاشة، والمجموعة كلها
+   بتتوسّط قائمة رأسياً بدل ما تتمدد */
+#onboardingOverlay .onb-slide-body {
+    width: 100%;
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+}
+
 #onboardingOverlay .onb-icon-wrap {
     position: relative;
     width: 215px;
@@ -1018,7 +1148,9 @@ body.onb-scroll-lock {
 .onb-grad-7.auth-modal-title {
     background: linear-gradient(135deg, #FFF6D1 0%, #F2D77E 50%, #D4AF37 100%);
     -webkit-background-clip: text;
+    background-clip: text;
     -webkit-text-fill-color: transparent;
+    color: transparent;
 }
 
 /* غلاف #authModal - وضعين بس، بيتبدّلوا من JS (showAuthModal/hideAuthModal

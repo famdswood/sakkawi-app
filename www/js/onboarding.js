@@ -7,12 +7,14 @@
    1) قراءة localStorage عشان يعرف المستخدم ده شاف الـ Onboarding
       قبل كده ولا لأ (بنفس فلسفة js/theme.js: مفتاح واحد بسيط،
       وفشل الوصول لـ localStorage بيتم تجاهله بهدوء)
-   2) تشغيل الـ Swiper (تأثير الكروت المكدّسة Cards Stack) وتحديث
-      الإضاءة المحيطة/نقاط الترقيم مع كل سلايد
+   2) التنقل بين صفحات الترحيب (.onb-page) عن طريق state machine بسيط
+      (goToPage) بدل أي مكتبة خارجية - كل صفحة بتظهر/تختفي بالكامل
+      (مش بتتحرك فوق بعض)، وتحديث الإضاءة المحيطة/نقاط الترقيم مع كل
+      صفحة
    3) تشغيل أنيميشن "كأس البطولة" التوقيعي + كونفيتي لما المستخدم
-      يوصل لآخر سلايد
+      يوصل لآخر صفحة
    4) فتح "صفحة الدخول" الكاملة (#onbAuthFormDock - عنصر مستقل بملء
-      الشاشة، برّه كروت الـ Swiper خالص) بأنيميشن انزلاق/تلاشي لما
+      الشاشة، برّه صفحات الترحيب خالص) بأنيميشن انزلاق/تلاشي لما
       المستخدم يضغط "إنشاء حساب جديد" أو "تسجيل الدخول" من آخر سلايد،
       وحقن فورم تسجيل الدخول/إنشاء الحساب الحقيقي (#authModal بتاع
       js/auth.js) جواها - مفيش مودال منبثق بثيم مختلف؛ نفس الكارت
@@ -23,7 +25,7 @@
 
    ملحوظة مهمة: initOnboarding() بترجع Promise. لو المستخدم شاف
    الشاشات دي قبل كده، بترجع فوراً من غير ما تلمس الـ DOM خالص
-   (متعملش Swiper جديد ولا حاجة) - توفير أداء لأي زيارة بعد الأولى.
+   (متعملش أي تهيئة لصفحات الترحيب) - توفير أداء لأي زيارة بعد الأولى.
    لو المستخدم أكمل تسجيل حساب/دخول فعلاً *جوه* شاشات الترحيب، الـ
    Promise بترجع 'signup' أو 'login' (يعني "خلص فعلاً، مفيش داعي
    تفتح مودال دخول تاني") - مش مجرد نية زي السلوك القديم.
@@ -34,10 +36,10 @@ import { checkLocationForSignup, GeofenceLocationError } from './geofence.js';
 
 const STORAGE_KEY = 'sakkawy:onboardingSeen';
 // (تعديل): كانت 7 - بقت 9 بعد إضافة سلايد "سؤالين يوميًا" وسلايد
-// "شارك عبر الإستوري" كسلايدين مستقلين (شوف index.html للسلايدات
-// الجديدة بالكامل) - لازم تتطابق مع عدد ".swiper-slide" الفعلي +
+// "شارك عبر الإستوري" كصفحتين مستقلتين (شوف index.html للصفحات
+// الجديدة بالكامل) - لازم تتطابق مع عدد ".onb-page" الفعلي +
 // عدد ".onb-bullet" في التذييل، وإلا الترقيم/الكونفيتي/الكأس هيشتغلوا
-// غلط على سلايد مش آخر واحد فعلاً
+// غلط على صفحة مش آخر واحدة فعلاً
 const TOTAL_SLIDES = 9;
 
 
@@ -551,7 +553,7 @@ export function initOnboarding() {
         const nextBtnText = document.getElementById('onbNextBtnText');
         const skipBtn = document.getElementById('onbSkipBtn');
         const bullets = Array.from(overlay.querySelectorAll('.onb-bullet'));
-        const slides = Array.from(overlay.querySelectorAll('.swiper-slide'));
+        const slides = Array.from(overlay.querySelectorAll('.onb-page'));
 
         // عناصر "صفحة الدخول" الكاملة (#onbAuthFormDock) اللي بتفتح فوق
         // كروت الترحيب لما المستخدم يضغط "إنشاء حساب"/"تسجيل الدخول" من
@@ -596,69 +598,131 @@ export function initOnboarding() {
         // سلايد (زي الكونفيتي بالظبط - شوف trophyCelebrated تحت)
         const trophyLottieContainer = document.getElementById('onbTrophyLottie');
         const trophyFallbackSvg = overlay.querySelector('.onb-trophy-fallback');
-        const trophyAnim = initTrophyLottie(trophyLottieContainer, trophyFallbackSvg);
 
         // شخصية الماشي الحقيقي (Lottie) - سلايد 2 بس، بيشتغل لوب
         // مستمر من لحظة ظهوره (autoplay: true)، عكس الكأس اللي بيتفعّل
         // مرة واحدة بس لحظة معينة
         const walkLottieContainer = document.getElementById('onbWalkLottie');
         const walkFallbackSvg = overlay.querySelector('.onb-walk-fallback');
-        initWalkLottie(walkLottieContainer, walkFallbackSvg);
 
         // علامات الاستفهام المتحركة (Lottie) - سلايد 3 بس، بيشتغل لوب
         // مستمر من لحظة ظهوره (autoplay: true) زي شخصية الماشي بالظبط
         const quizLottieContainer = document.getElementById('onbQuizLottie');
         const quizFallbackSvg = overlay.querySelector('.onb-quiz-fallback');
-        initQuizLottie(quizLottieContainer, quizFallbackSvg);
 
         // الدبوس/الموقع المتحرك (Lottie) - سلايد 4 بس، بيشتغل لوب
         // مستمر من لحظة ظهوره (autoplay: true) بنفس منطق باقي أيقونات
         // السلايدات المتحركة
         const locationLottieContainer = document.getElementById('onbLocationLottie');
         const locationFallbackSvg = overlay.querySelector('.onb-location-fallback');
-        initLocationLottie(locationLottieContainer, locationFallbackSvg);
 
         // الكأس/المنصة المتحركة (Lottie) - سلايد 5 بس، بيشتغل لوب
         // مستمر من لحظة ظهوره (autoplay: true) بنفس منطق باقي أيقونات
         // السلايدات المتحركة
         const rankLottieContainer = document.getElementById('onbRankLottie');
         const rankFallbackSvg = overlay.querySelector('.onb-rank-fallback');
-        initRankLottie(rankLottieContainer, rankFallbackSvg);
 
         // عملة النقاط المتحركة (Lottie) - سلايد 6 بس، بيشتغل لوب
         // مستمر من لحظة ظهوره (autoplay: true) بنفس منطق باقي أيقونات
         // السلايدات المتحركة
         const pointsLottieContainer = document.getElementById('onbPointsLottie');
         const pointsFallbackSvg = overlay.querySelector('.onb-points-fallback');
-        initPointsLottie(pointsLottieContainer, pointsFallbackSvg);
 
         // أيقونة الكتابة المتحركة (Lottie) - سلايد 8 بس، بيشتغل لوب
         // مستمر من لحظة ظهوره (autoplay: true) بنفس منطق باقي أيقونات
         // السلايدات المتحركة
         const writingLottieContainer = document.getElementById('onbWritingLottie');
         const writingFallbackSvg = overlay.querySelector('.onb-writing-fallback');
-        initWritingLottie(writingLottieContainer, writingFallbackSvg);
 
         let trophyCelebrated = false; // نضمن إن الكونفيتي يشتغل مرة واحدة بس
 
-        const swiper = new Swiper(overlay.querySelector('.onbSwiper'), {
-            effect: 'cards',
-            grabCursor: true,
-            cardsEffect: {
-                perSlideOffset: 12,
-                perSlideRotate: 4,
-                rotate: true,
-                slideShadows: true,
-            },
-            speed: 450,
-            resistanceRatio: 0.85,
-            on: {
-                slideChange() {
-                    updateSlideExperience(this.realIndex);
-                    playHapticTick();
-                },
-            },
-        });
+        // --------------------------------------------------------------
+        // 4.1) State Machine بسيط للتنقل بين صفحات الترحيب
+        // --------------------------------------------------------------
+        // currentIndex هو المصدر الوحيد للحقيقة (source of truth) لمكان
+        // المستخدم دلوقتي. أي تنقل (زرار تالي/بوليت/تخطي) لازم يعدّي من
+        // goToPage() عشان كل حاجة (كلاسات الصفحات + العداد + الأزرار)
+        // تتحدّث مع بعض دايماً، ومفيش مكانين ممكن يختلفوا في الحالة
+        let currentAnim = null;
+        let currentIndex = 0;
+
+        /** ينقل العرض لصفحة رقم index: بيبدّل كلاس التفعيل بين عناصر
+         *  .onb-page، وبيحدّث نقاط الترقيم/الأزرار عن طريق
+         *  updateSlideExperience(). بيتجاهل الطلب لو الـ index برّه
+         *  الحدود أو هو نفسه الصفحة الحالية أصلاً */
+       function goToPage(index) {
+    if (index < 0 || index >= TOTAL_SLIDES || index === currentIndex) return;
+
+    // تدمير الأنيميشن السابق فوراً لتوفير الرام
+    if (currentAnim && typeof currentAnim.destroy === 'function') {
+        currentAnim.destroy();
+        currentAnim = null;
+    }
+
+    currentIndex = index;
+
+    slides.forEach((slide, i) => {
+        slide.classList.toggle('onb-page-active', i === index);
+    });
+
+    updateSlideExperience(index);
+    playHapticTick();
+
+    // تشغيل أنيميشن الصفحة النشطة فقط
+    playLottieForPage(index);
+}
+function playLottieForPage(index) {
+    switch (index) {
+        case 1:
+            currentAnim = initWalkLottie(document.getElementById('onbWalkLottie'), overlay.querySelector('.onb-walk-fallback'));
+            break;
+        case 2:
+            currentAnim = initQuizLottie(document.getElementById('onbQuizLottie'), overlay.querySelector('.onb-quiz-fallback'));
+            break;
+        case 3:
+            currentAnim = initLocationLottie(document.getElementById('onbLocationLottie'), overlay.querySelector('.onb-location-fallback'));
+            break;
+        case 4:
+            currentAnim = initRankLottie(document.getElementById('onbRankLottie'), overlay.querySelector('.onb-rank-fallback'));
+            break;
+        case 5:
+            currentAnim = initPointsLottie(document.getElementById('onbPointsLottie'), overlay.querySelector('.onb-points-fallback'));
+            break;
+        case 7:
+            currentAnim = initWritingLottie(document.getElementById('onbWritingLottie'), overlay.querySelector('.onb-writing-fallback'));
+            break;
+        case 8:
+            currentAnim = initTrophyLottie(document.getElementById('onbTrophyLottie'), overlay.querySelector('.onb-trophy-fallback'));
+            // (إصلاح - باج حقيقي): منطق "احتفال الكأس" (تشغيل مرة واحدة +
+            // كونفيتي) كان قبل كده جوه updateSlideExperience() وبيستخدم
+            // متغيّر trophyAnim مش معرّف في السكوب ده أصلاً (كان موجود بس
+            // جوه showAuthGate() تحت، سكوب منفصل تمامًا) - أي وصول للسلايد
+            // الأخيرة كان بيرمي ReferenceError هنا، وبما إن
+            // updateSlideExperience() كانت بتتنادى قبل playLottieForPage()
+            // جوه goToPage()، الخطأ ده كان بيوقف goToPage() بالكامل قبل ما
+            // toIndex 8 يوصل هنا خالص - يعني initTrophyLottie() ما كانتش
+            // بتتنادى، فمش الأنيميشن ولا الكأس الاحتياطي SVG كانوا بيظهروا
+            // (الاحتياطي فاضل مخفي بـ display:none الافتراضي بتاعه). دلوقتي
+            // بقى المنطق هنا في المكان الصح، باستخدام currentAnim الحقيقي
+            if (!trophyCelebrated) {
+                trophyCelebrated = true;
+                if (currentAnim) {
+                    try {
+                        currentAnim.goToAndStop(0, true);
+                        currentAnim.play();
+                    } catch (err) {
+                        // مايهمناش لو الأنيميشن رفض يشتغل هنا - الكأس
+                        // الاحتياطي بيبان تلقائياً لو التهيئة الأولانية
+                        // فشلت أصلاً في initTrophyLottie()
+                    }
+                }
+                setTimeout(burstGoldConfetti, 250); // بعد لحظة بسيطة من ظهور الكأس
+            } else if (currentAnim) {
+                currentAnim.play();
+            }
+            break;
+    }
+}
 
         function updateSlideExperience(index) {
             const activeSlide = slides[index];
@@ -678,36 +742,30 @@ export function initOnboarding() {
             nextBtnText.textContent = isLast ? 'يلا بينا' : 'التالي';
             nextBtn.classList.toggle('opacity-0', isLast);
             nextBtn.classList.toggle('pointer-events-none', isLast);
-
-            if (isLast && !trophyCelebrated) {
-                trophyCelebrated = true;
-                if (trophyAnim) {
-                    try {
-                        trophyAnim.goToAndStop(0, true);
-                        trophyAnim.play();
-                    } catch (err) {
-                        // مايهمناش لو الأنيميشن رفض يشتغل هنا - الكأس
-                        // الاحتياطي بيبان تلقائياً لو التهيئة الأولانية
-                        // فشلت أصلاً في initTrophyLottie()
-                    }
-                }
-                setTimeout(burstGoldConfetti, 250); // بعد لحظة بسيطة من ظهور الكأس
-            }
+            // (إصلاح): منطق احتفال الكأس اتنقل لجوه playLottieForPage()
+            // (case 8) - شوف تعليقها هناك لتفاصيل الباج اللي كان بيمنع
+            // ظهور أيقونة السلايد الأخيرة خالص
         }
+
+        // عرض الصفحة الأولى فور التهيئة - مفيش تهيئة تلقائية من أي
+        // مكتبة خارجية، فلازم نعمل ده يدوي هنا
+        slides.forEach((slide, i) => {
+            slide.classList.toggle('onb-page-active', i === 0);
+        });
+        updateSlideExperience(0);
 
         bullets.forEach((bullet) => {
             bullet.addEventListener('click', () => {
-                swiper.slideTo(parseInt(bullet.getAttribute('data-index'), 10));
+                goToPage(parseInt(bullet.getAttribute('data-index'), 10));
             });
         });
 
         nextBtn.addEventListener('click', () => {
-            if (swiper.realIndex < TOTAL_SLIDES - 1) swiper.slideNext();
+            goToPage(currentIndex + 1);
         });
 
         skipBtn.addEventListener('click', () => {
-            swiper.slideTo(TOTAL_SLIDES - 1);
-            playHapticTick();
+            goToPage(TOTAL_SLIDES - 1);
         });
 
         function finish(authIntent) {
@@ -727,8 +785,7 @@ export function initOnboarding() {
             // بنفك قفل السكرول (onb-scroll-lock) بمجرد ما الشاشة تقفل فعلياً
             // - من هنا لحد ما التطبيق نفسه (اللي كان مستني وراها) ياخد التحكم
             document.body.classList.remove('onb-scroll-lock');
-            swiper.destroy(true, true);
-            if (trophyAnim) trophyAnim.destroy();
+            if (currentAnim && typeof currentAnim.destroy === 'function') currentAnim.destroy();
             resolve(authIntent);
         }
 
@@ -898,9 +955,9 @@ export function initOnboarding() {
    بتتنادى من js/auth.js (signOut) بدل ما نفتح authModal كمودال منبثق
    فوق التطبيق (Blur خلفه). بتعرض نفس "شاشة اختيار الدخول" (كأس +
    زرارين إنشاء حساب/تسجيل دخول) وصفحة الدخول الكاملة (#onbAuthFormDock)
-   اللي المستخدم شافها بالظبط أول مرة في آخر سلايد ترحيب - لكن من غير
-   إعادة عرض الستة سلايدات الأولى ولا تشغيل Swiper خالص (بنخفي كل
-   السلايدات ما عدا سلايد الاختيار الأخيرة بـ display:none مباشرة،
+   اللي المستخدم شافها بالظبط أول مرة في آخر صفحة ترحيب - لكن من غير
+   إعادة عرض الصفحات الأولى ولا تشغيل أي state machine تنقل خالص (بنخفي
+   كل الصفحات ما عدا صفحة الاختيار الأخيرة بـ display:none مباشرة،
    ومنخفيش/بنعطّل عناصر التنقل زي التخطي والنقاط وزرار التالي لأنها
    مالهاش لازمة هنا أصلاً).
 
@@ -948,24 +1005,24 @@ export function showAuthGate(initialIntent = null) {
 
     const skipBtn = document.getElementById('onbSkipBtn');
     const footer = overlay.querySelector('footer');
-    const slides = Array.from(overlay.querySelectorAll('.swiper-slide'));
+    const slides = Array.from(overlay.querySelectorAll('.onb-page'));
     const lastSlide = slides[slides.length - 1];
 
     // نخفي كل السلايدات ما عدا سلايد الاختيار الأخيرة (نفس الحالة اللي
     // كان المستخدم بيوصلها بعد ما يخلّص كل السلايدات أول مرة)، ونخفي
     // زرار التخطي والتذييل (النقاط + زرار التالي) لأننا مش بنعرض رحلة
     // ترحيب فعلية هنا، بس نفس شاشة الاختيار وصفحة الدخول بس
-    slides.forEach((slide) => {
-        slide.style.display = slide === lastSlide ? '' : 'none';
-    });
+   slides.forEach((slide) => {
+    slide.style.display = slide === lastSlide ? '' : 'none';
+});
     if (skipBtn) skipBtn.style.display = 'none';
     if (footer) footer.style.display = 'none';
 
     // (إصلاح - باج حقيقي): initOnboarding() بتلوّن الأضواء الخلفية
     // (#onbGlow1/#onbGlow2) عن طريق updateSlideExperience() اللي بتتنادى
-    // من حدث "slideChange" بتاع Swiper الحقيقي. هنا في showAuthGate()
-    // مفيش Swiper شغال أصلاً (بس تبديل display يدوي فوق) فـ
-    // updateSlideExperience() ما كانتش بتتنادى خالص - يعني الأضواء
+    // من جوه goToPage() نفسها مع كل تنقل حقيقي بين الصفحات. هنا في
+    // showAuthGate() مفيش أي تنقل بيحصل أصلاً (بس تبديل display يدوي
+    // فوق) فـ updateSlideExperience() ما كانتش بتتنادى خالص - يعني الأضواء
     // كانت فاضلة من غير أي لون (مفيش قيمة افتراضية في الـ CSS)، فشاشة
     // الاختيار كانت بتبان بخلفية سودة صلبة رغم إنها نفس العنصر بالظبط
     // بتاع أول مرة (نفس الكروت والزراير) - ده اللي كان بيدّي إحساس

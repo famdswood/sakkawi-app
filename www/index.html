@@ -101,12 +101,6 @@
         }
     </style>
 
-    <!-- Swiper: مكتبة كروت الـ Onboarding (تأثير Cards Stack) - مستخدمة -->
-    <!-- بس جوه #onboardingOverlay، منفصلة تماماً عن باقي التطبيق -->
-    <!-- [تعديل - دعم الأوفلاين]: بقت بتتقرا من vendor/ محلي - شوف
-         vendor/README.txt -->
-    <link rel="stylesheet" href="vendor/swiper-bundle.min.css">
-
     <!-- التنسيقات المخصصة (الانتقالات، الرسوم المتحركة، تفاصيل نمط Dark Luxury) -->
     <link rel="stylesheet" href="css/style.css">
     <!-- تنسيقات صفحة "الترتيب والبطولات" (Leaderboard Championships) -
@@ -279,7 +273,7 @@
         <div id="onbGlow2" class="onb-glow-2 bottom-16 -left-16"></div>
 
         <!-- هيدر: بس زرار تخطي في النص (شعار سِكّاوي والوصف اتشالوا بطلب المستخدم) -->
-        <header class="w-full max-w-md flex justify-center items-center z-10 px-2">
+        <header class="relative w-full max-w-md flex justify-center items-center z-10 px-2">
             <button id="onbSkipBtn" type="button"
                     class="text-xs font-bold text-lux-400 hover:text-white px-3.5 py-1.5 rounded-full onb-glass-btn flex items-center gap-1.5">
                 <span>تخطي</span>
@@ -287,14 +281,14 @@
             </button>
         </header>
 
-        <!-- كروت السلايدات (Swiper Cards Stack) -->
+        <!-- صفحات الترحيب - كل صفحة (.onb-page) عنصر مستقل بملء الشاشة،
+             ظاهرة أو مختفية بالكامل (onb-page-active)، بدل الكروت
+             المتكدسة اللي كانت شغالة بـ Swiper -->
         <main class="w-full flex-1 flex flex-col justify-center items-center my-auto z-10">
-            <div class="swiper onbSwiper">
-                <div class="swiper-wrapper">
 
                     <!-- ===== سلايد 1: الترحيب + لوجو سِكّاوي ===== -->
-                    <div class="swiper-slide onb-glass-card p-6 text-center relative flex flex-col justify-between"
-                         data-glow1="#D4AF37" data-glow2="#B8942A" data-accent="#D4AF37">
+                    <div class="onb-page p-6 text-center relative flex flex-col"
+                         data-index="0" data-glow1="#D4AF37" data-glow2="#B8942A" data-accent="#D4AF37" style="--accent:#D4AF37;">
                         <div class="flex justify-between items-center w-full">
                             <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold"
                                   style="background:rgba(212,175,55,0.16); color:#F2D77E; border:1px solid rgba(212,175,55,0.3);">
@@ -303,7 +297,8 @@
                             <span class="text-xs font-bold text-lux-400">01 / 09</span>
                         </div>
 
-                        <div class="w-full h-48 flex items-center justify-center relative my-auto">
+                        <div class="onb-slide-body">
+                        <div class="w-full h-48 flex items-center justify-center relative">
                             <div class="absolute inset-0 rounded-full blur-2xl" style="background:rgba(212,175,55,0.14);"></div>
                             <div class="onb-icon-wrap" style="--onb-icon-halo: rgba(212,175,55,0.4);">
                                 <div class="onb-icon-halo"></div>
@@ -340,11 +335,12 @@
                                 منصتك عشان تمشي، تتحدى نفسك، تجمع نقاط، وتكون بطل نزلة عبيد الحقيقي.
                             </p>
                         </div>
+                        </div>
                     </div>
 
                     <!-- ===== سلايد 2: قوة الحركة والمشي ===== -->
-                    <div class="swiper-slide onb-glass-card p-6 text-center relative flex flex-col justify-between"
-                         data-glow1="#06B6D4" data-glow2="#0E7490" data-accent="#06B6D4">
+                    <div class="onb-page p-6 text-center relative flex flex-col"
+                         data-index="1" data-glow1="#06B6D4" data-glow2="#0E7490" data-accent="#06B6D4" style="--accent:#06B6D4;">
                         <div class="flex justify-between items-center w-full">
                             <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold"
                                   style="background:rgba(6,182,212,0.16); color:#67E8F9; border:1px solid rgba(6,182,212,0.3);">
@@ -353,7 +349,8 @@
                             <span class="text-xs font-bold text-lux-400">02 / 09</span>
                         </div>
 
-                        <div class="w-full h-48 flex items-center justify-center relative my-auto">
+                        <div class="onb-slide-body">
+                        <div class="w-full h-48 flex items-center justify-center relative">
                             <div class="absolute inset-0 rounded-full blur-2xl" style="background:rgba(6,182,212,0.12);"></div>
                             <div class="onb-icon-wrap" style="--onb-icon-halo: rgba(6,182,212,0.4);">
                                 <div class="onb-icon-halo"></div>
@@ -451,11 +448,12 @@
                                 المشي بيحافظ على صحتك على المدى البعيد - قلبك، لياقتك، ومزاجك بيشكروك عليه كل يوم.
                             </p>
                         </div>
+                        </div>
                     </div>
 
                     <!-- ===== سلايد 3: سؤالين يوميًا للنقاط ===== -->
-                    <div class="swiper-slide onb-glass-card p-6 text-center relative flex flex-col justify-between"
-                         data-glow1="#F59E0B" data-glow2="#B45309" data-accent="#F59E0B">
+                    <div class="onb-page p-6 text-center relative flex flex-col"
+                         data-index="2" data-glow1="#F59E0B" data-glow2="#B45309" data-accent="#F59E0B" style="--accent:#F59E0B;">
                         <div class="flex justify-between items-center w-full">
                             <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold"
                                   style="background:rgba(245,158,11,0.16); color:#FCD34D; border:1px solid rgba(245,158,11,0.3);">
@@ -464,7 +462,8 @@
                             <span class="text-xs font-bold text-lux-400">03 / 09</span>
                         </div>
 
-                        <div class="w-full h-48 flex items-center justify-center relative my-auto">
+                        <div class="onb-slide-body">
+                        <div class="w-full h-48 flex items-center justify-center relative">
                             <div class="absolute inset-0 rounded-full blur-2xl" style="background:rgba(245,158,11,0.12);"></div>
                             <div class="onb-icon-wrap" style="--onb-icon-halo: rgba(245,158,11,0.4);">
                                 <div class="onb-icon-halo"></div>
@@ -516,11 +515,12 @@
                                 جاوب على سؤالين مختلفين كل يوم وزوّد رصيدك من النقاط بسهولة.
                             </p>
                         </div>
+                        </div>
                     </div>
 
                     <!-- ===== سلايد 4: حصري لنزلة عبيد - المنيا ===== -->
-                    <div class="swiper-slide onb-glass-card p-6 text-center relative flex flex-col justify-between"
-                         data-glow1="#3B82F6" data-glow2="#1D4ED8" data-accent="#3B82F6">
+                    <div class="onb-page p-6 text-center relative flex flex-col"
+                         data-index="3" data-glow1="#3B82F6" data-glow2="#1D4ED8" data-accent="#3B82F6" style="--accent:#3B82F6;">
                         <div class="flex justify-between items-center w-full">
                             <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold"
                                   style="background:rgba(59,130,246,0.16); color:#93C5FD; border:1px solid rgba(59,130,246,0.3);">
@@ -529,7 +529,8 @@
                             <span class="text-xs font-bold text-lux-400">04 / 09</span>
                         </div>
 
-                        <div class="w-full h-48 flex items-center justify-center relative my-auto">
+                        <div class="onb-slide-body">
+                        <div class="w-full h-48 flex items-center justify-center relative">
                             <div class="absolute inset-0 rounded-full blur-2xl" style="background:rgba(59,130,246,0.12);"></div>
                             <div class="onb-icon-wrap" style="--onb-icon-halo: rgba(59,130,246,0.4);">
                                 <div class="onb-icon-halo"></div>
@@ -579,11 +580,12 @@
                                 التنافس هنا بين أهل البلد بس - عشان يكون فيه معنى حقيقي وحماس أكتر.
                             </p>
                         </div>
+                        </div>
                     </div>
 
                     <!-- ===== سلايد 5: أصدقاء وليدربورد وإنجازات ===== -->
-                    <div class="swiper-slide onb-glass-card p-6 text-center relative flex flex-col justify-between"
-                         data-glow1="#D4AF37" data-glow2="#B8942A" data-accent="#D4AF37">
+                    <div class="onb-page p-6 text-center relative flex flex-col"
+                         data-index="4" data-glow1="#D4AF37" data-glow2="#B8942A" data-accent="#D4AF37" style="--accent:#D4AF37;">
                         <div class="flex justify-between items-center w-full">
                             <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold"
                                   style="background:rgba(212,175,55,0.16); color:#F2D77E; border:1px solid rgba(212,175,55,0.3);">
@@ -592,7 +594,8 @@
                             <span class="text-xs font-bold text-lux-400">05 / 09</span>
                         </div>
 
-                        <div class="w-full h-48 flex items-center justify-center relative my-auto">
+                        <div class="onb-slide-body">
+                        <div class="w-full h-48 flex items-center justify-center relative">
                             <div class="absolute inset-0 rounded-full blur-2xl" style="background:rgba(212,175,55,0.14);"></div>
                             <div class="onb-icon-wrap" style="--onb-icon-halo: rgba(212,175,55,0.4);">
                                 <div class="onb-icon-halo"></div>
@@ -662,11 +665,12 @@
                                 ابني شبكة أصحابك، شوف ترتيبك بينهم، وحقق إنجازات جديدة في مختلف النظام.
                             </p>
                         </div>
+                        </div>
                     </div>
 
                     <!-- ===== سلايد 6: نظام النقاط ===== -->
-                    <div class="swiper-slide onb-glass-card p-6 text-center relative flex flex-col justify-between"
-                         data-glow1="#E11D48" data-glow2="#9F1239" data-accent="#E11D48">
+                    <div class="onb-page p-6 text-center relative flex flex-col"
+                         data-index="5" data-glow1="#E11D48" data-glow2="#9F1239" data-accent="#E11D48" style="--accent:#E11D48;">
                         <div class="flex justify-between items-center w-full">
                             <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold"
                                   style="background:rgba(225,29,72,0.16); color:#FDA4AF; border:1px solid rgba(225,29,72,0.3);">
@@ -675,7 +679,8 @@
                             <span class="text-xs font-bold text-lux-400">06 / 09</span>
                         </div>
 
-                        <div class="w-full h-48 flex items-center justify-center relative my-auto">
+                        <div class="onb-slide-body">
+                        <div class="w-full h-48 flex items-center justify-center relative">
                             <div class="absolute inset-0 rounded-full blur-2xl" style="background:rgba(225,29,72,0.12);"></div>
                             <div class="onb-icon-wrap" style="--onb-icon-halo: rgba(225,29,72,0.4);">
                                 <div class="onb-icon-halo"></div>
@@ -730,11 +735,12 @@
                                 كل 200 خطوة = نقطة، وكل سؤال تجاوبه صح = 5 نقاط. كل مجهودك بيتحوّل لرصيد حقيقي.
                             </p>
                         </div>
+                        </div>
                     </div>
 
                     <!-- ===== سلايد 7: بطولات يومية/أسبوعية/شهرية ===== -->
-                    <div class="swiper-slide onb-glass-card p-6 text-center relative flex flex-col justify-between"
-                         data-glow1="#10B981" data-glow2="#047857" data-accent="#10B981">
+                    <div class="onb-page p-6 text-center relative flex flex-col"
+                         data-index="6" data-glow1="#10B981" data-glow2="#047857" data-accent="#10B981" style="--accent:#10B981;">
                         <div class="flex justify-between items-center w-full">
                             <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold"
                                   style="background:rgba(16,185,129,0.16); color:#6EE7B7; border:1px solid rgba(16,185,129,0.3);">
@@ -743,7 +749,8 @@
                             <span class="text-xs font-bold text-lux-400">07 / 09</span>
                         </div>
 
-                        <div class="w-full h-48 flex items-center justify-center relative my-auto">
+                        <div class="onb-slide-body">
+                        <div class="w-full h-48 flex items-center justify-center relative">
                             <div class="absolute inset-0 rounded-full blur-2xl" style="background:rgba(16,185,129,0.12);"></div>
                             <div class="onb-icon-wrap" style="--onb-icon-halo: rgba(16,185,129,0.4);">
                                 <div class="onb-icon-halo"></div>
@@ -793,11 +800,12 @@
                                 منافسة مستمرة على مدار الوقت - كل يوم وكل أسبوع وكل شهر ليه أبطاله الجدد.
                             </p>
                         </div>
+                        </div>
                     </div>
 
                     <!-- ===== سلايد 8: مشاركة الإنجازات عبر الإستوري ===== -->
-                    <div class="swiper-slide onb-glass-card p-6 text-center relative flex flex-col justify-between"
-                         data-glow1="#A855F7" data-glow2="#6D28D9" data-accent="#A855F7">
+                    <div class="onb-page p-6 text-center relative flex flex-col"
+                         data-index="7" data-glow1="#A855F7" data-glow2="#6D28D9" data-accent="#A855F7" style="--accent:#A855F7;">
                         <div class="flex justify-between items-center w-full">
                             <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold"
                                   style="background:rgba(168,85,247,0.16); color:#D8B4FE; border:1px solid rgba(168,85,247,0.3);">
@@ -806,7 +814,8 @@
                             <span class="text-xs font-bold text-lux-400">08 / 09</span>
                         </div>
 
-                        <div class="w-full h-48 flex items-center justify-center relative my-auto">
+                        <div class="onb-slide-body">
+                        <div class="w-full h-48 flex items-center justify-center relative">
                             <div class="absolute inset-0 rounded-full blur-2xl" style="background:rgba(168,85,247,0.12);"></div>
                             <div class="onb-icon-wrap" style="--onb-icon-halo: rgba(168,85,247,0.4);">
                                 <div class="onb-icon-halo"></div>
@@ -866,11 +875,12 @@
                                 انشرها للعامة أو لأصحابك بس، عبر استوري بيفضل ظاهر لمدة 24 ساعة بس.
                             </p>
                         </div>
+                        </div>
                     </div>
 
                     <!-- ===== سلايد 9: بداية الرحلة (كأس البطولة + أزرار الدخول) ===== -->
-                    <div class="swiper-slide onb-glass-card p-6 text-center relative flex flex-col justify-between"
-                         data-glow1="#D4AF37" data-glow2="#F2D77E" data-accent="#D4AF37">
+                    <div class="onb-page p-6 text-center relative flex flex-col"
+                         data-index="8" data-glow1="#D4AF37" data-glow2="#F2D77E" data-accent="#D4AF37" style="--accent:#D4AF37;">
                         <div class="flex justify-between items-center w-full">
                             <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold"
                                   style="background:rgba(212,175,55,0.18); color:#F2D77E; border:1px solid rgba(212,175,55,0.35);">
@@ -886,11 +896,11 @@
                              مستقل بملء الشاشة برّه الـ Swiper خالص، مش جزء من السلايد
                              ده) بأنيميشن انزلاق/تلاشي فوق كل حاجة، من غير ما نقفل شاشة
                              الترحيب أو نفتح مودال منبثق بثيم مختلف -->
-                        <div id="onbAuthChoiceView" class="w-full flex-1 min-h-0 flex flex-col items-center">
+                        <div id="onbAuthChoiceView" class="w-full flex-1 min-h-0 flex flex-col items-center justify-center">
 
                         <!-- كأس البطولة التوقيعي - SVG/CSS مش Lottie، عشان يفضل شغال
                              دايماً في أهم لحظة بصرية في الرحلة كلها -->
-                        <div class="w-full flex items-center justify-center relative my-auto">
+                        <div class="w-full flex items-center justify-center relative mb-2">
                             <div class="onb-trophy-wrap">
                                 <div class="onb-trophy-halo"></div>
                                 <!-- حلقة "وصول الكأس" - وميض دائري لمرة واحدة بس لحظة ما
@@ -1072,12 +1082,10 @@
                         <!-- ===== نهاية حالة الاختيار (#onbAuthChoiceView) ===== -->
                     </div>
 
-                </div>
-            </div>
         </main>
 
         <!-- تذييل: نقاط الترقيم + زرار التالي -->
-        <footer class="w-full max-w-md flex items-center justify-between z-10 px-2 mt-2">
+        <footer class="relative w-full max-w-md flex items-center justify-between z-10 px-2 mt-2">
             <div class="flex items-center gap-2" id="onbPagination">
                 <div class="onb-bullet onb-bullet-active" data-index="0"></div>
                 <div class="onb-bullet" data-index="1"></div>
@@ -1193,7 +1201,12 @@
     </div>
 
     <!-- Mobile Wrapper Frame -->
-    <div class="w-full max-w-md min-h-screen bg-lux-950 flex flex-col relative shadow-2xl overflow-x-hidden border-x border-gold-500/10 pb-[calc(6rem+env(safe-area-inset-bottom,0px))]">
+    <!-- id="appShell": مضاف عشان css/onboarding.css يقدر يخفيه بالكامل طول
+         ما شاشة الترحيب (#onboardingOverlay) ظاهرة - قبل كده كان العنصر ده
+         (عرضه max-w-md = 448px) بيفضل ظاهر وراها وبيبين حافته (border-x)
+         من الجانبين لأن #onboardingOverlay أضيق منه (420px) - شوف التعليق
+         جنب "body.onb-scroll-lock" في onboarding.css لتفاصيل الحل. -->
+    <div id="appShell" class="w-full max-w-md min-h-screen bg-lux-950 flex flex-col relative shadow-2xl overflow-x-hidden border-x border-gold-500/10 pb-[calc(6rem+env(safe-area-inset-bottom,0px))]">
 
         <!-- Top Bar Header -->
         <!-- ==================================================================
@@ -3782,11 +3795,6 @@
          استيراده واستدعاء initNotificationsUI() بتاعته من داخل
          js/app.js - مش لازم لينك <script> مستقل ليه غير كده، لكن
          سايبينه هنا موثّق فقط لتوضيح ترتيب الاعتماديات -->
-    <!-- Swiper JS (UMD): كروت شاشات الترحيب - سكريبت عادي (مش module)      -->
-    <!-- عشان تسجّل window.Swiper كـ global، js/onboarding.js (module)     -->
-    <!-- بيقدر يوصله عادي زي أي global تاني                                -->
-    <script src="vendor/swiper-bundle.min.js"></script>
-
     <!-- lottie-web (نسخة "light" - أخف حجماً، من غير تفسير expressions
          بتاعة After Effects، مش محتاجينها هنا لأن كأس البطولة معمول
          بـ keyframes عادية) - سكريبت عادي (مش module) بنفس منطق
