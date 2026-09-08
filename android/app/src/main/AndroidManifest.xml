@@ -57,4 +57,13 @@
 
     <!-- [جديد] لازم على أندرويد 13+ (API 33+) عشان نقدر نعرض إشعار الخدمة الثابت -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- [إصلاح - باج حقيقي "التطبيق مش بيطلب إذن الموقع"]: كانت
+         الصلاحيتين دول مش موجودتين خالص في الملف - عشان كده Capacitor
+         Geolocation كان بيفشل فورًا (أو مبيطلعش أي Prompt أصلاً) بدل ما
+         يسأل المستخدم، حتى بعد تثبيت بلجن @capacitor/geolocation نفسه.
+         ACCESS_COARSE_LOCATION مطلوبة بجانب ACCESS_FINE_LOCATION على
+         أندرويد الحديث عشان نافذة الإذن تظهر صح -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 </manifest>
