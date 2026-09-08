@@ -24,7 +24,7 @@
    ================================================================== */
 
 import { restoreSession, bindAuthEventListeners, checkExistingSession, getCurrentUser } from './auth.js';
-import { getStepsCount, getStepsHistory, syncActiveUser } from './sensors.js';
+import { getStepsCount, getStepsHistory, syncActiveUser, requestBatteryOptimizationExemption, requestAutostartPermission } from './sensors.js';
 import { applyGuestModeRestrictions } from './geofence.js';
 import { initStoriesUI } from './stories.js';
 import { initProfileUI } from './profiles.js';
@@ -1165,5 +1165,80 @@ function initApp() {
         }
     });
 }
+
+/* ==================================================================
+   🔋 [جديد] بانر "استثناء توفير البطارية" (صفحة إعدادات الحساب)
+   ------------------------------------------------------------------
+   js/sensors.js بيبعت 'sensors:battery-optimization-needed' لو
+   الـ Plugin الأصلي اكتشف إن التطبيق مش مستثنى من توفير البطارية على
+   أندرويد (شوف checkBatteryOptimizationStatus). هنا بس بنتحكم في
+   إظهار/إخفاء البانر وربط الزرار بطلب الاستثناء الفعلي - مفيش أي
+   منطق تاني هنا، كل التفاصيل جوه sensors.js/StepCounterPlugin.java.
+   ================================================================== */
+document.addEventListener('sensors:battery-optimization-needed', () => {
+    const banner = document.getElementById('batteryOptimizationBanner');
+    if (banner) banner.classList.remove('hidden');
+});
+
+document.addEventListener('DOMContentLoaded', () => {
+    const btnRequestBatteryExemption = document.getElementById('btnRequestBatteryExemption');
+    if (!btnRequestBatteryExemption) return;
+
+    btnRequestBatteryExemption.addEventListener('click', async () => {
+        btnRequestBatteryExemption.disabled = true;
+        try {
+            await requestBatteryOptimizationExemption();
+            // النافذة اللي فتحناها بتاعة النظام - مش هنعرف رد المستخدم
+            // فورًا. لما يرجع للتطبيق (visibilitychange) sensors.js
+            // هيتأكد تاني من الحالة الفعلية عن طريق
+            // syncFromNativeStepCounter -> checkBatteryOptimizationStatus،
+            // ولو بقى مستثنى فعلاً الحدث مش هيتبعت تاني والبانر هيفضل
+            // ظاهر لحد ما نضيف منطق إخفاء تلقائي لو حبينا لاحقًا.
+        } finally {
+            btnRequestBatteryExemption.disabled = false;
+        }
+    });
+});
+
+/* ==================================================================
+   🚀 [جديد] بانر "التشغيل التلقائي" (Autostart) - صفحة إعدادات الحساب
+   ------------------------------------------------------------------
+   نفس فلسفة بانر توفير البطارية فوق بالظبط: js/sensors.js بيبعت
+   'sensors:autostart-needed' لو الجهاز من الشركات المعروفة بتقييد
+   Autostart بشدة (شاومي/هواوي/أوبو/فيفو..إلخ). هنا بس بنتحكم في
+   إظهار البانر (مع اسم الشركة فعليًا من detail.manufacturer) وربط
+   الزرار بفتح شاشة الإعدادات المناسبة. مفيش منطق إخفاء تلقائي هنا
+   عمدًا (زي البانر التاني بالظبط) لأنه مفيش API رسمي نتأكد بيه إن
+   المستخدم فعّل الخيار فعلاً بعد ما يرجع من الشاشة.
+   ================================================================== */
+document.addEventListener('sensors:autostart-needed', (event) => {
+    const banner = document.getElementById('autostartBanner');
+    if (!banner) return;
+
+    const manufacturer = event.detail?.manufacturer;
+    const manufacturerLabel = document.getElementById('autostartManufacturerLabel');
+    if (manufacturerLabel && manufacturer) {
+        manufacturerLabel.textContent = manufacturer;
+    }
+
+    banner.classList.remove('hidden');
+});
+
+document.addEventListener('DOMContentLoaded', () => {
+    const btnRequestAutostart = document.getElementById('btnRequestAutostart');
+    if (!btnRequestAutostart) return;
+
+    btnRequestAutostart.addEventListener('click', async () => {
+        btnRequestAutostart.disabled = true;
+        try {
+            await requestAutostartPermission();
+            // زي بانر توفير البطارية بالظبط: مفيش رد فوري نتأكد بيه
+            // إن المستخدم فعّل الخيار، فالبانر بيفضل ظاهر لحد ما
+            // المستخدم يقفله بنفسه أو نضيف منطق إخفاء تلقائي لاحقًا
+        } finally {
+            btnRequestAutostart.disabled = false;
+        }
+    });
+});
 
 document.addEventListener('DOMContentLoaded', initApp);

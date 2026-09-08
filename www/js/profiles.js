@@ -1761,14 +1761,41 @@ export async function unlockBadge(badgeId) {
     const badge = badgesData.find((b) => b.id === badgeId);
     if (badge && badge.unlocked) return; // مفتوح بالفعل، مفيش داعي لنداء شبكة
 
-    const { error } = await supabaseClient
-        .from('user_badges')
-        .upsert({ user_id: currentAuthUser.id, badge_id: badgeId }, { onConflict: 'user_id,badge_id' });
+    let inserted;
 
-    if (error) {
-        console.error('خطأ في فتح الوسام:', error.message);
-        return;
+    if (badgeId === 'top3_leaderboard') {
+        // (إصلاح باج أمان حقيقي): كان في upsert مباشر من هنا لأي badgeId
+        // بيوصله - يعني أي حد يعرف يفتح Console المتصفح كان يقدر يكتب
+        // unlockBadge('champion') أو أي معرّف تاني ويفتح لنفسه أي وسام
+        // بالغش، مش بس top3_leaderboard. بدل ما نمنع الحالة العامة (مش
+        // مستخدمة فعليًا غير هنا)، بنمنع تحديدًا وسام "قدوة" - الوحيد
+        // اللي مبيتفتحش عن طريق Trigger سيرفر-سايد أصلاً - عن طريق RPC
+        // آمنة (check_and_unlock_top3_badge) بتتحقق فعليًا من ترتيبك
+        // all-time الحقيقي بعمود points في profiles قبل أي INSERT، وهي
+        // اللي بتعمل الـ INSERT نفسه (SECURITY DEFINER)، مش الفرونت إند.
+        // ده اللي بيمنع بالظبط باج "حساب جديد بصفر إنجاز واخد وسام
+        // قدوة" اللي كان بيحصل قبل كده.
+        const { data, error } = await supabaseClient.rpc('check_and_unlock_top3_badge');
+        if (error) {
+            console.error('خطأ في فتح وسام قدوة:', error.message);
+            return;
+        }
+        inserted = data === true;
+    } else {
+        const { error } = await supabaseClient
+            .from('user_badges')
+            .upsert({ user_id: currentAuthUser.id, badge_id: badgeId }, { onConflict: 'user_id,badge_id' });
+
+        if (error) {
+            console.error('خطأ في فتح الوسام:', error.message);
+            return;
+        }
+        inserted = true;
     }
+
+    // (top3_leaderboard بس) لسه مش مستحقه فعليًا (رتبتك أكبر من 3) أو
+    // كان مفتوح بالفعل - مفيش أي وسام جديد نعمله له باقي الخطوات دي
+    if (!inserted) return;
 
     await loadAndRenderBadges(currentAuthUser.id);
     const unlockedBadge = badgesData.find((b) => b.id === badgeId);

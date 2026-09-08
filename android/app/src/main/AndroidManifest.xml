@@ -39,6 +39,21 @@
             android:enabled="true"
             android:exported="false"
             android:foregroundServiceType="health" />
+
+        <!-- [جديد - إصلاح باج "عداد الخطوات أقل من Fit"] بيشغّل الخدمة
+             تلقائيًا فور إقلاع الجهاز، عشان الـ baseline بتاع
+             TYPE_STEP_COUNTER يتسجل قريب من منتصف الليل/الإقلاع مش وقت
+             ما المستخدم يفتح التطبيق بإيده -->
+        <receiver
+            android:name=".BootStepCounterReceiver"
+            android:enabled="true"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+                <action android:name="com.htc.intent.action.QUICKBOOT_POWERON" />
+            </intent-filter>
+        </receiver>
     </application>
 
     <!-- Permissions -->
@@ -47,6 +62,11 @@
 
     <!-- [جديد] لازم على أندرويد 10+ (API 29+) عشان نقدر نوصل لحساس عدّ الخطوات -->
     <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
+
+    <!-- [جديد - إصلاح باج "عداد الخطوات أقل من Fit"] لازم عشان
+         BootStepCounterReceiver يقدر يستقبل حدث إقلاع الجهاز ويشغّل
+         الخدمة تلقائيًا من غير ما ينتظر المستخدم يفتح التطبيق -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <!-- [جديد] لازم عشان نقدر نشغّل Foreground Service خالص -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
@@ -66,4 +86,21 @@
          أندرويد الحديث عشان نافذة الإذن تظهر صح -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
+    <!-- [جديد - متابعة موضوع "الخطوات أقل من Fit" على أجهزة OEM] لازم
+         عشان نقدر نطلب من المستخدم استثناء التطبيق من "توفير البطارية"
+         عبر ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS (نافذة موافقة
+         رسمية من نظام أندرويد نفسه - مش حيلة/API غير موثق). من غير
+         الصلاحية دي، الـ Intent هيرمي SecurityException على أي جهاز -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+
+    <!-- [جديد - Autostart] شاشات "التشغيل التلقائي" الخاصة بشركات
+         شاومي/هواوي/هونر/أوبو/فيفو/ميزو..إلخ بنفتحها بـ Intent صريح
+         (component name محدد) في openAutostartSettings()، فمش محتاجين
+         <queries> أصلاً تقنيًا (قيود ظهور الحزم في أندرويد 11+ بتخص
+         بس استعلامات PackageManager الضمنية زي queryIntentActivities،
+         مش startActivity بـ component صريح). بنسيبها هنا موثّقة/فاضية
+         عمدًا كتنويه، ومعتمدين على try/catch (ActivityNotFoundException/
+         SecurityException) جوه الـ Plugin نفسه للتعامل مع أي ROM
+         مايكونش فيه الـ Activity دي أصلاً أو غيّر اسمها -->
 </manifest>

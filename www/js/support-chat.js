@@ -342,6 +342,15 @@ function bindMessageLongPress() {
  * بالضغط على أي حتة برّه الكارت أو زرار ✕ بتاعه.
  * @param {string} messageId
  */
+/** مدة السماح بحذف الرسالة بعد إرسالها (بالمللي ثانية) - لازم تتطابق مع الـ interval المكتوب في RLS policy بتاعة الـ DELETE في قاعدة البيانات، وإلا هيفضل فيه فرق بين اللي شايفه المستخدم واللي الداتابيز فعلاً بتسمح بيه */
+const DELETE_WINDOW_MS = 60 * 60 * 1000; // ساعة واحدة
+
+/** true لو لسه في وقت مسموح فيه بحذف الرسالة دي (أقل من ساعة من وقت إرسالها) */
+function isMessageStillDeletable(msg) {
+    if (!msg?.created_at) return false;
+    return Date.now() - new Date(msg.created_at).getTime() < DELETE_WINDOW_MS;
+}
+
 function showMessageInfoPopover(messageId) {
     const msg = activeConversationMessages.find((m) => m.id === messageId);
     if (!msg) return;
@@ -361,6 +370,18 @@ function showMessageInfoPopover(messageId) {
         </div>
     `).join('<div class="h-px bg-lux-800"></div>');
 
+    // (جديد) بعد مرور ساعة من الإرسال، خيار الحذف بيختفي تماماً من غير
+    // أي نص بديل يوضّح السبب - القاعدة شغالة في الخلفية بس (DELETE_WINDOW_MS
+    // فوق + شرط الـ RLS المطابق له في الداتابيز)، من غير ما نلفت نظر
+    // المستخدم لوجود مهلة زمنية للحذف أصلاً
+    const canStillDelete = isMessageStillDeletable(msg);
+    const deleteSectionHtml = canStillDelete
+        ? `<button type="button" id="supportMsgInfoDeleteBtn"
+                    class="mt-3 w-full py-2 rounded-xl text-xs font-extrabold text-rose-400 bg-rose-500/10 hover:bg-rose-500/20 transition-colors">
+                حذف الرسالة
+           </button>`
+        : '';
+
     const overlay = document.createElement('div');
     overlay.id = 'supportMsgInfoOverlay';
     overlay.className = 'fixed inset-0 z-[80] flex items-center justify-center bg-black/50 px-6';
@@ -372,10 +393,7 @@ function showMessageInfoPopover(messageId) {
                         class="w-7 h-7 flex items-center justify-center rounded-full text-lux-400 hover:text-lux-100 hover:bg-lux-800/70 transition-colors">✕</button>
             </div>
             <div class="divide-y-0">${rowsHtml}</div>
-            <button type="button" id="supportMsgInfoDeleteBtn"
-                    class="mt-3 w-full py-2 rounded-xl text-xs font-extrabold text-rose-400 bg-rose-500/10 hover:bg-rose-500/20 transition-colors">
-                حذف الرسالة
-            </button>
+            ${deleteSectionHtml}
         </div>
     `;
 
@@ -388,7 +406,8 @@ function showMessageInfoPopover(messageId) {
 
     // (جديد) زرار "حذف الرسالة" - بيقفل كارت المعلومات ده ويفتح كارت
     // تأكيد منفصل (showDeleteConfirmDialog تحت) بدل ما يحذف على طول،
-    // عشان محدش يحذف رسالة بالغلط من ضغطة واحدة
+    // عشان محدش يحذف رسالة بالغلط من ضغطة واحدة. مش موجود أصلاً لو
+    // الرسالة عدّت عليها الساعة (شوف deleteSectionHtml فوق)
     document.getElementById('supportMsgInfoDeleteBtn')?.addEventListener('click', () => {
         hideMessageInfoPopover();
         showDeleteConfirmDialog(messageId);
@@ -467,13 +486,30 @@ function hideDeleteConfirmDialog() {
  * @returns {Promise<boolean>}
  */
 async function performDeleteMessage(messageId) {
-    const { error } = await supabaseClient
+    // (جديد) .select() هنا مش عشان نستخدم الداتا الراجعة، لكن عشان نضمن
+    // إن الـ response بترجّع عدد الصفوف اللي اتحذفت فعلاً - من غيرها،
+    // رفض الـ RLS (زي لما تحاول تمسح رسالة عدّى عليها الساعة) بيرجع
+    // نجاح كاذب (data فاضية، من غير error) وكنا وقعنا في نفس المشكلة اللي
+    // اكتشفناها قبل كده: بتتشال محلياً بس من غير أي حذف حقيقي في الداتابيز
+    const { data, error } = await supabaseClient
         .from('support_messages')
         .delete()
-        .eq('id', messageId);
+        .eq('id', messageId)
+        .select('id');
 
     if (error) {
         console.error('[support-chat.js] فشل حذف الرسالة:', error);
+        return false;
+    }
+
+    if (!data || data.length === 0) {
+        // مفيش صف اتحذف فعلياً - غالباً الرسالة عدّى عليها وقت السماح
+        // بالحذف والـ RLS رفضت العملية بصمت. مبنقولش السبب صراحةً للمستخدم
+        // (القاعدة الزمنية شغالة في الخلفية بس) - رسالة عامة بس كفاية
+        console.warn('[support-chat.js] الحذف اترفض (مفيش صف اتأثر)');
+        document.dispatchEvent(new CustomEvent('app:toast', {
+            detail: { message: 'تعذّر حذف الرسالة.', type: 'error' },
+        }));
         return false;
     }
 

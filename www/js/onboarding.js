@@ -585,8 +585,12 @@ export function initOnboarding() {
 
         // مدة أنيميشن فتح/قفل صفحة الدخول بالمللي ثانية - لازم تتطابق مع
         // transition-duration بتاعة ".onb-auth-page" في css/onboarding.css
-        // (شوف returnToChoiceView تحت ليه محتاجينها بالظبط)
-        const AUTH_PAGE_TRANSITION_MS = 380;
+        // (شوف returnToChoiceView تحت ليه محتاجينها بالظبط). (إصلاح -
+        // طلب المستخدم "صفحة الدخول حاسسها منفصلة"): كانت 380 (أطول من
+        // حركة السلايدات العادية 220 بشكل ملحوظ)، دلوقتي بقت مطابقة
+        // لمدة .onb-page بالظبط عشان تحس إنها استمرار لنفس رحلة السلايدات
+        // مش صفحة منفصلة ببطء/حركة مختلفة
+        const AUTH_PAGE_TRANSITION_MS = 220;
 
         // 'signup' أو 'login' حسب آخر زرار ضغطه المستخدم من شاشة
         // الاختيار - بنستخدمها لما ننجح فعلاً في تسجيل الدخول عشان
@@ -742,6 +746,14 @@ function playLottieForPage(index) {
             nextBtnText.textContent = isLast ? 'يلا بينا' : 'التالي';
             nextBtn.classList.toggle('opacity-0', isLast);
             nextBtn.classList.toggle('pointer-events-none', isLast);
+            // (إصلاح - طلب المستخدم): زرار "تخطي" لازم يظهر بس في أول 8
+            // سلايدات (من 0 لـ TOTAL_SLIDES - 2) ويختفي في السلايد
+            // الأخيرة (شاشة الاختيار/الكأس) - مفيش حاجة تانية نتخطاها
+            // لما تكون واقف أصلاً في آخر سلايد، فالزرار مالوش لازمة هناك
+            if (skipBtn) {
+                skipBtn.classList.toggle('opacity-0', isLast);
+                skipBtn.classList.toggle('pointer-events-none', isLast);
+            }
             // (إصلاح): منطق احتفال الكأس اتنقل لجوه playLottieForPage()
             // (case 8) - شوف تعليقها هناك لتفاصيل الباج اللي كان بيمنع
             // ظهور أيقونة السلايد الأخيرة خالص
@@ -1091,8 +1103,8 @@ export function showAuthGate(initialIntent = null) {
 
     // مدة أنيميشن فتح/قفل صفحة الدخول - لازم تتطابق مع transition-duration
     // بتاعة ".onb-auth-page" في css/onboarding.css (نفس القيمة المستخدمة
-    // في initOnboarding() فوق)
-    const AUTH_PAGE_TRANSITION_MS = 380;
+    // في initOnboarding() فوق). (إصلاح - نفس تعديل initOnboarding() فوق)
+    const AUTH_PAGE_TRANSITION_MS = 220;
 
     // احتياطي دفاعي: نضمن إن صفحة الدخول الكاملة (وصفحة الرفض) تبدأ
     // مقفولة دايماً حتى لو فضل أثر (class) من استدعاء سابق لأي سبب

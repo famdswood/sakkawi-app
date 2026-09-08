@@ -1159,27 +1159,18 @@ function renderLeaderboardResult(rows, config) {
     renderLeaderboardRemainingList(rows);
     renderSelfRankBar(rows, config.metric);
 
-    // (نُقل من js/profiles.js - إصلاح باج "الأرقام الوهمية"): فتح وسام
-    // "قدوة" (top3_leaderboard) كان شرطه محسوب جوه loadAndRenderLeaderboard
-    // القديمة (المحذوفة دلوقتي) على ترتيب all-time بس، وهو نفسه سبب
-    // نداء الدالة دي من غير داعي بعد كل Flush خطوات/سؤال يومي. الشرط
-    // اتنقل هنا حرفيًا (metric === 'points' && rank <= 3)، بس دلوقتي
-    // مبني على الترتيب الحقيقي المعروض فعليًا (يومي أو أسبوعي، مش
-    // all-time وهمي) - الوسام ده مستثنى عمداً من Triggers قاعدة
-    // البيانات لأن شرطه نسبي وسط كل المستخدمين مش عمود ثابت (شوف
-    // الملحوظة في profiles.js فوق checkAndUnlockBadges)
-    //
-    // (ملحوظة - كاش الأوفلاين): الشرط ده ممكن يتنفذ مرتين (مرة بالكاش
-    // ومرة بالشبكة) لو المستخدم فعلاً تحت أول 3 - unlockBadge نفسها
-    // المفروض idempotent (فتح وسام مفتوح أصلاً مايعملش حاجة) زي ما هي
-    // شغالة دلوقتي مع أي إعادة نداء تانية للدالة دي أصلاً
-    if (config.metric === 'points') {
-        const currentUserId = getCurrentUserId();
-        const myRow = currentUserId ? rows.find((row) => row.id === currentUserId) : null;
-        if (myRow && myRow.rank <= 3) {
-            import('./profiles.js').then(({ unlockBadge }) => unlockBadge?.('top3_leaderboard'));
-        }
-    }
+    // (تحديث - إصلاح باج أمان + باج "وسام قدوة بيتفتح لحساب صفر
+    // إنجاز"): الشرط اتنقل بالكامل لدالة SQL آمنة (check_and_unlock_top3_badge
+    // في js/profiles.js -> unlockBadge) بتتحقق فعليًا من ترتيبك
+    // الحقيقي all-time (عمود points في profiles) قبل أي INSERT - مش
+    // من بيانات الفرونت إند (rows هنا) اللي أي حد يقدر يتلاعب فيها من
+    // الـ Console (كان ده بالظبط سبب فتح الوسام لحساب صفر إنجاز).
+    // مفيش داعي نحسب أي شرط رتبة هنا خالص، ولا نربطه بمقياس/فترة
+    // معينة (يومي/أسبوعي/شهري) - "قدوة" إنجاز دائم all-time، والدالة
+    // بتتأكد بنفسها إنك مش مستحقه أصلاً أو مفتوح بالفعل وترجع بسرعة
+    // من غير أي تأثير - آمنة تتنادى في كل مرة الليدربورد يتحمّل (حتى
+    // لو مرتين بسبب كاش الأوفلاين فوق - unlockBadge/الدالة idempotent)
+    import('./profiles.js').then(({ unlockBadge }) => unlockBadge?.('top3_leaderboard'));
 }
 
 

@@ -10,9 +10,11 @@
     <!-- ربط PWA Manifest -->
     <link rel="manifest" href="manifest.json">
 
-    <!-- Favicon مؤقت (SVG مضمّن مباشرة - بدون طلب شبكة إضافي) عشان نمنع
-         404 على favicon.ico لحد ما يتحط أيقونة حقيقية للمشروع -->
-    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%230B0D12'/%3E%3Ctext x='50' y='68' font-size='60' text-anchor='middle' fill='%23D4AF37'%3E%D8%B3%3C/text%3E%3C/svg%3E">
+    <!-- Favicon حقيقي مبني من لوجو المشروع (assets/icons/) -->
+    <link rel="icon" href="assets/icons/favicon.ico" sizes="any">
+    <link rel="icon" type="image/png" sizes="32x32" href="assets/icons/favicon-32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="assets/icons/favicon-16.png">
+    <link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">
 
     <!-- Google Fonts: Cairo & Tajawal -->
     <!-- [تعديل - دعم الأوفلاين]: خطوط Cairo و Tajawal بقت محلية جوه
@@ -273,7 +275,7 @@
         <div id="onbGlow2" class="onb-glow-2 bottom-16 -left-16"></div>
 
         <!-- هيدر: بس زرار تخطي في النص (شعار سِكّاوي والوصف اتشالوا بطلب المستخدم) -->
-        <header class="relative w-full max-w-md flex justify-center items-center z-10 px-2">
+        <header class="relative w-full max-w-md flex justify-center items-center z-20 px-2">
             <button id="onbSkipBtn" type="button"
                     class="text-xs font-bold text-lux-400 hover:text-white px-3.5 py-1.5 rounded-full onb-glass-btn flex items-center gap-1.5">
                 <span>تخطي</span>
@@ -300,32 +302,12 @@
                         <div class="onb-slide-body">
                         <div class="w-full h-48 flex items-center justify-center relative">
                             <div class="absolute inset-0 rounded-full blur-2xl" style="background:rgba(212,175,55,0.14);"></div>
-                            <div class="onb-icon-wrap" style="--onb-icon-halo: rgba(212,175,55,0.4);">
+                            <div class="onb-icon-wrap" style="--onb-icon-halo: rgba(212,175,55,0.4); width:260px; height:260px;">
                                 <div class="onb-icon-halo"></div>
-                                <!-- ==========================================================
-                                     لوجو سِكّاوي مؤقت (Placeholder) - رسمة SVG بسيطة (بلاطة
-                                     ذهبية بحرف "سِ") لحد ما يتوفر ملف اللوجو الحقيقي PNG.
-                                     لاستبداله لاحقاً: امسح المحتوى من <svg class="onb-icon-svg">
-                                     لحد </svg> وحط بدالها:
-                                     <img src="images/sakkawy-logo.png" class="onb-icon-svg"
-                                          style="width:96px;height:96px;object-fit:contain;" alt="سِكّاوي">
-                                     (أو أي مسار تحط فيه ملف اللوجو فعلياً) -->
-                                <svg class="onb-icon-svg" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-                                    <defs>
-                                        <linearGradient id="onbIconGrad1" x1="0%" y1="0%" x2="100%" y2="100%">
-                                            <stop offset="0%" stop-color="#FFF6D1"/>
-                                            <stop offset="50%" stop-color="#F2D77E"/>
-                                            <stop offset="100%" stop-color="#B8942A"/>
-                                        </linearGradient>
-                                    </defs>
-
-                                    <ellipse cx="60" cy="102" rx="34" ry="5" fill="#000" opacity="0.25"/>
-
-                                    <rect x="22" y="18" width="76" height="76" rx="22" fill="#5C4610" opacity="0.4" transform="translate(2,3)"/>
-                                    <rect x="22" y="18" width="76" height="76" rx="22" fill="url(#onbIconGrad1)" stroke="#8A6A16" stroke-width="1"/>
-                                    <rect x="27" y="23" width="66" height="66" rx="17" fill="none" stroke="#ffffff" stroke-opacity="0.35" stroke-width="1.5"/>
-                                    <text x="60" y="73" font-size="44" font-weight="900" fill="#5C4610" text-anchor="middle" font-family="Cairo, sans-serif">سِ</text>
-                                </svg>
+                                <!-- لوجو سِكّاوي الحقيقي (استبدلنا الـ SVG المؤقت بيه) -->
+                                <img src="images/logo.png" class="onb-icon-svg"
+                                     style="object-fit:contain;"
+                                     alt="سِكّاوي">
                             </div>
                         </div>
 
@@ -2407,6 +2389,56 @@
                         </form>
                     </div>
 
+                    <!-- ============================================================= -->
+                    <!-- [جديد] بانر "استثناء توفير البطارية" - بيظهر بس على أندرويد
+                         لو الـ Plugin الأصلي اكتشف إن التطبيق مش مستثنى من توفير
+                         البطارية (شوف checkBatteryOptimizationStatus في js/sensors.js).
+                         مخفي افتراضيًا (hidden) وبيتحكم في ظهوره js/app.js عن طريق
+                         حدث 'sensors:battery-optimization-needed'. مهم خصوصًا على
+                         أجهزة شاومي/هواوي/أوبو/فيفو اللي بتقفل عداد الخطوات في
+                         الخلفية لو التطبيق مش مستثنى، حتى بعد إصلاح BOOT_COMPLETED. -->
+                    <!-- ============================================================= -->
+                    <div id="batteryOptimizationBanner" class="hidden pt-4 mt-1 border-t border-gold-500/10 space-y-3">
+                        <div class="bg-lux-800 border border-gold-500/15 rounded-2xl p-4 space-y-2.5">
+                            <h3 class="text-xs font-extrabold text-lux-50">دقّة عداد الخطوات في الخلفية</h3>
+                            <p class="text-[11px] text-lux-300 leading-relaxed font-medium">
+                                جهازك بيوقف تطبيقات كتير في الخلفية عشان توفير البطارية،
+                                وده ممكن يوقف عداد الخطوات وانت ماشي والتطبيق مقفول.
+                                استثنِ سِكّاوي من توفير البطارية عشان يفضل يعد خطواتك بدقة زي Fit.
+                            </p>
+                            <button type="button" id="btnRequestBatteryExemption"
+                                    class="w-full text-xs font-extrabold text-lux-950 bg-gradient-to-br from-gold-400 to-gold-600 shadow-glow-amber rounded-2xl py-2.5 transition-opacity">
+                                استثناء التطبيق من توفير البطارية
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- ============================================================= -->
+                    <!-- [جديد] بانر "التشغيل التلقائي" (Autostart) - بيظهر بس على
+                         الأجهزة اللي شركتها المصنّعة معروفة بتقييد شديد للتطبيقات في
+                         الخلفية (شاومي/هواوي/هونر/أوبو/ريلمي/فيفو/ميزو..إلخ) - شوف
+                         checkAutostartStatus في js/sensors.js. مخفي افتراضيًا (hidden)
+                         وبيتحكم في ظهوره js/app.js عن طريق حدث
+                         'sensors:autostart-needed'. التقييد ده أخطر من توفير البطارية
+                         العادي لأنه بيقفل عداد الخطوات في الخلفية حتى لو التطبيق
+                         مستثنى من توفير البطارية أصلاً. -->
+                    <!-- ============================================================= -->
+                    <div id="autostartBanner" class="hidden pt-4 mt-1 border-t border-gold-500/10 space-y-3">
+                        <div class="bg-lux-800 border border-gold-500/15 rounded-2xl p-4 space-y-2.5">
+                            <h3 class="text-xs font-extrabold text-lux-50">تفعيل التشغيل التلقائي</h3>
+                            <p class="text-[11px] text-lux-300 leading-relaxed font-medium">
+                                جهازك (<span id="autostartManufacturerLabel">هذا الجهاز</span>) بيوقف تطبيقات الخلفية
+                                إلا لو فعّلت "التشغيل التلقائي" (Autostart) ليها يدويًا من إعدادات الجهاز نفسه -
+                                حتى لو استثنيت التطبيق من توفير البطارية. فعّلها عشان عداد الخطوات يفضل دقيق
+                                زي Fit حتى والتطبيق مقفول.
+                            </p>
+                            <button type="button" id="btnRequestAutostart"
+                                    class="w-full text-xs font-extrabold text-lux-950 bg-gradient-to-br from-gold-400 to-gold-600 shadow-glow-amber rounded-2xl py-2.5 transition-opacity">
+                                فتح إعدادات التشغيل التلقائي
+                            </button>
+                        </div>
+                    </div>
+
                 </div>
 
             </section>
@@ -2654,8 +2686,9 @@
 
                 <!-- Header -->
                 <div class="text-center space-y-1.5">
-                    <div class="w-14 h-14 mx-auto rounded-2xl bg-gradient-to-br from-gold-400 to-gold-600 flex items-center justify-center text-lux-950 shadow-glow-amber">
-                        <svg class="w-7 h-7 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4h10v5a5 5 0 0 1-10 0V4z"/><path d="M7 6H4a3 3 0 0 0 3 3"/><path d="M17 6h3a3 3 0 0 1-3 3"/><path d="M12 14v3"/><path d="M9 20h6"/><path d="M10 17h4v3h-4z"/></svg>
+                    <div class="w-24 h-24 mx-auto flex items-center justify-center">
+                        <img src="images/logo.png" class="w-full h-full object-contain"
+                             style="filter: drop-shadow(0 0 14px rgba(212,175,55,0.35));" alt="سِكّاوي">
                     </div>
                     <h2 class="text-lg font-black onb-grad-7 auth-modal-title tracking-tight">سِكّاوي</h2>
                     <p id="authModalSubtitle" class="text-xs text-lux-300 font-medium">
@@ -2724,7 +2757,7 @@
                     <div>
                         <label for="authUsernameInput" class="sr-only">اسم المستخدم</label>
                         <input id="authUsernameInput" type="text" required autocomplete="username"
-                               dir="ltr" placeholder="اسم المستخدم بالإنجليزي، مثال: famdawood"
+                               dir="ltr" placeholder="famdawood"
                                pattern="[A-Za-z0-9_]{3,20}" title="حروف إنجليزية وأرقام و ' _ ' بس، من 3 لـ20 حرف"
                                class="onb-auth-input text-xs font-medium rounded-2xl px-4 py-3 text-left">
                     </div>

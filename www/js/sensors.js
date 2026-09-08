@@ -604,6 +604,20 @@ async function syncFromNativeStepCounter() {
         // نشغّل الخدمة الأمامية (لو شغّالة أصلاً، النداء ده آمن ومفيهوش أي تأثير)
         await StepCounter.startTracking();
 
+        // [جديد] نتأكد إن التطبيق مستثنى من "توفير البطارية" - لو
+        // لأ، بنبعت تنبيه للواجهة (مش alert مباشر زي notifySensorUnavailable
+        // عشان ده مش خطأ فوري بيمنع العداد من الشغل دلوقتي، لكنه سبب
+        // شائع جدًا إن أجهزة شاومي/هواوي/أوبو..إلخ توقف الخدمة بعد شوية
+        // في الخلفية - فبنسيب app.js يقرر يعرضه إزاي (بانر/زرار بدل
+        // ما نقاطع المستخدم بـ alert كل مرة يفتح فيها التطبيق)
+        checkBatteryOptimizationStatus();
+
+        // [جديد] نتأكد كمان هل الجهاز ده من الشركات المعروفة بتقييد
+        // Autostart بشدة (شاومي/هواوي/أوبو/فيفو..إلخ) - ده تقييد أخطر
+        // من توفير البطارية العادي لأنه بيقفل الـ Foreground Service
+        // بتاعنا تمامًا حتى لو مستثنى من توفير البطارية أصلاً
+        checkAutostartStatus();
+
         // نجيب عدد خطوات اليوم من الحساس الأصلي
         const { steps: nativeSteps, date: nativeDate } = await StepCounter.getStepsToday();
 
@@ -622,6 +636,120 @@ async function syncFromNativeStepCounter() {
         }
     } catch (err) {
         console.warn('[sensors.js] تعذر المزامنة مع StepCounter الأصلي:', err);
+    }
+}
+
+/**
+ * [جديد] بيسأل الـ Plugin الأصلي هل التطبيق مستثنى من "توفير البطارية"
+ * ولا لأ، وبيبعت حدث 'sensors:battery-optimization-needed' للواجهة لو
+ * لأ (عشان تعرض بانر/زرار مثلاً في صفحة الإعدادات - شوف
+ * requestBatteryOptimizationExemption تحت للزرار الفعلي اللي بيستدعيه
+ * المستخدم). ده مهم خصوصًا على أجهزة شاومي/هواوي/أوبو/فيفو اللي بتقفل
+ * الـ Foreground Service بعد شوية في الخلفية لو التطبيق مش مستثنى، حتى
+ * لو الـ Boot Receiver شغّله صح من الأول (شوف نقاش "هل التعديل ده
+ * هيتناسب مع كل أجهزة أندرويد؟" في المحادثة).
+ * ما بتعملش حاجة على المتصفح/iOS (مفيش المفهوم ده أصلاً غير أندرويد).
+ * @returns {Promise<boolean|null>} true/false لو أندرويد ورد بنجاح، null لو مش قابل للتطبيق (مش أندرويد أو الـ API فشل)
+ */
+export async function checkBatteryOptimizationStatus() {
+    if (!window.Capacitor?.isNativePlatform?.()) return null;
+
+    try {
+        const { StepCounter } = Capacitor.Plugins;
+        const { ignoring } = await StepCounter.isIgnoringBatteryOptimizations();
+
+        if (ignoring === false) {
+            document.dispatchEvent(new CustomEvent('sensors:battery-optimization-needed', {
+                detail: {
+                    message: 'عشان عداد الخطوات يفضل شغّال بدقة والتطبيق مقفول، لازم تستثنيه من "توفير البطارية" في إعدادات جهازك.'
+                }
+            }));
+        }
+
+        return ignoring;
+    } catch (err) {
+        console.warn('[sensors.js] تعذر التحقق من حالة توفير البطارية:', err);
+        return null;
+    }
+}
+
+/**
+ * [جديد] بتتنادى من زرار في الواجهة (مثلاً في صفحة "إعدادات الحساب")
+ * بعد ما المستخدم يشوف تنبيه 'sensors:battery-optimization-needed' -
+ * بتفتح نافذة موافقة أندرويد الرسمية لاستثناء التطبيق من توفير
+ * البطارية. لازم تتنادى من داخل إيماءة مستخدم حقيقية (ضغطة زرار) زي
+ * أي نافذة نظام تانية، مش تلقائيًا من غير تفاعل المستخدم.
+ * @returns {Promise<{requested: boolean, reason?: string}>}
+ */
+export async function requestBatteryOptimizationExemption() {
+    if (!window.Capacitor?.isNativePlatform?.()) {
+        return { requested: false, reason: 'not-native-platform' };
+    }
+
+    try {
+        const { StepCounter } = Capacitor.Plugins;
+        return await StepCounter.requestIgnoreBatteryOptimizations();
+    } catch (err) {
+        console.warn('[sensors.js] تعذر فتح نافذة استثناء توفير البطارية:', err);
+        return { requested: false, reason: 'plugin-call-failed' };
+    }
+}
+
+/**
+ * [جديد] بيسأل الـ Plugin الأصلي هل الجهاز من الشركات المعروفة بتقييد
+ * "Autostart" بشدة (شاومي/هواوي/هونر/أوبو/ريلمي/فيفو/ميزو..إلخ)، وبيبعت
+ * حدث 'sensors:autostart-needed' للواجهة لو أيوه (عشان تعرض بانر/زرار
+ * في صفحة الإعدادات - شوف requestAutostartPermission تحت للزرار الفعلي).
+ * على عكس checkBatteryOptimizationStatus، مفيش API رسمي نتأكد بيه إن
+ * المستخدم فعّل الخيار فعلاً - فبنعتمد بس على "الشركة دي معروفة إنها
+ * بتقيّد" كإشارة، والبانر بيفضل ظاهر (المستخدم يقدر يقفله بنفسه لو
+ * حابب، أو نضيف "متعرضهاش تاني" لاحقًا لو حبينا).
+ * ما بتعملش حاجة على المتصفح/iOS ولا على أجهزة أندرويد "القياسية"
+ * (Pixel/Android One/سامسونج) اللي مفيهاش المفهوم ده أصلاً.
+ * @returns {Promise<{manufacturer: string, restrictive: boolean}|null>}
+ */
+export async function checkAutostartStatus() {
+    if (!window.Capacitor?.isNativePlatform?.()) return null;
+
+    try {
+        const { StepCounter } = Capacitor.Plugins;
+        const { manufacturer, restrictive } = await StepCounter.getManufacturerInfo();
+
+        if (restrictive) {
+            document.dispatchEvent(new CustomEvent('sensors:autostart-needed', {
+                detail: {
+                    manufacturer,
+                    message: `جهازك (${manufacturer}) بيوقف تطبيقات كتير في الخلفية إلا لو فعّلت "التشغيل التلقائي" (Autostart) ليها يدويًا - عشان عداد الخطوات يفضل شغّال ودقيق زي Fit حتى والتطبيق مقفول.`
+                }
+            }));
+        }
+
+        return { manufacturer, restrictive };
+    } catch (err) {
+        console.warn('[sensors.js] تعذر التحقق من حالة Autostart:', err);
+        return null;
+    }
+}
+
+/**
+ * [جديد] بتتنادى من زرار في الواجهة (صفحة "إعدادات الحساب") بعد ما
+ * المستخدم يشوف تنبيه 'sensors:autostart-needed' - بتحاول تفتح شاشة
+ * "Autostart" الخاصة بالشركة المصنّعة مباشرة، أو شاشة تفاصيل التطبيق
+ * العامة لو الشاشة المخصصة مش موجودة/معروفة. لازم تتنادى من داخل
+ * إيماءة مستخدم حقيقية (ضغطة زرار) زي أي Intent تاني بيفتح شاشة نظام.
+ * @returns {Promise<{opened: boolean, method?: string, manufacturer?: string, reason?: string}>}
+ */
+export async function requestAutostartPermission() {
+    if (!window.Capacitor?.isNativePlatform?.()) {
+        return { opened: false, reason: 'not-native-platform' };
+    }
+
+    try {
+        const { StepCounter } = Capacitor.Plugins;
+        return await StepCounter.openAutostartSettings();
+    } catch (err) {
+        console.warn('[sensors.js] تعذر فتح شاشة إعدادات Autostart:', err);
+        return { opened: false, reason: 'plugin-call-failed' };
     }
 }
 
