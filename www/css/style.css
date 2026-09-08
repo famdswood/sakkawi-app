@@ -141,17 +141,27 @@ body {
        جوه WebView تطبيق APK (مفيش شريط متصفح حواليه يوضح إنه سكرول عادي)،
        بعكس المتصفح العادي اللي التأثير ده مقبول فيه بصريًا */
     overscroll-behavior-y: none;
-    /* إلغاء شريط التمرير خالص في كل التطبيق (Firefox) - شوف
-       ::-webkit-scrollbar تحت لباقي المتصفحات (Chrome/Safari/Edge) */
-    scrollbar-width: none;
     -ms-overflow-style: none; /* Edge القديم/IE */
+}
+
+/* إلغاء شريط التمرير خالص في كل عنصر في التطبيق (Firefox) - "*" هنا
+   عشان تتغطى كل العناصر القابلة للسكرول، مش عنصر body بس (راجع نفس
+   ملحوظة *::-webkit-scrollbar تحت) */
+* {
+    scrollbar-width: none;
 }
 
 /* إلغاء شريط التمرير خالص في كل عنصر قابل للسكرول في التطبيق (Chrome/
    Safari/Edge الحديث) - كان فيه شريط تمرير مخصص هنا (رفيع بلون ذهبي)
    بناءً على طلب صريح سابق، اتشال تمامًا بناءً على طلب أحدث. اللف
-   (Scroll) نفسه لسه شغال زي ما هو، بس من غير أي شريط ظاهر */
-::-webkit-scrollbar {
+   (Scroll) نفسه لسه شغال زي ما هو، بس من غير أي شريط ظاهر
+   ملحوظة (تعديل): السيلكتور كان "::-webkit-scrollbar" من غير أي عنصر
+   قبله، وده كان بيأثر بس على شريط تمرير الصفحة الرئيسي (documentElement)،
+   مش على أي عنصر داخلي عنده overflow-y: auto (زي الفييد/الشات/المودالز) -
+   ده اللي كان بيخلي شريط التمرير يبان أثناء الاستخدام الفعلي جوه الموبايل
+   رغم القاعدة دي. استخدام "*" هنا بيخلي القاعدة تتطبق على شريط تمرير أي
+   عنصر في الصفحة، مش الصفحة نفسها بس */
+*::-webkit-scrollbar {
     display: none;
 }
 
@@ -189,6 +199,43 @@ input,
 /* ------------------------------------------------------------------
    3) الرسوم المتحركة (Animations)
    ------------------------------------------------------------------ */
+
+/* (جديد) نقط مؤشر مراحل عداد الخطوات (Steps Counter Card في index.html،
+   منطق الحالة كامل في js/app.js -> updateStageIndicatorUI). كل نقطة
+   بتمثل مرحلة من STAGE_MILESTONES، وليها 3 حالات ممكنة:
+   - افتراضي (لسه مخطتهاش/upcoming): دائرة باهتة بلون lux-700
+   - .stage-dot--current (المرحلة اللي بيمشي فيها المستخدم دلوقتي):
+     نبضة خفيفة ذهبية (بتستخدم نفس subtlePulse فوق)
+   - .stage-dot--completed (اتخطاها فعلاً): دائرة ذهبية مليانة وثابتة
+*/
+.stage-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 9999px;
+    background: var(--lux-700);
+    display: inline-block;
+    transition: background-color 0.3s ease, transform 0.3s ease;
+}
+.stage-dot--completed {
+    background: linear-gradient(135deg, #E8C158, #C9962E);
+}
+.stage-dot--current {
+    background: #E8C158;
+    animation: subtlePulse 1.6s infinite ease-in-out;
+}
+
+/* (جديد) نبضة احتفالية لحظية على نقطة المرحلة اللي اتخطاها المستخدم
+   للتو - بتتضاف وتتشال أوتوماتيك من triggerStageDotCelebration في
+   js/app.js (نص ثانية بس)، عشان تدّي إحساس "خلصت المرحلة!" لحظي من
+   غير ما تحتاج توست يقاطع المستخدم */
+@keyframes stageDotComplete {
+    0%   { transform: scale(1); }
+    40%  { transform: scale(1.6); }
+    100% { transform: scale(1); }
+}
+.stage-dot--celebrate {
+    animation: stageDotComplete 0.5s ease-out;
+}
 
 /* نبضة خفيفة للعناصر النشطة (زي ستريك الأيام) */
 @keyframes subtlePulse {
@@ -258,6 +305,8 @@ input,
     .badge-glow::after,
     .animate-bounce,
     .screen-fade-in,
+    .stage-dot--current,
+    .stage-dot--celebrate,
     .story-heart-btn.pulse svg {   /* السطر الجديد */
         animation: none !important;
     }
@@ -701,6 +750,16 @@ input,
     background: rgba(0, 0, 0, 0.35);
     backdrop-filter: blur(4px);
     transition: transform 0.15s ease, background 0.25s ease;
+    /* منع مربع/توهج التاتش الافتراضي (Tap Highlight) اللي بعض المتصفحات/
+       الـ WebView بيرسمه حوالين العنصر لحظة الضغط - ده اللي كان بيبان
+       كمربع أبيض خفيف حوالين شكل القلب نفسه رغم إن -webkit-tap-highlight-color
+       متعرّف على body، لأن بعض بيئات الـ WebView مابتورّثش الخاصية دي
+       صح لكل عنصر، فلازم تتحدد صراحةً هنا كمان */
+    -webkit-tap-highlight-color: transparent;
+    -webkit-appearance: none;
+    appearance: none;
+    outline: none;
+    border: none;
 }
 .story-heart-btn:active {
     transform: scale(0.9);
@@ -723,6 +782,15 @@ input,
 .story-heart-btn.liked .heart-shape {
     fill: #fb7185;
     stroke: #fb7185;
+}
+/* الفلتر (drop-shadow) اتنقل من فوق الـ path (.heart-shape) لهنا على الـ
+   <svg> نفسها بالكامل. لما الفلتر كان على الـ path جوه الـ SVG، المتصفح
+   كان بيحسب "منطقة الفلتر" (filter region) كصندوق مربع صغير حوالين شكل
+   القلب بالظبط (السلوك الافتراضي لفلاتر SVG الداخلية)، فكان بيقص التوهج
+   عند حواف الصندوق ده ويطلع شكل مربع خفيف حوالين القلب. تطبيق الفلتر على
+   الـ <svg> كعنصر بيخليه يتعامل مع الفلتر زي أي عنصر HTML عادي من غير
+   قصّ الصندوق ده */
+.story-heart-btn.liked svg {
     filter: drop-shadow(0 0 6px rgba(251, 113, 133, 0.85));
 }
 

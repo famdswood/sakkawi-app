@@ -216,28 +216,9 @@ body.onb-scroll-lock #appShell {
 #onboardingOverlay .onb-grad-8 {
     text-shadow: 0 2px 5px rgba(0, 0, 0, 0.4);
 }
-#onboardingOverlay .swiper-slide p.text-lux-300,
-#onboardingOverlay .swiper-slide span.text-lux-400 {
+#onboardingOverlay .onb-page p.text-lux-300,
+#onboardingOverlay .onb-page span.text-lux-400 {
     text-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
-}
-
-/* ------------------------------------------------------------------
-   4) تحجيم الـ Swiper وشكل الكروت (Cards Stack Effect)
-   ------------------------------------------------------------------ */
-#onboardingOverlay .onbSwiper {
-    width: 100%;
-    max-width: 360px;
-    height: 66vh;
-    max-height: 560px;
-    padding: 10px 0;
-}
-
-#onboardingOverlay .swiper-slide {
-    border-radius: 32px;
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
 }
 
 /* ------------------------------------------------------------------

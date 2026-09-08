@@ -124,6 +124,12 @@ let awaitingPeakReset = false;   // true = إحنا فوق الحد الأعلى
 let currentDayKey = null;        // تاريخ اليوم الحالي (YYYY-MM-DD) اللي العداد بيتحسب عليه
 let stepsHistory = {};           // أرشيف خطوات الأيام السابقة { 'YYYY-MM-DD': steps }
 
+// (إصلاح - باج حقيقي) آخر user id اتسجلت الحالة المحلية (localStorage)
+// باسمه - null يعني "زائر" أو مفيش حساب لسه. بنستخدمه عشان نكتشف
+// "تبديل حساب على نفس الجهاز" ونصفّر العداد المحلي وقتها، بدل ما نسيب
+// بيانات حساب سابق تتسرب لحساب جديد (شوف syncActiveUser تحت)
+let currentOwnerUserId = null;
+
 /**
  * طلب إذن الوصول لحساسات الحركة (مطلوب إجباريًا في iOS 13+)
  * على أندرويد ومعظم المتصفحات التانية الإذن بيتاخد تلقائي بدون هذا الطلب
@@ -209,7 +215,8 @@ function persistDailyState() {
         localStorage.setItem(STORAGE_KEY, JSON.stringify({
             date: currentDayKey,
             steps: stepCount,
-            history: stepsHistory
+            history: stepsHistory,
+            ownerUserId: currentOwnerUserId   // (إصلاح - باج حقيقي) صاحب الحالة المحلية دي
         }));
     } catch (err) {
         // ممكن يفشل لو localStorage ممتلئ أو محظور (وضع تصفح خفي مثلاً)
@@ -247,6 +254,7 @@ function loadPersistedDailyState() {
     }
 
     stepsHistory = saved.history && typeof saved.history === 'object' ? saved.history : {};
+    currentOwnerUserId = saved.ownerUserId ?? null; // (إصلاح - باج حقيقي)
 
     if (saved.date === todayKey) {
         // نفس تاريخ اليوم - نكمل على العداد المحفوظ زي ما هو
@@ -442,12 +450,98 @@ export function getStepsCount() {
 }
 
 /**
+ * (إصلاح - باج حقيقي) دمج عدد خطوات اليوم القادم من صف البروفايل في
+ * Supabase (عمود daily_steps) مع العداد المحلي هنا. الهدف: لو المستخدم
+ * سجّل خطوات النهاردة من جهاز/متصفح تاني بنفس الحساب، وبعدين فتح
+ * التطبيق من جهاز جديد (localStorage فاضي هنا)، العداد يبدأ من نفس
+ * تقدمه الحقيقي بدل ما يبدأ من صفر.
+ * بتتنادى من profiles.js أول ما بيانات البروفايل توصل بعد تسجيل
+ * الدخول (loadAndRenderRealProfile).
+ * بنـ"دمج" (ناخد الأكبر بين الاتنين) بدل الاستبدال المباشر، عشان لو
+ * كان المستخدم مشى شوية على *نفس* الجهاز ده قبل ما بيانات البروفايل
+ * توصل من الشبكة (اللي ممكن تاخد ثانية أو اتنين)، الخطوات دي متتفقدش.
+ * ⚠️ مهم: الدالة دي بتبعت حدث مختلف تماماً ('sensors:steps-resynced')
+ * مش 'sensors:steps-update' العادي بتاع الحساس الحقيقي - عشان
+ * profiles.js ميفهمهاش غلط كـ"خطوات جديدة" ويحاول يبعتها تاني لـ
+ * Supabase (ده كان هيسبب تضاعف حقيقي في total_steps/points في كل مرة
+ * يتفتح فيها جهاز جديد لنفس الحساب - الخطوات دي أصلاً مصدرها Supabase
+ * نفسه، مش حركة جديدة لسه متسجلتش).
+ * @param {number} serverDailySteps - قيمة daily_steps من صف البروفايل
+ */
+export function reconcileWithServerSteps(serverDailySteps) {
+    if (typeof serverDailySteps !== 'number' || !Number.isFinite(serverDailySteps)) return;
+    if (serverDailySteps <= stepCount) return; // العداد المحلي أصلاً مساوي أو أكبر - مفيش داعي نعمل حاجة
+
+    stepCount = serverDailySteps;
+    persistDailyState();
+
+    document.dispatchEvent(new CustomEvent('sensors:steps-resynced', {
+        detail: { steps: stepCount, date: currentDayKey }
+    }));
+}
+
+/**
+ * (جديد) نفس فكرة reconcileWithServerSteps بالظبط بس للرقم القياسي
+ * (best_daily_steps من صف البروفايل) مش لخطوات اليوم الحالي. الرقم
+ * القياسي المحلي هنا (أرشيف stepsHistory) بتاع الجهاز ده بس، لكن
+ * السيرفر عنده أعلى رقم وصله المستخدم من *كل* أجهزته - فبنجيب الأكبر
+ * بين الاتنين وبنبعت حدث منفصل 'sensors:best-steps-resynced' عشان
+ * app.js يحدّث عرض "رقمك القياسي" بيه.
+ * (بتتنادى من profiles.js في نفس مكان reconcileWithServerSteps، بعد
+ * ما syncActiveUser تتأكد أول إن الحساب صح ومفيش تسريب من حساب سابق)
+ * @param {number} serverBestSteps - قيمة best_daily_steps من صف البروفايل
+ */
+export function reconcileServerBestSteps(serverBestSteps) {
+    if (typeof serverBestSteps !== 'number' || !Number.isFinite(serverBestSteps)) return;
+
+    const localBest = Object.values(stepsHistory).reduce(
+        (max, value) => Math.max(max, Number(value) || 0),
+        0
+    );
+    const combinedBest = Math.max(localBest, serverBestSteps);
+
+    document.dispatchEvent(new CustomEvent('sensors:best-steps-resynced', {
+        detail: { bestSteps: combinedBest }
+    }));
+}
+
+/**
  * تصفير عداد الخطوات يدوياً (مثلاً زرار "إعادة ضبط" لو احتجته لاحقاً)
  * بيصفّر ويحفظ الحالة فوراً في localStorage - من غير ما يأرشف اليوم
  * الحالي (ده تصفير صريح مش Daily Reset تلقائي)
  */
 export function resetSteps() {
     stepCount = 0;
+    filteredMagnitude = GRAVITY;
+    awaitingPeakReset = false;
+    persistDailyState();
+}
+
+/**
+ * (إصلاح - باج حقيقي) بتتنادى من profiles.js بمجرد ما نعرف مين المستخدم
+ * الحالي فعليًا (بعد تسجيل دخول، أو null بعد تسجيل خروج/وضع زائر).
+ * لو المستخدم مختلف عن آخر واحد كانت الحالة المحلية دي باسمه، بنصفّر
+ * العداد المحلي بالكامل (زي جهاز جديد تمامًا) قبل ما نسيب
+ * reconcileWithServerSteps تجيب رقمه الصحيح من Supabase - عشان نمنع
+ * تسريب خطوات حساب سابق لحساب جديد على نفس الجهاز (اللي كان بيحصل قبل
+ * الإصلاح ده لأن "ماخدناش غير الأكبر" في reconcileWithServerSteps كانت
+ * بتحسب رقم الحساب القديم كـ"تقدم أعلى" غلط بدل ما تعرف إنه حساب مختلف
+ * خالص).
+ * (إصلاح تاني - باج حقيقي): كنا بنصفّر stepCount بس وننسى stepsHistory
+ * (أرشيف الأيام السابقة اللي "رقمك القياسي" في app.js بيتحسب منه عن
+ * طريق getStepsHistory/getPreviousBestSteps) - فده كان فاضل تابع
+ * للجهاز مش للحساب، فحساب جديد لسه معملش خطوة كان بيشوف "رقم قياسي"
+ * حساب سابق على نفس الجهاز. دلوقتي بنصفّرها هي كمان مع أي تبديل حساب
+ * فعلي (بنسيبها زي ما هي بس لو نفس الحساب، شوف الشرط فوق).
+ * @param {string|null} userId
+ */
+export function syncActiveUser(userId) {
+    const normalizedId = userId || null;
+    if (currentOwnerUserId === normalizedId) return; // نفس المستخدم، مفيش داعي نعمل حاجة
+
+    currentOwnerUserId = normalizedId;
+    stepCount = 0;
+    stepsHistory = {};
     filteredMagnitude = GRAVITY;
     awaitingPeakReset = false;
     persistDailyState();

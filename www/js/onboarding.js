@@ -1013,7 +1013,14 @@ export function showAuthGate(initialIntent = null) {
     // زرار التخطي والتذييل (النقاط + زرار التالي) لأننا مش بنعرض رحلة
     // ترحيب فعلية هنا، بس نفس شاشة الاختيار وصفحة الدخول بس
    slides.forEach((slide) => {
-    slide.style.display = slide === lastSlide ? '' : 'none';
+    const isLast = slide === lastSlide;
+    slide.style.display = isLast ? '' : 'none';
+    // (إصلاح): لازم نحط نفس كلاس "onb-page-active" اللي goToPage()
+    // بتحطه على أي صفحة ظاهرة فعليًا - من غيره الـ CSS بتاعة .onb-page
+    // بتفضل معاملة السلايد كأنه غير نشط (opacity/transform الحالة
+    // الافتراضية)، فبيبان مكانها محجوز (display:block) بس من غير أي
+    // محتوى ظاهر بصريًا - بالظبط اللي كان بيحصل بعد تسجيل الخروج
+    slide.classList.toggle('onb-page-active', isLast);
 });
     if (skipBtn) skipBtn.style.display = 'none';
     if (footer) footer.style.display = 'none';
@@ -1220,7 +1227,10 @@ export function showAuthGate(initialIntent = null) {
 
         // نرجّع كل حاجة لحالتها الافتراضية استعداداً لأي تسجيل خروج تاني
         // في نفس الجلسة
-        slides.forEach((slide) => slide.style.removeProperty('display'));
+        slides.forEach((slide) => {
+            slide.style.removeProperty('display');
+            slide.classList.remove('onb-page-active');
+        });
         if (skipBtn) skipBtn.style.removeProperty('display');
         if (footer) footer.style.removeProperty('display');
         authFormDock.classList.add('hidden');

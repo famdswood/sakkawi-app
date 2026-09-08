@@ -24,7 +24,7 @@
    ================================================================== */
 
 import { restoreSession, bindAuthEventListeners, checkExistingSession, getCurrentUser } from './auth.js';
-import { getStepsCount, getStepsHistory } from './sensors.js';
+import { getStepsCount, getStepsHistory, syncActiveUser } from './sensors.js';
 import { applyGuestModeRestrictions } from './geofence.js';
 import { initStoriesUI } from './stories.js';
 import { initProfileUI } from './profiles.js';
@@ -33,6 +33,8 @@ import { initNotificationsUI } from './notifications.js';
 // (المرحلة 8) رسائل الدعم لأكونتك الشخصي - مودال منفصل تماماً، بنفس
 // فلسفة initNotificationsUI (تهيئة مودال مستقل عن محتوى الصفحة الرئيسية)
 import { initSupportChat } from './support-chat.js';
+// (إصلاح باج "شريط ترتيبي ثابت في كل مكان") - شوف switchTab() تحت
+import { refreshActiveLeaderboard } from './leaderboard.js';
 import { initOnboarding, showAuthGate } from './onboarding.js';
 import { initDailyQuestionCard } from './daily-question.js';
 // (المرحلة 5): منشورات "سِكّاوي" (فيسبوك-ستايل) - initPostsUI() بتجيب
@@ -52,7 +54,13 @@ import { supabaseClient } from './supabase-config.js';
    المراحل بتتصفر يومياً (زي ما كانت الخطوات بتتصفر) - كل يوم جديد
    المستخدم بيرجع يبدأ من المرحلة الأولى (500) تاني.
    ================================================================== */
-const STAGE_MILESTONES = [500, 1000, 2000, 3500, 5000, 7500, 10000];
+// (تعديل) اتوسّعت من 7 مراحل (لحد 10,000) لـ12 مرحلة (لحد 30,000) بناءً
+// على طلب صريح - المراحل الأولى (لحد 10,000) اتسابت زي ما هي بالظبط
+// عشان نفس التقدم/الاستخدام الحالي للمستخدمين يفضل متسق، والمراحل
+// الجديدة بعدها فجواتها بتكبر أكتر (2500 ثم 5000) لأنها بقت تمثل مجهود
+// استثنائي (30,000 خطوة ≈ نص ماراثون تقريبًا) مش استخدام يومي عادي -
+// لسه تحت HARD_DAILY_STEPS_CAP (50,000) بمساحة كويسة
+const STAGE_MILESTONES = [500, 1000, 2000, 3500, 5000, 7500, 10000, 12500, 15000, 20000, 25000, 30000];
 
 /** عدد الخطوات المطلوبة لاكتساب نقطة واحدة (كل 200 خطوة = نقطة) -
  *  مستخدم في مكانين: appState.earnedFromSteps (تقدير العرض الفوري)
@@ -149,6 +157,26 @@ function switchTab(tabId, { fromPopState = false } = {}) {
     const targetTab = document.getElementById(`tab-${tabId}`);
     if (targetTab) targetTab.classList.add('active');
 
+    // (إصلاح باج "شريط ترتيبي (مركزك الحالي) ثابت وظاهر في أي تبويب
+    // أروحله"): #selfRankBar عنصر position:fixed (شوف .self-rank-bar
+    // في css/leaderboard-championships.css) بيتفعّل بشرط واحد بس في
+    // js/leaderboard.js: "ترتيبك بره أول 10 في البطولة النشطة" - مفيش
+    // أي علاقة بينه وبين أي تبويب مفتوح دلوقتي، فكان بيفضل عالق فوق أي
+    // تبويب تاني (البروفايل/الرئيسية) بعد أول ظهور ليه في تبويب الترتيب
+    // - لأن مفيش حاجة كانت بتقفله تاني غير رسمة ليدربورد جديدة.
+    // الحل: بنتأكد إن العنصر ده موجود فعلياً *جوه* التبويب المستهدف
+    // (targetTab.contains) بدل ما نفترض اسم تبويب معيّن بالإيد - لو
+    // مش جواه، بنقفله فورًا. ولو *هو* جواه (يعني داخلين تبويب الترتيب)،
+    // بنعيد جلب/رسم بيانات الفترة النشطة حالياً عشان الشريط (وكل
+    // أرقام الليدربورد) تفضل حديثة كل مرة تدخل التبويب، وتظهر بس لو
+    // ترتيبك فعلاً معدّي أول 10 في البطولة دي بالذات.
+    const selfRankBar = document.getElementById('selfRankBar');
+    if (targetTab && selfRankBar && targetTab.contains(selfRankBar)) {
+        refreshActiveLeaderboard();
+    } else if (selfRankBar) {
+        selfRankBar.classList.add('hidden');
+    }
+
     document.querySelectorAll('.nav-btn').forEach((btn) => {
         btn.classList.remove('text-gold-400', 'bg-gold-400/10');
         btn.classList.add('text-lux-500');
@@ -237,6 +265,79 @@ function getCurrentStageTarget() {
     return STAGE_MILESTONES[appState.stageIndex];
 }
 
+/**
+ * (جديد) بيبني عناصر نقط مؤشر المراحل مرة واحدة بس عند بداية التطبيق -
+ * عدد النقط = عدد STAGE_MILESTONES (7 حاليًا). بعد كده updateStageIndicatorUI
+ * هي بس اللي بتغيّر كلاس كل نقطة حسب تقدم المستخدم، من غير أي إعادة بناء
+ * لعناصر الـDOM (أرخص وأبسط في الأداء).
+ */
+function renderStageDotsSkeleton() {
+    const container = document.getElementById('stageDotsRow');
+    if (!container || container.childElementCount > 0) return; // إتبنت قبل كده (initStepsCounter ممكن تتنادى أكتر من مرة نظريًا)
+
+    STAGE_MILESTONES.forEach((_, index) => {
+        const dot = document.createElement('span');
+        dot.className = 'stage-dot';
+        dot.dataset.stageIndex = String(index);
+        container.appendChild(dot);
+    });
+}
+
+/**
+ * (جديد) بتحدّث نص "المرحلة X من 7" وحالة كل نقطة (completed/current/
+ * upcoming) بناءً على appState.steps الحالي - بتتنادى من جوه
+ * updateStepsUI() مع كل تحديث عادي للعداد (حساس حركة أو مزامنة صامتة
+ * من جهاز تاني على السواء). بنحسب حالة كل نقطة من appState.steps
+ * مباشرة (مش من stageIndex بس) عشان آخر مرحلة (10,000) تتلوّن "مكتملة"
+ * فعليًا لما توصلها، بدل ما تفضل عالقة في حالة "نبض" للأبد.
+ */
+function updateStageIndicatorUI() {
+    const stageLabelEl = document.getElementById('stageLabel');
+    const totalStages = STAGE_MILESTONES.length;
+
+    if (stageLabelEl) {
+        // Math.min عشان لو المستخدم عدّى آخر مرحلة، يفضل عارض "٧ من ٧"
+        // (مش رقم ٨ وهمي مالوش مرحلة فعلية تقابله)
+        const displayedStageNumber = Math.min(appState.stageIndex + 1, totalStages);
+        stageLabelEl.textContent = `المرحلة ${displayedStageNumber} من ${totalStages}`;
+    }
+
+    const dots = document.querySelectorAll('#stageDotsRow .stage-dot');
+    dots.forEach((dot) => {
+        const dotIndex = Number(dot.dataset.stageIndex);
+        const milestone = STAGE_MILESTONES[dotIndex];
+        dot.classList.remove('stage-dot--completed', 'stage-dot--current');
+
+        if (appState.steps >= milestone) {
+            dot.classList.add('stage-dot--completed');
+        } else if (dotIndex === appState.stageIndex) {
+            dot.classList.add('stage-dot--current');
+        }
+        // dotIndex أكبر من appState.stageIndex ولسه ماوصلش milestone بتاعه:
+        // بتفضل بدون أي كلاس زيادة (upcoming، الشكل الافتراضي بس)
+    });
+}
+
+/**
+ * (جديد) نبضة احتفالية لحظية على نقطة المرحلة اللي اتخطاها المستخدم
+ * للتو (نص ثانية بس، شوف .stage-dot--celebrate في style.css) - بديل
+ * بصري خفيف عن توست "خلصت المرحلة..." اللي اتشال بناءً على طلب صريح
+ * قبل كده، عشان يفضل حس بالإنجاز موجود من غير ما يقاطع المستخدم بنص.
+ * @param {number} stageIndex - فهرس المرحلة اللي اتخطاها للتو
+ */
+function triggerStageDotCelebration(stageIndex) {
+    const dot = document.querySelector(`#stageDotsRow .stage-dot[data-stage-index="${stageIndex}"]`);
+    if (!dot) return;
+
+    dot.classList.remove('stage-dot--celebrate');
+    // إجبار المتصفح يعيد حساب الـ Style قبل ما نضيف الكلاس تاني (Reflow
+    // Trick) - عشان لو المستخدم عدّى مرحلتين قريبين من بعض، الأنيميشن
+    // تقدر تتكرر على نفس النقطة من غير ما المتصفح "يوفّرها" لإنه شايف
+    // نفس الكلاس مضاف أصلاً
+    void dot.offsetWidth;
+    dot.classList.add('stage-dot--celebrate');
+}
+
 function updateStepsUI() {
     const stepCountEl = document.getElementById('stepCount');
     const stepTargetLabelEl = document.getElementById('stepTargetLabel');
@@ -250,6 +351,8 @@ function updateStepsUI() {
 
     const percentage = Math.min(100, (appState.steps / currentTarget) * 100);
     if (progressBar) progressBar.style.width = `${percentage}%`;
+
+    updateStageIndicatorUI();
 
     // بنعرض الرقم القياسي بس لو فيه تاريخ استخدام فعلي (يوم سابق واحد
     // على الأقل)، عشان مانعرضش "الرقم القياسي: 0" في أول يوم استخدام
@@ -311,7 +414,12 @@ function handleStepsIncrease(delta) {
     // المرحلة" مع كل خطوة، غلط)
     const justCompletedStage = !wasAtFinalStage && appState.steps >= currentTarget;
     if (justCompletedStage) {
+        // (جديد) بنلقط فهرس المرحلة اللي اتخطيناها للتو *قبل* ما نحدّث
+        // appState.stageIndex للمرحلة الجاية - عشان نعرف نحط الاحتفال
+        // البصري على النقطة الصح (شوف triggerStageDotCelebration)
+        const completedStageIndex = appState.stageIndex;
         appState.stageIndex = getStageIndexForSteps(appState.steps);
+        triggerStageDotCelebration(completedStageIndex);
     }
 
     // (تعديل) حساب "تنبيه قربت من المرحلة الجاية" (shouldNudgeNearStage/
@@ -366,7 +474,11 @@ function handleStepsIncrease(delta) {
         showToast(`جامد أوي! وصلت لأقصى حد تسجيل يومي (${HARD_DAILY_STEPS_CAP.toLocaleString()} خطوة)!`);
         triggerConfetti();
     } else if (justReachedFinalTarget) {
-        showToast('الله ينور! وصلت لهدف الـ 10,000 خطوة النهاردة!');
+        // (إصلاح) كان النص هنا ثابت "10,000" وده كان بيبقى غلط دلوقتي
+        // بعد ما آخر مرحلة بقت 30,000 (أو أي رقم تاني يتغيّر بعد كده) -
+        // بنستخدم finalTarget نفسه (آخر قيمة في STAGE_MILESTONES) عشان
+        // النص يفضل صح مهما اتغيّرت المراحل من غير ما نستنى ننسى نعدّله هنا كمان
+        showToast(`الله ينور! وصلت لهدف الـ ${finalTarget.toLocaleString()} خطوة النهاردة!`);
         triggerConfetti();
     } else if (justCompletedStage) {
         // (تعديل) توست "جامد! خلصت المرحلة..." اتشال بناءً على طلب صريح -
@@ -382,12 +494,91 @@ function handleStepsIncrease(delta) {
     // شغالة عادي لأنها بتمثل إنجاز فعلي واضح مش أي تحديث عادي.
 }
 
+/**
+ * (إصلاح - باج حقيقي) الاستجابة لمزامنة "صامتة" لعدد خطوات اليوم قادمة
+ * من صف البروفايل في Supabase (daily_steps عبر reconcileWithServerSteps
+ * في sensors.js) - مش من حساس حركة حقيقي. بتحصل مرة واحدة عند تحميل
+ * البروفايل (بعد تسجيل الدخول من أي جهاز)، عشان لو المستخدم سجّل
+ * خطوات النهاردة من جهاز تاني، العداد هنا يبدأ من نفس تقدمه الحقيقي
+ * بدل ما يبدأ من صفر.
+ * ⚠️ بعكس handleStepsIncrease، الدالة دي *مبتبعتش* حدث 'steps:progress'
+ * عن قصد - الخطوات دي أصلاً محفوظة في Supabase (هي مصدرها الأساسي)،
+ * فلو بعتناها تاني كـ"جديدة" لـ profiles.js كانت هتتضاف فوق نفسها في
+ * total_steps/points (تضاعف حقيقي) في كل مرة يتفتح فيها جهاز جديد.
+ * الدالة دي بس بتزبط *العرض المحلي* (appState) والأعلام المرتبطة بيه
+ * (رقم قياسي/هدف اليوم/سقف الأمان) عشان تفضل متسقة مع الرقم الجديد.
+ */
+// (إصلاح - باج حقيقي) اتشال شرط "newSteps <= appState.steps" اللي كان
+// بيرفض أي resync أقل من الرقم الظاهر - ده كان صح وقت افتراض إن
+// المستخدم نفسه بيتنقل بين أجهزته بس (فمينفعش يتراجع للخلف)، لكن بعد
+// إصلاح تبديل الحسابات (syncActiveUser في sensors.js)، resync ممكن
+// دلوقتي "ينزل" الرقم فعلاً (حساب تاني له تقدم أقل على نفس الجهاز)،
+// فلازم دايمًا نصدّق الرقم الجاي من السيرفر كامل - مش بس لو كان أكبر
+function applySilentStepsResync(newSteps) {
+    if (typeof newSteps !== 'number' || newSteps === appState.steps) return;
+
+    appState.steps = newSteps;
+    appState.stageIndex = getStageIndexForSteps(appState.steps);
+    appState.earnedFromSteps = Math.floor(appState.steps / STEPS_PER_POINT);
+
+    // بنعيد حساب الأعلام دي بالكامل من الصفر (مش بس "نفعّلها")، عشان لو
+    // الرقم الجديد نزل (حساب تاني بتقدم أقل)، مينفعش تفضل الأعلام شايلة
+    // true من الحساب القديم غلط
+    const finalTarget = STAGE_MILESTONES[STAGE_MILESTONES.length - 1];
+    appState.recordBrokenToday = appState.previousBestSteps > 0 && appState.steps > appState.previousBestSteps;
+    appState.reachedDailyGoalToday = appState.steps >= finalTarget;
+    appState.hitHardCapToday = appState.steps >= HARD_DAILY_STEPS_CAP;
+
+    updateStepsUI();
+}
+
+/**
+ * (إصلاح - باج حقيقي): لما المستخدم يدخل/يترجّع لوضع الزائر (سواء بعد
+ * تسجيل خروج فعلي من حساب كان شغال بيه، أو بالضغط على "تصفح كزائر")،
+ * كان عداد الخطوات الظاهر في الواجهة (appState.steps + عنصر #stepCount)
+ * بيفضل شايل آخر رقم كان ظاهر لصاحب الحساب اللي خرج - بس متعتّم بصريًا
+ * (كلاس guest-locked من setStepsCounterMutedVisual في geofence.js) - مش
+ * بيترجع لصفر فعليًا. السبب: applyGuestModeRestrictions بتعتّم العنصر
+ * بصريًا بس، وsyncActiveUser(null) (اللي بيصفّر العداد الداخلي في
+ * sensors.js) بتتنادى في بعض المسارات بس (initProfileUI(null))، وفي كل
+ * الحالتين محدش كان بيرجع يحدّث appState.steps نفسها أو يعيد رسم
+ * updateStepsUI() بعد التصفير - فالرقم القديم فضل عالق على الشاشة.
+ *
+ * الحل: كل مرة يتأكد فيها إننا في وضع الزائر فعليًا (حدث
+ * 'geofence:guest-mode-change' بـ isGuestMode = true من geofence.js)،
+ * بنصفّر العداد المحلي في sensors.js (syncActiveUser(null) - نفس تصفير
+ * تبديل الحساب تمامًا، مأمون حتى لو اتنادت أكتر من مرة لنفس الحالة)
+ * وبعدين بنصفّر appState.steps وكل الأعلام المرتبطة بيه هنا في app.js
+ * ونعيد رسم الواجهة فورًا - عشان الزائر يشوف صفر حقيقي دايمًا، مش رقم
+ * حساب سابق متعتّم بس.
+ */
+function resetStepsUIForGuestMode() {
+    syncActiveUser(null);
+
+    appState.steps = 0;
+    appState.stageIndex = getStageIndexForSteps(0);
+    appState.earnedFromSteps = 0;
+    appState.previousBestSteps = 0;
+    appState.recordBrokenToday = false;
+    appState.reachedDailyGoalToday = false;
+    appState.hitHardCapToday = false;
+
+    updateStepsUI();
+}
+
 function initStepsCounter() {
+    renderStageDotsSkeleton(); // (جديد) بناء نقط المراحل مرة واحدة بس
     updateStepsUI();
 
     // الاستماع لأي خطوات جاية لايف من js/sensors.js (حساس الحركة الحقيقي فقط)
     document.addEventListener('sensors:steps-update', (event) => {
         handleStepsIncrease(event.detail.delta);
+    });
+
+    // (إصلاح - باج حقيقي) الاستماع لمزامنة العداد مع daily_steps القادمة
+    // من Supabase وقت تحميل البروفايل - شوف applySilentStepsResync فوق
+    document.addEventListener('sensors:steps-resynced', (event) => {
+        applySilentStepsResync(event.detail.steps);
     });
 }
 
@@ -403,9 +594,11 @@ function initStepsCounter() {
 
 /* ------------------------------------------------------------------
    5) أدوات واجهة مشتركة (Toast / صوت / كونفيتي)
-   ملحوظة: لوحة الصدارة (الفلترة، الجلب، والعرض) بقت مسؤولية js/profiles.js
-   بالكامل (bindLeaderboardFilterButtons / loadAndRenderLeaderboard /
-   initLeaderboardUI) - متضفش أي منطق ليدربورد هنا تاني.
+   ملحوظة: لوحة الصدارة (الفلترة، الجلب، والعرض) بقت مقسّمة بين
+   js/leaderboard.js (initChampionshipTabs / refreshActiveLeaderboard -
+   الجلب والرسم الفعلي من get_leaderboard) وjs/profiles.js
+   (initLeaderboardUI - نقطة الدخول اللي بتتنادى من initApp، وخانة
+   البحث) - متضفش أي منطق ليدربورد هنا تاني.
    تُستخدم داخلياً هنا، وبتتاح لباقي الوحدات عبر حدث 'app:toast'
    عشان نتجنب استيراد app.js من جوه auth.js أو stories.js..إلخ
    ------------------------------------------------------------------ */
@@ -817,6 +1010,17 @@ function initSharedUIBridge() {
     // قبل ما auth:login يرجّع كل حاجة لوضعها الصح.
     document.addEventListener('auth:confirmed-signed-out', () => {
         applyGuestModeRestrictions(false);
+    });
+
+    // (إصلاح - باج حقيقي) شوف تعليق resetStepsUIForGuestMode فوق: مصدر
+    // واحد موثوق لتصفير عداد الخطوات المعروض فعليًا (مش بس تعتيمه
+    // بصريًا) في كل مرة نتأكد فيها إننا دخلنا/رجعنا لوضع الزائر -
+    // بيغطي كل المسارات (تسجيل خروج، الضغط على "تصفح كزائر"..إلخ) من
+    // غير ما نكرر نفس منطق التصفير في كل مسار لوحده.
+    document.addEventListener('geofence:guest-mode-change', (event) => {
+        if (event.detail && event.detail.isGuestMode) {
+            resetStepsUIForGuestMode();
+        }
     });
 }
 

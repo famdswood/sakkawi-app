@@ -370,6 +370,10 @@ function showMessageInfoPopover(messageId) {
                         class="w-7 h-7 flex items-center justify-center rounded-full text-lux-400 hover:text-lux-100 hover:bg-lux-800/70 transition-colors">✕</button>
             </div>
             <div class="divide-y-0">${rowsHtml}</div>
+            <button type="button" id="supportMsgInfoDeleteBtn"
+                    class="mt-3 w-full py-2 rounded-xl text-xs font-extrabold text-rose-400 bg-rose-500/10 hover:bg-rose-500/20 transition-colors">
+                حذف الرسالة
+            </button>
         </div>
     `;
 
@@ -379,10 +383,101 @@ function showMessageInfoPopover(messageId) {
 
     document.body.appendChild(overlay);
     document.getElementById('supportMsgInfoCloseBtn')?.addEventListener('click', hideMessageInfoPopover);
+
+    // (جديد) زرار "حذف الرسالة" - بيقفل كارت المعلومات ده ويفتح كارت
+    // تأكيد منفصل (showDeleteConfirmDialog تحت) بدل ما يحذف على طول،
+    // عشان محدش يحذف رسالة بالغلط من ضغطة واحدة
+    document.getElementById('supportMsgInfoDeleteBtn')?.addEventListener('click', () => {
+        hideMessageInfoPopover();
+        showDeleteConfirmDialog(messageId);
+    });
 }
 
 function hideMessageInfoPopover() {
     document.getElementById('supportMsgInfoOverlay')?.remove();
+}
+
+/**
+ * (جديد) كارت تأكيد حذف رسالة - بنفس هوية باقي كروت الشات (bg-lux-900 +
+ * حدود gold-500 خفيفة)، بيتفتح من زرار "حذف الرسالة" في كارت المعلومات
+ * فوق. زرار "حذف" بيتعطّل وقت الطلب نفسه (منع ضغط مزدوج) وبيرجع لحالته
+ * لو فشل الحذف عشان المستخدم يقدر يحاول تاني، وبيقفل الكارت لوحده لو نجح.
+ * @param {string} messageId
+ */
+function showDeleteConfirmDialog(messageId) {
+    hideDeleteConfirmDialog();
+
+    const overlay = document.createElement('div');
+    overlay.id = 'supportMsgDeleteConfirmOverlay';
+    overlay.className = 'fixed inset-0 z-[90] flex items-center justify-center bg-black/60 px-6';
+    overlay.innerHTML = `
+        <div class="w-full max-w-xs bg-lux-900 border border-gold-500/15 rounded-2xl p-4 shadow-2xl" role="alertdialog" aria-label="تأكيد حذف الرسالة">
+            <h3 class="text-sm font-extrabold text-lux-50 mb-1.5">حذف الرسالة؟</h3>
+            <p class="text-xs font-medium text-lux-400 leading-relaxed mb-4">هتتحذف نهائياً من المحادثة عند الطرفين، ومفيش رجوع فيها بعد كده.</p>
+            <div class="flex items-center gap-2">
+                <button type="button" id="supportMsgDeleteCancelBtn"
+                        class="flex-1 py-2 rounded-xl text-xs font-extrabold text-lux-100 bg-lux-800 hover:bg-lux-800/70 transition-colors">إلغاء</button>
+                <button type="button" id="supportMsgDeleteConfirmBtn"
+                        class="flex-1 py-2 rounded-xl text-xs font-extrabold text-white bg-rose-600 hover:bg-rose-500 transition-colors">حذف</button>
+            </div>
+        </div>
+    `;
+
+    overlay.addEventListener('click', (event) => {
+        if (event.target === overlay) hideDeleteConfirmDialog();
+    });
+
+    document.body.appendChild(overlay);
+    document.getElementById('supportMsgDeleteCancelBtn')?.addEventListener('click', hideDeleteConfirmDialog);
+
+    const confirmBtn = document.getElementById('supportMsgDeleteConfirmBtn');
+    confirmBtn?.addEventListener('click', async () => {
+        confirmBtn.disabled = true;
+        confirmBtn.textContent = 'جاري الحذف…';
+
+        const success = await performDeleteMessage(messageId);
+
+        if (!success) {
+            // (جديد) فشل الحذف (مشكلة نت/سيرفر مثلاً) - نرجّع الزرار لحالته
+            // الأصلية عشان المستخدم يقدر يحاول تاني من غير ما يقفل الكارت
+            confirmBtn.disabled = false;
+            confirmBtn.textContent = 'حاول تاني';
+            return;
+        }
+
+        hideDeleteConfirmDialog();
+    });
+}
+
+function hideDeleteConfirmDialog() {
+    document.getElementById('supportMsgDeleteConfirmOverlay')?.remove();
+}
+
+/**
+ * (جديد) حذف رسالة فعلياً من support_messages - RLS المفروض تسمح بس
+ * لصاحب الرسالة (sender_id = auth.uid() بتاعه) إنه يحذف رسالته، فمفيش
+ * داعي نتحقق من isMine تاني هنا (لو حد حاول يحذف رسالة مش بتاعته، قاعدة
+ * البيانات هترفض العملية من نفسها). لو نجح الحذف، بنشيلها من النسخة
+ * المحلية (activeConversationMessages) ونعيد الرسم على طول - الطرف
+ * التاني هيشوفها بتتشال لوحدها لحظياً عن طريق DELETE listener في
+ * subscribeToActiveConversation تحت.
+ * @param {string} messageId
+ * @returns {Promise<boolean>}
+ */
+async function performDeleteMessage(messageId) {
+    const { error } = await supabaseClient
+        .from('support_messages')
+        .delete()
+        .eq('id', messageId);
+
+    if (error) {
+        console.error('[support-chat.js] فشل حذف الرسالة:', error);
+        return false;
+    }
+
+    activeConversationMessages = activeConversationMessages.filter((m) => m.id !== messageId);
+    renderConversationMessages();
+    return true;
 }
 
 /** توقيت كامل (تاريخ + ساعة) لكارت معلومات الرسالة - أدق من formatClockTimeArabicLocal اللي بيورّي الساعة بس */
@@ -434,6 +529,7 @@ function showModal() {
 /** الإخفاء الخام فقط - استخدم closeModal() من أي مكان تاني عشان يتزامن مع تاريخ المتصفح */
 function hideSupportChatModal() {
     hideMessageInfoPopover();
+    hideDeleteConfirmDialog();
 
     const modalEl = document.getElementById('supportChatModal');
     if (modalEl) {
@@ -1131,6 +1227,25 @@ function subscribeToActiveConversation(userId) {
             filter: `sender_id=eq.${userId}`,
         }, async () => {
             await loadAndRenderConversation(userId);
+        })
+        // (جديد) حذف رسالة (من عندي أو من عند الطرف التاني، أي جهاز) -
+        // بنشيلها من النسخة المحلية بس من غير إعادة تحميل كاملة (أسرع، ومفيش
+        // داعي رحلة تانية للسيرفر). من غير فلتر sender_id عمداً: بايلود
+        // DELETE بيرجّع عمود الـ id بس افتراضياً (REPLICA IDENTITY الافتراضية)،
+        // مش باقي الأعمدة زي sender_id اللي الفلتر محتاجه، فكنا هنفوّت
+        // الإشارة لو حطينا الفلتر. المطابقة بـ id هنا كافية وآمنة لأن القناة
+        // دي أصلاً مشترَكة بس وقت فتح ثريد المحادثة ده بالذات.
+        .on('postgres_changes', {
+            event: 'DELETE',
+            schema: 'public',
+            table: 'support_messages',
+        }, (payload) => {
+            const deletedId = payload.old?.id;
+            if (!deletedId) return;
+            if (!activeConversationMessages.some((m) => m.id === deletedId)) return;
+
+            activeConversationMessages = activeConversationMessages.filter((m) => m.id !== deletedId);
+            renderConversationMessages();
         })
         // (جديد) إشارة "بيكتب…" اللحظية بتاعة الطرف التاني - Broadcast بس،
         // مالهاش أي علاقة بجدول support_messages (شوف sendTypingState فوق).

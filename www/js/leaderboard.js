@@ -15,17 +15,23 @@
    الليدربورد، وإن الملف ده مايعرفش حاجة عن Supabase خالص. من دلوقتي،
    وبناءً على طلب صريح، الملف ده (js/leaderboard.js) بقى هو المسؤول
    المباشر عن جلب ورسم بيانات الليدربورد بنفسه عن طريق get_leaderboard،
-   من غير ما نلمس أي حرف في js/profiles.js. النسخة القديمة الموجودة
-   هناك (fetchLeaderboardTop / loadAndRenderLeaderboard / renderLeaderboardPodium
-   / renderLeaderboardRemainingList / renderCurrentUserRankBanner) اتسابت
-   زي ما هي بالظبط ومعطوبة الاستخدام حالياً (Dead Code Path) - مش بتتنفذ
-   تاني، لأننا مبقيناش بنعتمد على آلية "تسجيل Loader خارجي"
-   (registerLeaderboardDataLoader) في تشغيل تبديل التبويبات ولا في أول
-   تحميل، واستبدلناها بنداء مباشر لـ loadAndRenderPeriod() تحت في نفس
-   الملف. الدالة registerLeaderboardDataLoader() لسه متصدّرة (Exported)
-   بس عشان النداء الموجود فعلاً جوه initLeaderboardUI() في profiles.js
-   ماياخدش خطأ Import - لكن القيمة اللي بتتسجّل فيها مبقتش بتتستخدم من
-   جوه الملف ده تاني.
+   (تحديث - إصلاح باج "الأرقام الوهمية بتظهر وترجع تاني"): النسخة القديمة
+   اللي كانت موجودة في js/profiles.js (fetchLeaderboardTop /
+   loadAndRenderLeaderboard / renderLeaderboardPodium /
+   renderLeaderboardRemainingList / renderCurrentUserRankBanner) اتشالت
+   نهائياً من هناك - مكانتش فعلاً Dead Code زي ما كان مفترض؛ كانت لسه
+   بتتنادى مباشرة من flushPendingStepsBatch() (بعد كل Flush خطوات)
+   ومن refreshProfileAfterDailyQuestion() (بعد كل إجابة على السؤال
+   اليومي)، وبترسم فوق نفس عناصر الـ DOM (p1-name/p1-points/...
+   و#leaderboardList) بأرقام all-time إجمالية (مش مقسّمة يومي/أسبوعي/
+   شهري زي get_leaderboard هنا) - وده كان بالظبط سبب ظهور أرقام غلط
+   لحظياً وبعدين رجوعها للصح تاني لما loadAndRenderPeriod() هنا يرسم
+   فوقها من جديد. بدل الاعتماد على آلية "تسجيل Loader خارجي"
+   (registerLeaderboardDataLoader، اتشالت هي كمان)، دلوقتي فيه دالة
+   واحدة مُصدّرة (refreshActiveLeaderboard) أي كود خارجي محتاج "يحدّث"
+   الليدربورد الظاهر بيها، وهي بتنادي loadAndRenderPeriod() بنفس الفترة
+   النشطة حالياً - مفيش أي مصدر بيانات تاني يرسم على نفس العناصر دي غير
+   الملف ده.
 
    مسؤوليات هذا الملف حصرياً دلوقتي:
      1) حساب الوقت المتبقي لكل بطولة (يومية/أسبوعية/شهرية) بدقة على
@@ -118,16 +124,6 @@ let lastKnownRemainingSeconds = null;
 
 /** علم لمنع ربط أحداث أزرار التبويبات أكتر من مرة (Memory Leak Guard) - نفس فلسفة leaderboardEventsBound في profiles.js */
 let tabEventsBound = false;
-
-/**
- * دالة تحميل بيانات خارجية اختيارية (Legacy) - لسه ممكن تتسجل عن طريق
- * registerLeaderboardDataLoader() من برّه (profiles.js بينادي عليها
- * فعلاً)، لكنها مبقتش بتتنادى من جوه الملف ده تاني بعد المرحلة 4 (شوف
- * الملحوظة المعمارية أعلى الملف) - متسابة بس عشان التوافق مع الكود
- * الموجود ومنعاً لأي كسر في الـ Import.
- * @type {Function|null}
- */
-let leaderboardDataLoader = null;
 
 
 /* ==================================================================
@@ -562,7 +558,42 @@ async function fetchLeaderboardData(periodKey) {
         return [];
     }
 
-    return (data || []).map(normalizeLeaderboardRow);
+    return dedupeLeaderboardRowsById((data || []).map(normalizeLeaderboardRow), periodType);
+}
+
+/**
+ * (جديد) حماية من باج "المستخدم بيظهر مرتين بأرقام مختلفة" اللي بيحصل
+ * أحياناً (مش كل مرة) في نتيجة get_leaderboard الراجعة من قاعدة
+ * البيانات - نفس id بيظهر في أكتر من صف (مثلاً مرة في المنصة بأرقام،
+ * ومرة تانية في باقي القائمة بأرقام مختلفة تماماً لنفس اليوزر). ده أصله
+ * سلوك غير متوقع من الـ RPC نفسها في قاعدة البيانات (Join بيتفرّع/
+ * Race Condition في تحديث الإحصائيات وقت تنفيذ الاستعلام) مش حاجة نقدر
+ * نصلحها من هنا فعلياً، لكن أقل حاجة نقدر نعملها في الواجهة إننا منسيبش
+ * نفس الشخص يظهر مرتين بأرقام متضاربة قدام المستخدم. بنسيب أول ظهور بس
+ * (الأعلى ترتيباً، لأن get_leaderboard بترجع الصفوف مرتبة تصاعدياً
+ * بالفعل حسب rank_position) ونرمي أي تكرار بعده، مع تسجيل تحذير واضح
+ * في الـ Console يوضح إن المشكلة الحقيقية لازم تتصلح في تعريف
+ * get_leaderboard() نفسها في قاعدة البيانات.
+ * @param {Array<object>} rows
+ * @param {string} periodType
+ * @returns {Array<object>}
+ */
+function dedupeLeaderboardRowsById(rows, periodType) {
+    const seenIds = new Set();
+    const deduped = [];
+
+    rows.forEach((row) => {
+        if (seenIds.has(row.id)) {
+            console.warn(
+                `[leaderboard.js] باج بيانات: المستخدم (${row.id}) ظهر أكتر من مرة بأرقام مختلفة في نتيجة get_leaderboard(period_type: '${periodType}') - اتم تجاهل التكرار وعرض أول ظهور بس. المشكلة الحقيقية لازم تتراجع في تعريف get_leaderboard() نفسها في قاعدة البيانات.`,
+            );
+            return;
+        }
+        seenIds.add(row.id);
+        deduped.push(row);
+    });
+
+    return deduped;
 }
 
 /**
@@ -587,24 +618,30 @@ async function fetchLeaderboardData(periodKey) {
  * إجمالي المسجلين بدل كده عشان الجملة تظهر من أول يوم وتحفّز أي حد
  * لسه ما لعبش إنه ينزل يشارك، مش بس تعكس اللي بيلعب فعلاً دلوقتي.
  *
- * نفس منطق fetchTotalProfilesCount في profiles.js بالظبط (نفس الـ View
- * public_profiles، ونفس أسلوب count: 'exact', head: true) - مكرّرة هنا
- * بدل ما نستوردها عشان نفس فلسفة عدم الاستيراد المتبادل غير الضروري
- * بين ملفات الليدربورد والبروفايل (شوف تعليق "ليه ملف منفصل" في
- * presence.js لنفس المبدأ)
+ * (تعديل - إصلاح باج "النص التحفيزي مش ظاهر"): كانت بتعتمد على استعلام
+ * مباشر على public_profiles (view عادي فوق profiles من غير أي Bypass)،
+ * وده كان بيرجع 1 بس (بروفايل المستخدم نفسه) مش الإجمالي الحقيقي، لأن
+ * public_profiles بتورّث سياسات RLS بتاعة profiles حرفياً ("Users can
+ * view own profile": auth.uid() = id) - فمستخدم عادي مش أدمن كان بيشوف
+ * نفسه بس، فالحساب (1 - 10) بيطلع صفر/سالب والجملة بتتخفي دايماً. بقينا
+ * بننادي RPC جديدة (get_total_registered_users_count، SECURITY DEFINER
+ * زي get_leaderboard بالظبط) بترجع العدد الحقيقي لأي مستخدم بغض النظر
+ * عن دوره - شوف تعليق SQL المطلوب تنفيذه لإنشاء الدالة دي.
+ *
+ * ملحوظة: fetchTotalProfilesCount في profiles.js على الأغلب فيها نفس
+ * الباج بالظبط (كانت بتستخدم نفس أسلوب public_profiles القديم) - محتاجة
+ * تتحدّث بنفس الطريقة لو حابب تصلحها هناك كمان.
  * @returns {Promise<number|null>} null يعني فشل الجلب (خطأ شبكة/RPC)
  */
 async function fetchTotalRegisteredUsersCount() {
-    const { count, error } = await supabaseClient
-        .from('public_profiles')
-        .select('id', { count: 'exact', head: true });
+    const { data, error } = await supabaseClient.rpc('get_total_registered_users_count');
 
     if (error) {
         console.error('خطأ في حساب إجمالي عدد المستخدمين المسجلين:', error.message);
         return null;
     }
 
-    return count ?? 0;
+    return Number(data ?? 0);
 }
 
 /**
@@ -769,6 +806,7 @@ async function openLeaderboardUserProfile(userId) {
  */
 function renderLeaderboardPodium(rows) {
     const podiumUserIds = [];
+    const currentUserId = getCurrentUserId();
 
     PODIUM_SLOTS.forEach((slot, index) => {
         const row = rows[slot.rank - 1] || null;
@@ -778,6 +816,12 @@ function renderLeaderboardPodium(rows) {
         const avatarEl = document.getElementById(slot.avatarEl);
         const presenceEl = document.getElementById(slot.presenceEl);
         const cardEl = document.querySelector(`.podium-card[data-rank="${slot.rank}"]`);
+        // (جديد) لو صاحب المركز ده هو المستخدم الحالي نفسه - كان قبل
+        // كده مفيش أي إشارة "أنت" على الإطلاق لو ترتيبك جوه أعلى 3 (بعكس
+        // باقي القائمة اللي فيها .rank-card-self + "(أنت)")، فكان حرفياً
+        // ترتيبك مش ظاهر إنه بتاعك في الحالة دي. شوف podium-card-self في
+        // CSS للـ ring الذهبي المميز حوالين الصورة
+        const isCurrentUser = Boolean(row?.id && currentUserId && row.id === currentUserId);
 
         // (المرحلة 5) إزالة حالة الـ Skeleton أولاً - لو لسه متحطة من
         // renderLeaderboardLoadingState - قبل ما نرسم القيم الحقيقية،
@@ -785,7 +829,7 @@ function renderLeaderboardPodium(rows) {
         // وراء ستايل الـ Skeleton سهواً
         [nameEl, pointsEl, stepsEl].forEach((el) => el?.classList.remove('champ-skel'));
 
-        if (nameEl) nameEl.textContent = row ? row.full_name : '—';
+        if (nameEl) nameEl.textContent = row ? `${row.full_name}${isCurrentUser ? ' (أنت)' : ''}` : '—';
         if (pointsEl) pointsEl.textContent = row ? row.points.toLocaleString() : '—';
         if (stepsEl) stepsEl.textContent = row ? formatCompactNumber(row.total_steps) : '—';
         if (avatarEl) avatarEl.src = row?.avatar_url || slot.fallback;
@@ -824,6 +868,7 @@ function renderLeaderboardPodium(rows) {
         // التبويبات يحس بحركة حيّة بدل ما البيانات الجديدة تقفز فجأة
         if (cardEl) {
             cardEl.style.setProperty('--stagger-index', String(index));
+            cardEl.classList.toggle('podium-card-self', isCurrentUser);
             replayEntranceAnimation(cardEl);
         }
     });
@@ -1070,6 +1115,23 @@ async function loadAndRenderPeriod(periodKey) {
     renderLeaderboardRemainingList(rows);
     renderRemainingParticipantsCount(totalUsersCount);
     renderSelfRankBar(rows, config.metric);
+
+    // (نُقل من js/profiles.js - إصلاح باج "الأرقام الوهمية"): فتح وسام
+    // "قدوة" (top3_leaderboard) كان شرطه محسوب جوه loadAndRenderLeaderboard
+    // القديمة (المحذوفة دلوقتي) على ترتيب all-time بس، وهو نفسه سبب
+    // نداء الدالة دي من غير داعي بعد كل Flush خطوات/سؤال يومي. الشرط
+    // اتنقل هنا حرفيًا (metric === 'points' && rank <= 3)، بس دلوقتي
+    // مبني على الترتيب الحقيقي المعروض فعليًا (يومي أو أسبوعي، مش
+    // all-time وهمي) - الوسام ده مستثنى عمداً من Triggers قاعدة
+    // البيانات لأن شرطه نسبي وسط كل المستخدمين مش عمود ثابت (شوف
+    // الملحوظة في profiles.js فوق checkAndUnlockBadges)
+    if (config.metric === 'points') {
+        const currentUserId = getCurrentUserId();
+        const myRow = currentUserId ? rows.find((row) => row.id === currentUserId) : null;
+        if (myRow && myRow.rank <= 3) {
+            import('./profiles.js').then(({ unlockBadge }) => unlockBadge?.('top3_leaderboard'));
+        }
+    }
 }
 
 
@@ -1077,21 +1139,24 @@ async function loadAndRenderPeriod(periodKey) {
    5) الواجهة العامة (Public API) - دي بس اللي المفروض تتستورد من برّه
    ================================================================== */
 
-/**
- * (Legacy - شوف الملحوظة المعمارية أعلى الملف) تسجيل دالة تحميل بيانات
- * خارجية. متسابة بس عشان التوافق مع النداء الموجود فعلاً جوه
- * initLeaderboardUI() في profiles.js - القيمة المسجّلة هنا مبقتش
- * بتتنادى من جوه الملف ده تاني بعد المرحلة 4 (loadAndRenderPeriod
- * بقت هي المسؤولة مباشرة عن الجلب من Supabase).
- * @param {Function} loaderFn
- */
-export function registerLeaderboardDataLoader(loaderFn) {
-    leaderboardDataLoader = loaderFn;
-}
-
 /** @returns {'today'|'week'|'month'} الفترة النشطة حالياً */
 export function getActivePeriod() {
     return activePeriod;
+}
+
+/**
+ * (إصلاح باج "الأرقام الوهمية بتظهر وترجع تاني") إعادة جلب ورسم بيانات
+ * الفترة النشطة حالياً من غير ما تبديل تبويب فعلي - دي نقطة الدخول
+ * الصح اللي أي كود خارجي (زي profiles.js بعد Flush خطوات أو بعد
+ * الإجابة على السؤال اليومي) لازم ينادي عليها لو عايز "يحدّث" الليدربورد
+ * الظاهر دلوقتي، بدل ما يرسم بأي مصدر بيانات تاني مباشرة فوق نفس عناصر
+ * الـ DOM (p1-name/p1-points/... و#leaderboardList) - أي رسم من مصدر
+ * تاني (حتى لو صحيح في حد ذاته) هيبقى بالتعريف "غير متزامن مع الفترة/
+ * التبويب الظاهر فعلياً"، وده أصل باج الأرقام الوهمية اللي كانت بتظهر
+ * وترجع.
+ */
+export function refreshActiveLeaderboard() {
+    loadAndRenderPeriod(activePeriod);
 }
 
 /** @returns {'points'|'total_steps'} مقياس الترتيب المستخدم في الفترة النشطة حالياً */

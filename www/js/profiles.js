@@ -54,9 +54,13 @@
    ================================================================== */
 
 import { supabaseClient } from './supabase-config.js';
+// (إصلاح - باج حقيقي) عشان نزبط عداد الخطوات المحلي مع daily_steps
+// الحقيقية القادمة من Supabase وقت تحميل البروفايل - شوف
+// reconcileWithServerSteps تحت في loadAndRenderRealProfile
+import { reconcileWithServerSteps, reconcileServerBestSteps, syncActiveUser } from './sensors.js';
 import { pushModalState, closeModal, replaceModalState } from './modal-history.js';
 import { signOut } from './auth.js';
-import { initChampionshipTabs, registerLeaderboardDataLoader } from './leaderboard.js';
+import { initChampionshipTabs, refreshActiveLeaderboard, getActiveMetric } from './leaderboard.js';
 // (المرحلة 8) رسائل الدعم - بنستورد بس نقطة الفتح + دالة معرفة الأدمن
 // من support-chat.js (اتجاه استيراد واحد؛ support-chat.js مايستورد منا
 // حاجة خالص، فمفيش أي Circular Import هنا)
@@ -316,12 +320,6 @@ let friendsData = [];
 
 /** قائمة طلبات الصداقة الواردة للمستخدم الحالي (status = 'pending' ومُرسلة له) */
 let incomingFriendRequests = [];
-
-/** أحدث بيانات ليدربورد (Top 10) اتجابت من Supabase، لازمة عشان نقدر نميّز صف المستخدم الحالي لو ظاهر فيها */
-let leaderboardTopRows = [];
-
-/** المقياس الحالي المستخدم في ترتيب الليدربورد: 'points' (زرار "النهاردة") أو 'total_steps' (زرار "الشهر ده") - شوف الملاحظة في أعلى الملف */
-let currentLeaderboardMetric = 'points';
 
 /**
  * إحصائيات المستخدم المعروضة في كارت البروفايل وشارات الهيدر. كل
@@ -650,7 +648,12 @@ async function flushPendingStepsBatch() {
         await notifyLeaderboardPassIfNeeded('total_steps', oldTotalSteps, currentProfileRow?.total_steps ?? oldTotalSteps);
 
         // تحديث فوري لترتيب الليدربورد (نفس فلسفة recordCorrectAnswer فوق)
-        await loadAndRenderLeaderboard(currentLeaderboardMetric);
+        // (إصلاح باج "الأرقام الوهمية"): كان بينادي هنا على النسخة
+        // القديمة loadAndRenderLeaderboard اللي بترسم أرقام all-time
+        // بغض النظر عن التبويب (يومي/أسبوعي/شهري) الظاهر فعلاً - بقى
+        // بينادي على refreshActiveLeaderboard() من js/leaderboard.js
+        // اللي بتحدّث بس الفترة النشطة حالياً بنفس مصدر البيانات الصح
+        await refreshActiveLeaderboard();
     } catch (error) {
         // لو الـ Flush فشل (مشكلة شبكة مؤقتة مثلاً)، بنرجّع الخطوات
         // والنقاط دي لقايمة الانتظار عشان تتحاول تاني في الـ Flush
@@ -714,7 +717,9 @@ async function refreshProfileAfterDailyQuestion() {
         checkAndUnlockBadges();
 
         await notifyLeaderboardPassIfNeeded('points', oldPoints, freshRow.points ?? oldPoints);
-        await loadAndRenderLeaderboard(currentLeaderboardMetric);
+        // (إصلاح باج "الأرقام الوهمية") - نفس السبب المذكور في
+        // flushPendingStepsBatch() فوق
+        await refreshActiveLeaderboard();
     } catch (error) {
         // فشل التحديث البصري مش لازم يكسر تجربة السؤال اليومي نفسها
         // (النقاط أصلاً اتسجّلت أو متسجّلتش في السيرفر بغض النظر عن
@@ -741,10 +746,25 @@ function scheduleStepsBatchFlush() {
  * @param {number} [pointsEarned] - عدد النقاط المكتسبة من الخطوات دي (اختياري)
  */
 export function recordStepsProgress(addedSteps, pointsEarned = 0) {
-    if (!currentAuthUser || !currentProfileRow || !addedSteps) return;
+    if (!addedSteps) return;
 
+    // (إصلاح - باج حقيقي): كنا بنرفض الخطوة كاملة هنا لو currentAuthUser/
+    // currentProfileRow لسه مش متظبطين (يعني لسه بنحمّل بيانات البروفايل
+    // من الشبكة، أو bindActivityEvents اتربطت متأخرة). الرفض ده كان
+    // بيضيع الخطوة نهائيًا من غير أي حفظ احتياطي، فمجموع البروفايل/
+    // الليدربورد كان بيفضل أقل من الشاشة الرئيسية (اللي بتتحدث فورًا من
+    // غير الشرط ده في app.js).
+    // دلوقتي: بنجمّع الخطوات دايمًا بغض النظر عن حالة تسجيل الدخول.
     pendingStepsDelta += addedSteps;
     pendingStepsPointsDelta += pointsEarned;
+
+    if (!currentAuthUser || !currentProfileRow) {
+        // لسه مفيش مستخدم/بروفايل جاهز نبعت له - نحفظ الرصيد ده محليًا
+        // كشبكة أمان (زي ما بيحصل وقت إغلاق الصفحة أو انقطاع النت) لحد
+        // ما loadAndRenderRealProfile تخلص وتعمل flushPendingStepsBatch
+        persistPendingStepsToStorage();
+        return;
+    }
 
     if (pendingStepsDelta >= STEPS_BATCH_FORCE_FLUSH_THRESHOLD) {
         flushPendingStepsBatch();
@@ -752,6 +772,29 @@ export function recordStepsProgress(addedSteps, pointsEarned = 0) {
         scheduleStepsBatchFlush();
     }
 }
+
+// (إصلاح - باج حقيقي) كان الـ listener بتاع 'steps:progress' بيتربط بس
+// جوه bindActivityEvents، اللي بدورها بتتنادى بس *بعد* ما initProfileUI
+// تخلص await loadAndRenderRealProfile (نداء شبكة). في الفترة من فتح
+// التطبيق لحد ما النداء ده يخلص، أي حدث 'steps:progress' كان بيتبعث
+// من app.js من غير أي listener مسجّل أصلاً يستقبله - يعني بيضيع نهائيًا
+// (CustomEvent مالوش Queue). ده كان بيسبب فرق دايم بين عداد الشاشة
+// الرئيسية (بيتحدث فورًا من app.js) وعداد البروفايل/الليدربورد (اللي
+// بيتغذى من هنا). دلوقتي بنربط الـ listener ده فورًا عند تحميل الملف،
+// مستقل تمامًا عن حالة تسجيل الدخول - recordStepsProgress نفسها بقت
+// بتجمّع الخطوة في pendingStepsDelta وتحفظها احتياطيًا حتى لو المستخدم
+// لسه مسجّلش دخول/البروفايل لسه بيتحمّل.
+document.addEventListener('steps:progress', (event) => {
+    recordStepsProgress(event.detail?.addedSteps ?? 0, event.detail?.pointsEarned ?? 0);
+});
+
+// نسترجع فورًا عند تحميل الملف أي رصيد خطوات فضل محفوظ في localStorage
+// من جلسة سابقة اتقفلت قبل ما تتبعت (شوف persistPendingStepsToStorage) -
+// لازم يحصل ده *قبل* أي حدث 'steps:progress' جديد يوصل، وإلا الرصيد
+// الجديد هيطغى (Overwrite) على النسخة المحفوظة القديمة وتضيع. النداء
+// التاني بتاع نفس الدالة جوه bindStepsFlushLifecycleEvents آمن تمامًا -
+// المفتاح بيتمسح فور القراءة فمفيش أي احتمال يتضاعف الرصيد.
+restorePendingStepsFromStorage();
 
 /**
  * ربط أحداث دورة حياة الصفحة (تبديل التاب/تصغير المتصفح/إغلاقه) بعمل
@@ -874,10 +917,6 @@ function bindStepsFlushLifecycleEvents() {
 function bindActivityEvents() {
     if (activityEventsBound) return;
     activityEventsBound = true;
-
-    document.addEventListener('steps:progress', (event) => {
-        recordStepsProgress(event.detail?.addedSteps ?? 0, event.detail?.pointsEarned ?? 0);
-    });
 
     // (إصلاح أمني) js/daily-question.js دلوقتي بيطلق الحدث ده بس *بعد*
     // ما دالة RPC في السيرفر (record_daily_question_result) تتحقق من
@@ -1138,7 +1177,8 @@ function formatCompactNumber(num) {
    الأوسمة المفتوحة قبل/بعد) عشان تبعت إشعار "وسام جديد!" فورًا. الوسام
    الوحيد المستثنى تمامًا من الـ Triggers هو "قدوة" (top3_leaderboard)
    لأن شرطه ترتيب نسبي وسط كل المستخدمين مش عمود ثابت في صف واحد - ده
-   بيتفتح مباشرة من loadAndRenderLeaderboard تحت.
+   بيتفتح دلوقتي من جوه loadAndRenderPeriod() في js/leaderboard.js (بعد
+   نقل الفحص ده من هنا - شوف إصلاح باج "الأرقام الوهمية").
    ================================================================== */
 
 /**
@@ -1779,86 +1819,22 @@ async function checkAndUnlockBadges() {
 /* ==================================================================
    المرحلة 5أ: الليدربورد الحقيقي (Leaderboard)
    ------------------------------------------------------------------
-   بيعتمد بالكامل على جدول profiles الموجود أصلاً (points, total_steps,
-   full_name, avatar_url) - مفيش جدول إضافي مطلوب. راجع الملاحظة في
-   أعلى الملف بخصوص الفرق بين "اليوم/الشهر" و"نقاط/خطوات".
+   (تحديث - إصلاح باج "الأرقام الوهمية بتظهر وترجع تاني"): كل منطق
+   الجلب والرسم الفعلي (podium/باقي القائمة/شريط مركزك الحالي) اتشال
+   من هنا نهائياً واتنقل بالكامل لـ js/leaderboard.js (get_leaderboard
+   RPC، مقسّم فعليًا يومي/أسبوعي/شهري). كان فيه نسخة قديمة هنا
+   (fetchLeaderboardTop/renderLeaderboardPodium/renderLeaderboardRemainingList/
+   renderCurrentUserRankBanner/loadAndRenderLeaderboard) بترسم فوق نفس
+   عناصر الـ DOM بأرقام all-time إجمالية (من غير أي تقسيم لفترة بطولة)
+   - وكانت لسه بتتنادى فعليًا من flushPendingStepsBatch() و
+   refreshProfileAfterDailyQuestion() تحت، فبتفضل تظهر لحظيًا وتختفي كل
+   ما حد يمشي/يجاوب سؤال يومي. شوف refreshActiveLeaderboard() المستوردة
+   من js/leaderboard.js - هي الطريقة الصح دلوقتي لأي كود هنا يحدّث
+   الليدربورد الظاهر.
    ================================================================== */
-
-const LEADERBOARD_TOP_LIMIT = 50;
 
 /** أقصى عدد أشخاص نبلغهم بإشعار "leaderboard_pass" في نفس دفعة التخطي الواحدة - لو المستخدم قفز قفزة كبيرة (مثلاً أول Flush خطوات كبير بعد فترة off) وخطى ناس كتير مرة واحدة، منبعتش سيل إشعارات لعدد كبير، بنبلغ الأقرب ليه بس (الأقل فرق نقط/خطوات) */
 const LEADERBOARD_PASS_NOTIFY_LIMIT = 5;
-
-/**
- * جلب أعلى 10 مستخدمين مرتبين حسب عمود معين (points أو total_steps)
- * @param {'points'|'total_steps'} metric
- * @returns {Promise<Array<object>>}
- */
-async function fetchLeaderboardTop(metric) {
-    // (جديد) بنجيب من public_profiles (View آمن فيه بس الأعمدة المسموح
-    // عرضها عامةً) بدل profiles مباشرة - كده لوحة الصدارة (بما فيها
-    // وضع الزائر) متعرّضش أي عمود حساس (زي is_inside_bounds/is_verified_override)
-    // حتى لو حد استخدم الـ anon key يعمل طلب REST مباشر برّه التطبيق
-    const { data, error } = await supabaseClient
-        .from('public_profiles')
-        .select('id, full_name, avatar_url, points, total_steps')
-        .order(metric, { ascending: false, nullsFirst: false })
-        .limit(LEADERBOARD_TOP_LIMIT);
-
-    if (error) {
-        console.error('خطأ في جلب لوحة الصدارة:', error.message);
-        return [];
-    }
-
-    return data || [];
-}
-
-/**
- * حساب ترتيب المستخدم الحالي فعلياً (حتى لو مش ضمن أعلى 10) عن طريق
- * عدّ كام مستخدم قيمته في العمود المطلوب أعلى من قيمة المستخدم الحالي
- * @param {'points'|'total_steps'} metric
- * @returns {Promise<number|null>}
- */
-async function fetchCurrentUserRank(metric) {
-    if (!currentProfileRow) return null;
-
-    const myValue = currentProfileRow[metric] ?? 0;
-
-    // (إصلاح - باج حقيقي): نفس مشكلة fetchAcceptedFriends - profiles
-    // مباشرة كانت بتعدّ صفوف المستخدمين التانيين إنها صفر دايماً بسبب
-    // RLS (بترجع بس صفك انت، ومستحيل تكون أكبر من قيمتك نفسها)، فالترتيب
-    // كان دايماً بيرجع 1 غلط لأي حد. public_profiles View آمنة ومتاحة
-    // للعد على أي مستخدم - نفس المستخدمة في لوحة الصدارة.
-    const { count, error } = await supabaseClient
-        .from('public_profiles')
-        .select('id', { count: 'exact', head: true })
-        .gt(metric, myValue);
-
-    if (error) {
-        console.error('خطأ في حساب ترتيب المستخدم:', error.message);
-        return null;
-    }
-
-    return (count ?? 0) + 1;
-}
-
-/**
- * إجمالي عدد المستخدمين المسجلين، لازم عشان نحسب نسبة "متقدم على X%"
- * @returns {Promise<number>}
- */
-async function fetchTotalProfilesCount() {
-    // (إصلاح - باج حقيقي): نفس السبب فوق بالظبط.
-    const { count, error } = await supabaseClient
-        .from('public_profiles')
-        .select('id', { count: 'exact', head: true });
-
-    if (error) {
-        console.error('خطأ في حساب إجمالي عدد المستخدمين:', error.message);
-        return 0;
-    }
-
-    return count ?? 0;
-}
 
 /**
  * بعد أي زيادة في points أو total_steps للمستخدم الحالي، بنشوف هل
@@ -1917,233 +1893,6 @@ async function notifyLeaderboardPassIfNeeded(metric, oldValue, newValue) {
     }
 }
 
-
-function metricValueOf(row, metric) {
-    return row?.[metric] ?? 0;
-}
-
-/** تنسيق قيمة المقياس المعروضة على الليدربورد ("2,890 ن" أو "12.4K خطوة") */
-function formatMetricLabel(value, metric) {
-    return metric === 'total_steps'
-        ? `${formatCompactNumber(value)} خطوة`
-        : `${value.toLocaleString()} ن`;
-}
-
-/**
- * رسم منصّة التتويج (المراكز 1، 2، 3) بالبيانات الحقيقية
- * ملحوظة (شريط الإحصائيات المزدوج): كل صف بييجي من Supabase أصلاً معاه
- * points وtotal_steps مع بعض (شوف select في fetchLeaderboardTop تحت)،
- * فبنعرض الاتنين سوا دايماً بغض النظر عن المقياس المستخدم للترتيب نفسه
- * (metric بيحدد بس مين قاعد فين، مش بيحدد نعرض قيمة مين)
- * @param {Array<object>} topRows
- * @param {'points'|'total_steps'} metric
- */
-function renderLeaderboardPodium(topRows, metric) {
-    const podiumSlots = [
-        { rank: 1, nameEl: 'p1-name', pointsEl: 'p1-points', stepsEl: 'p1-steps', avatarEl: 'p1-avatar', presenceEl: 'p1-avatar-presence' },
-        { rank: 2, nameEl: 'p2-name', pointsEl: 'p2-points', stepsEl: 'p2-steps', avatarEl: 'p2-avatar', presenceEl: 'p2-avatar-presence' },
-        { rank: 3, nameEl: 'p3-name', pointsEl: 'p3-points', stepsEl: 'p3-steps', avatarEl: 'p3-avatar', presenceEl: 'p3-avatar-presence' },
-    ];
-
-    const podiumUserIds = [];
-
-    podiumSlots.forEach((slot) => {
-        const row = topRows[slot.rank - 1];
-        const nameEl = document.getElementById(slot.nameEl);
-        const pointsEl = document.getElementById(slot.pointsEl);
-        const stepsEl = document.getElementById(slot.stepsEl);
-        const avatarEl = document.getElementById(slot.avatarEl);
-        const presenceEl = document.getElementById(slot.presenceEl);
-
-        if (nameEl) nameEl.textContent = row ? (row.full_name || 'بطل') : '—';
-        if (pointsEl) pointsEl.textContent = row ? (row.points ?? 0).toLocaleString() : '—';
-        if (stepsEl) stepsEl.textContent = row ? formatCompactNumber(row.total_steps ?? 0) : '—';
-        if (avatarEl) {
-            // نفس أيقونة "مفيش صورة" الموحدة المستخدمة في كل مكان تاني بالمشروع
-            // (DEFAULT_AVATAR_URI) - سواء لمّا مفيش صف أصلاً في المركز ده، أو
-            // لمّا avatar_url فاضية، بدل صور placehold.co الملوّنة القديمة
-            // اللي كانت بتتكسر لو النت مقطوع وتظهر أيقونة الصورة المكسورة
-            // الافتراضية بتاعة المتصفح (زي الدايرة الوردية بعلامة الاستفهام)
-            avatarEl.src = row?.avatar_url || DEFAULT_AVATAR_URI;
-            avatarEl.onerror = () => { avatarEl.onerror = null; avatarEl.src = DEFAULT_AVATAR_URI; };
-        }
-
-        // نقطة "أونلاين الآن" لصاحب المركز ده - شوف js/presence.js. لو
-        // مفيش صف أصلاً في المركز ده بنشيل الـ data attribute عشان
-        // النقطة تفضل مخفية (مش هتتفعّل لأي id قديم متسيب من رسمة فاتت)
-        if (presenceEl) {
-            if (row?.id) {
-                presenceEl.setAttribute('data-presence-avatar', row.id);
-                podiumUserIds.push(row.id);
-            } else {
-                presenceEl.removeAttribute('data-presence-avatar');
-                presenceEl.classList.remove('is-online');
-            }
-        }
-
-        // الضغط على صورة أو اسم صاحب المركز (1، 2، أو 3) بيفتح بروفايله
-        // العام - بنعيد تعيين onclick في كل رسم (بدل addEventListener)
-        // عشان العناصر دي ثابتة في الصفحة وما بتتحذفش، فمش عايزين نراكم
-        // نفس الـ Listener مرات كتير مع كل تحميل جديد للّيدربورد
-        [nameEl, avatarEl].forEach((el) => {
-            if (!el) return;
-            el.onclick = row ? () => openPublicProfile(row.id) : null;
-            el.classList.toggle('cursor-pointer', Boolean(row));
-        });
-    });
-
-    if (podiumUserIds.length > 0) loadAndApplyPresence(podiumUserIds);
-}
-
-/**
- * رسم باقي القائمة (المراكز من 4 لحد 50) وإبراز صف المستخدم الحالي
- * لو موجود ضمنهم - كروت زجاجية (.rank-card) بشريط إحصائيات مزدوج
- * (خطوات + نقاط سوا). ملحوظة عن أسهم تغيير الترتيب (▲/▼): مش موجودة
- * هنا عمداً لأننا لسه مابنسجّلش "ترتيب سابق" لكل مستخدم في قاعدة
- * البيانات (محتاج عمود/جدول تاريخي منفصل يتحدث مرة كل فترة البطولة) -
- * الكلاسات الجاهزة ليها (rank-arrow-up/down/same) موجودة في
- * css/leaderboard-championships.css لحد ما المصدر ده يتضاف فعلياً.
- * @param {Array<object>} topRows
- * @param {'points'|'total_steps'} metric
- */
-function renderLeaderboardRemainingList(topRows, metric) {
-    const list = document.getElementById('leaderboardList');
-    if (!list) return;
-
-    const remaining = topRows.slice(3);
-
-    if (remaining.length === 0) {
-        list.innerHTML = '';
-        return;
-    }
-
-    list.innerHTML = remaining.map((row, index) => {
-        const rank = index + 4;
-        const isCurrentUser = currentAuthUser && row.id === currentAuthUser.id;
-
-        return `
-            <article class="rank-card${isCurrentUser ? ' rank-card-self' : ''}" data-leaderboard-user-id="${row.id}">
-                <span class="rank-card-number">${rank}</span>
-                <span class="relative inline-block shrink-0">
-                    <img src="${row.avatar_url || DEFAULT_AVATAR_URI}" alt="${row.full_name || 'بطل'}"
-                         class="rank-card-avatar"
-                         onerror="this.src='${DEFAULT_AVATAR_URI}'">
-                    ${presenceDotHtml(row.id)}
-                </span>
-                <div class="rank-card-info">
-                    <h5 class="rank-card-name">${row.full_name || 'بطل'}${isCurrentUser ? ' (أنت)' : ''}</h5>
-                    <div class="dual-stat-badge dual-stat-badge-compact">
-                        <span class="dual-stat-item" title="عدد الخطوات">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l2-6 4 12 2-6h6"/></svg>
-                            <span>${formatCompactNumber(row.total_steps ?? 0)}</span>
-                        </span>
-                        <span class="dual-stat-divider" aria-hidden="true"></span>
-                        <span class="dual-stat-item" title="النقاط">
-                            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2l2.9 6.6 7.1.6-5.4 4.7 1.6 7-6.2-3.9-6.2 3.9 1.6-7L2 9.2l7.1-.6z"/></svg>
-                            <span>${(row.points ?? 0).toLocaleString()}</span>
-                        </span>
-                    </div>
-                </div>
-            </article>
-        `;
-    }).join('');
-
-    // الضغط على أي صف بيفتح بروفايل صاحبه العام (حتى لو كان صف المستخدم
-    // الحالي نفسه - هيفتح بروفايله وهيظهر من غير زرار صداقة، شوف status === 'self' في renderPublicProfileFriendButton)
-    list.querySelectorAll('[data-leaderboard-user-id]').forEach((rowEl) => {
-        rowEl.addEventListener('click', () => openPublicProfile(rowEl.dataset.leaderboardUserId));
-    });
-
-    loadAndApplyPresence(remaining.map((row) => row.id));
-}
-
-/**
- * تحديث شريط "مركزك الحالي" المثبت (#selfRankBar) بالترتيب والصورة
- * والإحصائيات المزدوجة (خطوات + نقاط) والفرق الحقيقي بين المستخدم
- * الحالي واللي فوقه مباشرة في الترتيب.
- * حساب "الفرق عن اللي فوقك" بيعتمد على topRows (أعلى 50 أصلاً محمّلين
- * في الذاكرة من loadAndRenderLeaderboard) لو المستخدم الحالي ضمنهم؛
- * لو ترتيبه أبعد من كده (خارج أعلى 50) بنعرض رسالة تحفيزية عامة بدل
- * رقم غير دقيق، لأننا مش هنجيب صف "اللي فوقه بالظبط" بـ Request إضافي
- * في المرحلة دي.
- * @param {number|null} rank
- * @param {number} totalCount
- * @param {'points'|'total_steps'} metric
- * @param {Array<object>} topRows
- */
-function renderCurrentUserRankBanner(rank, totalCount, metric, topRows) {
-    const rankNumberEl = document.getElementById('currentUserRankNumber');
-    const gapTextEl = document.getElementById('currentUserRankPercentText');
-    const pointsEl = document.getElementById('currentUserRankPointsBadge');
-    const stepsEl = document.getElementById('selfRankSteps');
-    const avatarEl = document.getElementById('selfRankAvatar');
-    const barEl = document.getElementById('selfRankBar');
-
-    if (avatarEl) avatarEl.src = currentProfileRow?.avatar_url || DEFAULT_AVATAR_URI;
-
-    if (!currentProfileRow || !rank || totalCount === 0) {
-        if (rankNumberEl) rankNumberEl.textContent = '—';
-        if (gapTextEl) gapTextEl.textContent = 'كمّل نشاطك عشان يبان ترتيبك هنا';
-        if (pointsEl) pointsEl.textContent = '—';
-        if (stepsEl) stepsEl.textContent = '—';
-        if (barEl) barEl.classList.remove('is-topper');
-        return;
-    }
-
-    if (rankNumberEl) rankNumberEl.textContent = String(rank);
-    if (pointsEl) pointsEl.textContent = (currentProfileRow.points ?? 0).toLocaleString();
-    if (stepsEl) stepsEl.textContent = formatCompactNumber(currentProfileRow.total_steps ?? 0);
-
-    if (gapTextEl) {
-        if (rank === 1) {
-            gapTextEl.textContent = 'انت في القمة دلوقتي.. حافظ عليها!';
-        } else if (rank - 2 < topRows.length) {
-            // اللي فوق المستخدم الحالي مباشرة موجود ضمن topRows المحمّلة
-            const aboveRow = topRows[rank - 2];
-            const gapValue = Math.max(0, metricValueOf(aboveRow, metric) - metricValueOf(currentProfileRow, metric));
-            const unit = metric === 'total_steps' ? 'خطوة' : 'نقطة';
-            gapTextEl.textContent = gapValue > 0
-                ? `محتاج ${gapValue.toLocaleString()} ${unit} كمان عشان تعدّي اللي فوقك`
-                : 'قربت جداً من اللي فوقك.. كمّل!';
-        } else {
-            gapTextEl.textContent = 'كمّل نشاطك عشان تتقدم في الترتيب!';
-        }
-    }
-
-    if (barEl) barEl.classList.toggle('is-topper', rank === 1);
-}
-
-/**
- * تحميل بيانات الليدربورد كاملة (Top 10 + ترتيب المستخدم الحالي +
- * إجمالي عدد المستخدمين) ورسمها في كل عناصر تبويب "الترتيب" دفعة واحدة
- * @param {'points'|'total_steps'} metric
- */
-export async function loadAndRenderLeaderboard(metric) {
-    currentLeaderboardMetric = metric;
-
-    const [topRows, rank, totalCount] = await Promise.all([
-        fetchLeaderboardTop(metric),
-        fetchCurrentUserRank(metric),
-        fetchTotalProfilesCount(),
-    ]);
-
-    leaderboardTopRows = topRows;
-
-    renderLeaderboardPodium(topRows, metric);
-    renderLeaderboardRemainingList(topRows, metric);
-    renderCurrentUserRankBanner(rank, totalCount, metric, topRows);
-
-    // (المرحلة 9) وسام "قدوة" شرطه ترتيب في الليدربورد، مش رقم ثابت في
-    // صف profiles بتاعه - مينفعش يتفحص جوه Trigger على تحديث صف واحد
-    // (مالوش رؤية على ترتيب المستخدم وسط الباقيين). بنفحصه هنا بس على
-    // مقياس "points" (اللوحة الأساسية)، مش "total_steps" (زرار الشهر) -
-    // عشان يفضل معناه "من الأفضل دلوقتي" بمقياس واحد واضح، مش يتفتح
-    // مرتين بمعايير مختلفة. unlockBadge نفسها بتتأكد إنه مش مفتوح أصلاً
-    // قبل ما تعمل أي نداء شبكة زيادة.
-    if (metric === 'points' && rank && rank <= 3) {
-        unlockBadge('top3_leaderboard');
-    }
-}
 
 /**
  * البحث عن أي مستخدم بالاسم في كل جدول profiles (مش بس أعلى 10 الظاهرين
@@ -2253,8 +2002,16 @@ function bindLeaderboardSearchInput() {
         if (resultsContainer) resultsContainer.classList.remove('hidden');
 
         debounceTimer = setTimeout(async () => {
-            const results = await searchLeaderboardUsers(query, currentLeaderboardMetric);
-            renderLeaderboardSearchResults(results, currentLeaderboardMetric);
+            // (تحديث - إصلاح باج "الأرقام الوهمية"): كانت بتستخدم متغير
+            // currentLeaderboardMetric المحلي هنا اللي كان بيتحدّث بس
+            // جوه loadAndRenderLeaderboard القديمة (المحذوفة دلوقتي) -
+            // بقت بتاخد المقياس الحقيقي للفترة النشطة فعلاً من
+            // js/leaderboard.js (getActiveMetric) عشان نتائج البحث
+            // تتفق مع نفس ترتيب الفترة الظاهرة (يومي/أسبوعي = نقاط،
+            // شهري = خطوات) بدل ما تفضل مقفولة على "نقاط" ثابتة
+            const metric = getActiveMetric();
+            const results = await searchLeaderboardUsers(query, metric);
+            renderLeaderboardSearchResults(results, metric);
         }, 300);
     });
 }
@@ -2265,16 +2022,12 @@ function bindLeaderboardSearchInput() {
  * واحدة من initProfileUI (بنفس فلسفة باقي initXxxUI في الملف ده)
  */
 export async function initLeaderboardUI() {
-    // بنسجّل دالة تحميل البيانات الحقيقية عند js/leaderboard.js عشان
-    // تستخدمها هي كل ما المستخدم يبدّل تبويب البطولة (المرحلة 3 بتستدعي
-    // المرحلة 4 تلقائياً من غير ما الملفين يعرفوا تفاصيل بعض)
-    registerLeaderboardDataLoader((metric) => loadAndRenderLeaderboard(metric));
     bindLeaderboardSearchInput();
 
     // initChampionshipTabs() هي اللي هتربط أزرار التبويبات التلاتة،
     // تشغّل عداد "اليومية" كفترة افتراضية، وتستدعي أول تحميل بيانات
-    // تلقائياً بنفسها - مفيش داعي نستدعي loadAndRenderLeaderboard يدوياً
-    // هنا تاني
+    // تلقائياً بنفسها من js/leaderboard.js - مفيش داعي نسجّل أي Loader
+    // خارجي هنا تاني (شوف إصلاح باج "الأرقام الوهمية" فوق)
     initChampionshipTabs('today');
 }
 
@@ -3427,8 +3180,8 @@ function goBackFromPublicProfilePage() {
 /**
  * فتح صفحة "بروفايل عام" لأي مستخدم بمعرّفه - بتُنادى من:
  *  - js/stories.js عند الضغط على اسم/صورة صاحب الستوري المفتوحة
- *  - js/profiles.js (renderLeaderboardPodium/renderLeaderboardRemainingList)
- *    عند الضغط على أي صف/بطل في لوحة المتصدرين
+ *  - js/leaderboard.js (openLeaderboardUserProfile، عن طريق import()
+ *    ديناميكي) عند الضغط على أي صف/بطل في لوحة المتصدرين
  * @param {string} targetUserId
  * @param {{ replaceHistory?: boolean }} [options] - مرّر
  *   { replaceHistory: true } لو الاستدعاء ده جاي فوراً بعد إغلاق مودال
@@ -3596,9 +3349,30 @@ function bindPublicProfileEvents() {
  */
 async function loadAndRenderRealProfile(user) {
     currentAuthUser = user;
+    // (إصلاح - باج حقيقي) لازم قبل أي قراءة/مزامنة للخطوات - بيصفّر
+    // العداد المحلي في sensors.js لو الحساب ده مختلف عن آخر حساب كانت
+    // الحالة المحلية باسمه (تبديل حساب على نفس الجهاز)، عشان
+    // reconcileWithServerSteps تحت ماتحسبش خطوات الحساب القديم غلط
+    // كـ"تقدم أعلى" للحساب الجديد
+    syncActiveUser(user.id);
 
     const profile = await fetchUserProfile(user.id);
     currentProfileRow = profile;
+
+    // (إصلاح - باج حقيقي) currentAuthUser/currentProfileRow دلوقتي
+    // متظبطين - أي خطوات اتجمّعت في pendingStepsDelta قبل كده (من غير
+    // ما تتبعت، لأن المستخدم ماكانش مسجّل دخول لسه) موجودة أصلاً في
+    // الذاكرة (recordStepsProgress بتجمّعها هناك مباشرة) - مبنعملش
+    // restorePendingStepsFromStorage هنا عشان مش نضيفها مرة تانية فوق
+    // نفسها (النسخة المحفوظة في localStorage هي نفس القيمة اللي في
+    // الذاكرة، مش قيمة إضافية). بنبعتها فورًا دلوقتي بدل ما تستنى معاد
+    // الـ Flush الدوري (8 ثواني) أو أسوأ من كده تفضل واقفة لو المستخدم
+    // قفل التطبيق قبل ما الـ Timer يجيله دوره. bindStepsFlushLifecycleEvents
+    // (بتتنادى لاحقًا من initProfileUI) هي المسؤولة عن استرجاع أي رصيد
+    // اتحفظ من *جلسة سابقة* فعلاً اتقفلت (شوف restorePendingStepsFromStorage).
+    if (pendingStepsDelta > 0) {
+        flushPendingStepsBatch();
+    }
 
     renderProfileHeader(profile, user);
     updateProfileStats({
@@ -3617,6 +3391,21 @@ async function loadAndRenderRealProfile(user) {
     // الصف مش موجود أصلاً (مستخدم لسه معملش "إعداد البطل لأول مرة")
     if (profile) {
         await applyDailyCheckIn();
+    }
+
+    // (إصلاح - باج حقيقي) لو دخلنا من جهاز/متصفح جديد، localStorage
+    // هنا فاضي فعداد الخطوات المحلي (sensors.js) بيبدأ من صفر رغم إن
+    // daily_steps الحقيقية موجودة أصلاً في صف البروفايل. بعد
+    // applyDailyCheckIn فوق (اللي ممكن يحدّث currentProfileRow لو
+    // السيرفر عمل Reset ليوم جديد)، بنزبط العداد المحلي على أحدث قيمة
+    // معروفة من Supabase - reconcileWithServerSteps بتتجاهل النداء لو
+    // القيمة المحلية أصلاً أكبر أو مساوية (مفيش تراجع للخلف).
+    if (currentProfileRow) {
+        reconcileWithServerSteps(currentProfileRow.daily_steps ?? 0);
+        // (جديد) نفس فكرة السطر اللي فوق بالظبط بس للرقم القياسي
+        // (best_daily_steps) - عشان "رقمك القياسي" يفضل صح عبر كل
+        // الأجهزة لنفس الحساب، مش بس محفوظ محليًا على جهاز واحد
+        reconcileServerBestSteps(currentProfileRow.best_daily_steps ?? 0);
     }
 
     // تحميل الأوسمة الحقيقية وقائمة الأصدقاء (المرحلتين 4 و5) بعد ما
@@ -4397,6 +4186,10 @@ export async function initProfileUI(user) {
         // الثغرة دي من جذرها، مش بس بصريًا.
         currentAuthUser = null;
         currentProfileRow = null;
+        // (إصلاح - باج حقيقي) يصفّر عداد الخطوات المحلي في sensors.js وقت
+        // الخروج/وضع الزائر، عشان لو حساب تاني دخل بعد كده على نفس
+        // الجهاز مياخدش خطوات الحساب اللي خرج غلط (شوف syncActiveUser)
+        syncActiveUser(null);
         // (إصلاح) نصفّر baseline الأوسمة كمان - لو حساب تاني دخل بعد كده
         // على نفس الجهاز، مينفعش يفضل شايف badgesLoadedOnce=true وbadgesData
         // بتاعة الحساب اللي خرج (هتتفحص واحدة صح من loadAndRenderRealProfile

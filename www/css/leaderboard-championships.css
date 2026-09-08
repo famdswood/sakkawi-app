@@ -469,6 +469,23 @@
     box-shadow: 0 0 0 3px var(--lux-900), 0 0 0 4px var(--champ-bronze-500);
 }
 
+/* (جديد) كارت المستخدم الحالي نفسه لو ترتيبه جوه أعلى 3 (Top 3) - ring
+   تركواز إضافي حوالين الصورة (نفس لون --champ-daily-* المستخدم لثيم
+   البطولة اليومية، عشان يبقى واضح ومميز عن ألوان الميداليات الدهب/فضة/
+   برونز نفسها) + توهج خفيف تحت الكارت. كلاسه بيتحط/يتشال ديناميكياً من
+   renderLeaderboardPodium() في js/leaderboard.js مع كل رسم */
+.podium-card-self .podium-avatar {
+    box-shadow: 0 0 0 3px var(--lux-900), 0 0 0 5px var(--champ-daily-400), 0 0 16px rgba(var(--champ-daily-rgb), 0.55);
+}
+.podium-card-self::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 1.1rem 1.1rem 0 0;
+    box-shadow: 0 0 0 1px rgba(var(--champ-daily-rgb), 0.35) inset;
+    pointer-events: none;
+}
+
 /* ==================================================================
    4) شريط الإحصائيات المزدوج (Dual-Stat Badge) - "خطوات | نقاط"
    ================================================================== */

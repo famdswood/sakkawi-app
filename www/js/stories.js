@@ -1083,9 +1083,6 @@ async function deleteCurrentStory() {
     // ممكن يكون واقع دلوقتي في وضع الزائر (معاهوش حساب/مش مسجل دخول
     // فعليًا) - في الحالة دي بردو مينفعش يحذف، زي أي عملية حساسة تانية
     if (window.isGuestMode) {
-        document.dispatchEvent(new CustomEvent('app:toast', {
-            detail: { message: 'التصفح فقط متاح دلوقتي، متقدرش تحذف الاستوري', type: 'info' },
-        }));
         return;
     }
 
@@ -1154,8 +1151,6 @@ async function performDeleteCurrentStory() {
         const ownerId = story.userId;
         storiesData = storiesData.filter((item) => item.id !== story.id);
         currentGroupStoryIndices = getUserStoryIndices(ownerId);
-
-        document.dispatchEvent(new CustomEvent('app:toast', { detail: { message: 'اتمسحت الاستوري' } }));
 
         if (currentGroupStoryIndices.length === 0) {
             closeStory();
@@ -2171,7 +2166,6 @@ async function publishStory() {
 
     const currentUser = await getCurrentUser();
     if (!currentUser) {
-        document.dispatchEvent(new CustomEvent('app:toast', { detail: { message: 'لازم تسجّل دخول الأول عشان تنشر استوري' } }));
         return;
     }
 
@@ -2268,7 +2262,6 @@ async function publishStory() {
             viewed: false,
         });
 
-        document.dispatchEvent(new CustomEvent('app:toast', { detail: { message: 'اتنشرت استوريك بنجاح!' } }));
         document.dispatchEvent(new CustomEvent('stories:published', { detail: { story: data } }));
 
         closeCreateStoryModal();

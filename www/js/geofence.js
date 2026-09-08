@@ -229,14 +229,94 @@ export class GeofenceLocationError extends Error {
 
 
 /**
+ * (إصلاح - باج حقيقي "التطبيق مش بيطلب إذن الموقع"): طلب الموقع عن
+ * طريق navigator.geolocation الخام (Web API عادي) جوه WebView تطبيق
+ * Capacitor على أندرويد مش موثوق فيه - الـ WebView الافتراضي مش مربوط
+ * تلقائيًا بنظام أذونات أندرويد الحقيقي (Runtime Permissions)، فمعظم
+ * الوقت بيرفض الطلب فورًا بكود PERMISSION_DENIED من غير ما يطلع أي
+ * نافذة إذن حقيقية للمستخدم أصلاً - وده بالظبط اللي بيحصل: المستخدم
+ * جوه نطاق نزلة عبيد فعليًا، بس التطبيق بيقوله "مش في المنطقة" لأن
+ * طلب الموقع نفسه فشل من الأول، مش لأنه فعلاً برّه النطاق.
+ *
+ * الحل: نستخدم بلجن @capacitor/geolocation الرسمي (Capacitor.Plugins.
+ * Geolocation) وقت ما التطبيق شغال فعليًا كتطبيق أصلي (isNativePlatform)
+ * - هو ده اللي فعليًا بيعرف يطلع نافذة إذن الموقع الحقيقية بتاعة
+ * أندرويد/iOS ويستنى قرار المستخدم، بنفس فلسفة sensors.js مع
+ * Capacitor.Plugins.StepCounter. لسه بنسيب navigator.geolocation
+ * الخام شغال كـ fallback وقت التطوير العادي في المتصفح (لما
+ * window.Capacitor مش موجود أو مش تطبيق أصلي).
+ *
+ * ⚠️ متطلب خارج الكود ده: لازم يتضاف @capacitor/geolocation فعليًا
+ * للمشروع (npm install @capacitor/geolocation && npx cap sync)،
+ * وتتضاف صلاحيات الموقع (ACCESS_FINE_LOCATION/ACCESS_COARSE_LOCATION)
+ * في AndroidManifest.xml (والمكافئ في iOS Info.plist) - من غيرهم
+ * الطلب هيفضل يفشل حتى مع الكود ده.
+ */
+async function getNativeUserCoordinates() {
+    const Geolocation = window.Capacitor?.Plugins?.Geolocation;
+
+    if (!Geolocation) {
+        // البلجن مش متضاف للمشروع أصلاً (شوف الملحوظة فوق) - نرجع نفس
+        // خطأ "غير مدعوم" بدل ما نكسر التطبيق بخطأ غامض
+        throw new GeofenceLocationError(GEOLOCATION_ERROR_MESSAGES.UNSUPPORTED, 'UNSUPPORTED');
+    }
+
+    // (1) طلب الإذن صراحة الأول - ده اللي فعليًا بيطلع نافذة إذن
+    // الموقع الأصلية لأندرويد/iOS، بعكس navigator.geolocation الخام
+    // اللي كان بيرفض من غير ما يسأل خالص
+    let permissionStatus;
+    try {
+        permissionStatus = await Geolocation.requestPermissions();
+    } catch (err) {
+        console.warn('فشل طلب إذن الموقع من Capacitor Geolocation:', err);
+        throw new GeofenceLocationError(GEOLOCATION_ERROR_MESSAGES[1], 1);
+    }
+
+    const isGranted =
+        permissionStatus?.location === 'granted' || permissionStatus?.coarseLocation === 'granted';
+
+    if (!isGranted) {
+        throw new GeofenceLocationError(GEOLOCATION_ERROR_MESSAGES[1], 1);
+    }
+
+    // (2) بعد التأكد من الإذن، نجيب الإحداثيات الفعلية
+    try {
+        const position = await Geolocation.getCurrentPosition({
+            enableHighAccuracy: true,
+            timeout: 15000,
+        });
+
+        return {
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+            accuracyMeters: position.coords.accuracy,
+        };
+    } catch (err) {
+        const errorCode = err?.code || 'UNKNOWN';
+        const arabicMessage = GEOLOCATION_ERROR_MESSAGES[errorCode] || GEOLOCATION_ERROR_MESSAGES.UNKNOWN;
+        console.warn('فشل جلب الموقع من Capacitor Geolocation:', err);
+        throw new GeofenceLocationError(arabicMessage, errorCode);
+    }
+}
+
+/**
  * طلب إذن الوصول لموقع المستخدم الجغرافي، وجلب أحدث إحداثيات متاحة
  * بأعلى دقة ممكنة (enableHighAccuracy: true).
+ *
+ * (إصلاح - باج حقيقي): بقت بتختار المصدر المناسب تلقائيًا - بلجن
+ * Capacitor.Plugins.Geolocation الأصلي جوه التطبيق الحقيقي على
+ * الموبايل (شوف getNativeUserCoordinates فوق)، أو navigator.geolocation
+ * الخام كـ fallback وقت التطوير في متصفح عادي بس.
  *
  * @returns {Promise<{latitude: number, longitude: number, accuracyMeters: number}>}
  *          يرفض الـ Promise (reject) بكائن من نوع GeofenceLocationError
  *          يحتوي رسالة عربية جاهزة للعرض مباشرة للمستخدم.
  */
 export function getUserCoordinates() {
+    if (window.Capacitor?.isNativePlatform?.()) {
+        return getNativeUserCoordinates();
+    }
+
     return new Promise((resolve, reject) => {
         // (1) التأكد أولًا إن المتصفح أصلًا بيدعم خاصية تحديد الموقع
         if (!('geolocation' in navigator)) {
