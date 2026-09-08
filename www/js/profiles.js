@@ -72,6 +72,8 @@ import { showAuthGate } from './onboarding.js';
 // نقطة "أونلاين الآن" الخضراء فوق صورة البروفايل (مقيّدة: نفسي/صديق
 // مقبول/أدمن بس - شوف الشرح الكامل في js/presence.js)
 import { presenceDotHtml, loadAndApplyPresence } from './presence.js';
+// (جديد - كاش الأوفلاين) شوف js/offline-cache.js للتفاصيل الكاملة
+import { fetchWithCache } from './offline-cache.js';
 
 /**
  * أيقونة "مفيش صورة" العامة الموحّدة - Data URI جاهزة تتحط مباشرة كـ src
@@ -357,6 +359,36 @@ async function fetchUserProfile(userId) {
     }
 
     return data;
+}
+
+/**
+ * (كاش الأوفلاين) نسخة "خام" من fetchUserProfile تُستخدم فقط في
+ * loadAndRenderRealProfile عن طريق fetchWithCache - بترجع null صراحة
+ * عند فشل حقيقي في الجلب (مشكلة شبكة/سيرفر)، أو { profile: data }
+ * (حتى لو data نفسها null - يعني صف البروفايل مش موجود فعلاً، مثلاً فشل
+ * الـ insert وقت التسجيل) في حالة النجاح - نفس فلسفة fetchHomeBannerRow
+ * في js/banner.js بالظبط، عشان fetchWithCache تقدر تفرّق بين "الطلب
+ * فشل، سيب المعروض زي ما هو" و"الطلب نجح ورجع إن الصف مش موجود فعلاً".
+ * fetchUserProfile الأصلية فوق فضلت من غير أي تغيير لأنها كمان بتتستخدم
+ * مباشرة (بدون كاش) في refreshProfileAfterDailyQuestion بعد كتابة فعلية
+ * (إجابة سؤال يومي) واللي محتاجة فعلياً أحدث نسخة من السيرفر وقتها، مش
+ * كاش قديم ممكن يكون لسه مش شايف نتيجة الكتابة دي.
+ * @param {string} userId
+ * @returns {Promise<{profile: object|null}|null>}
+ */
+async function fetchUserProfileFromServer(userId) {
+    const { data, error } = await supabaseClient
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .maybeSingle();
+
+    if (error) {
+        console.error('خطأ في جلب بيانات البروفايل الحقيقية:', error.message);
+        return null;
+    }
+
+    return { profile: data };
 }
 
 /**
@@ -2161,7 +2193,10 @@ async function fetchIncomingFriendRequests(userId) {
 
 /**
  * تحميل قائمة الأصدقاء المقبولين + طلبات الصداقة الواردة معاً، ورسمهم
- * تُستدعى من initProfileUI وبعد أي عملية إضافة/حذف/قبول/رفض ناجحة
+ * تُستدعى بعد أي عملية إضافة/حذف/قبول/رفض ناجحة (مش من التحميل الأول -
+ * شوف loadAndRenderFriendsCached تحت) - قراءة مباشرة من الشبكة من غير
+ * كاش، بالعمد: المستخدم لسه عامل عملية دلوقتي وبيتوقع يشوف نتيجتها
+ * فعلياً على طول، مش نسخة قديمة من الكاش لحد ما رد الشبكة يوصل
  * @param {string} userId
  */
 async function loadAndRenderFriends(userId) {
@@ -2175,6 +2210,130 @@ async function loadAndRenderFriends(userId) {
 
     renderFriends();
     renderIncomingFriendRequests();
+}
+
+/**
+ * (كاش الأوفلاين) نسخة "خام" من fetchAcceptedFriends تُستخدم فقط في
+ * loadAndRenderFriendsCached تحت - بترجع null صراحة عند فشل حقيقي بدل []
+ * (زي fetchAcceptedFriends الأصلية فوق) عشان fetchWithCache تقدر تفرّق
+ * بين "الطلب فشل، سيب المعروض زي ما هو" و"الطلب نجح ورجع إن مفيش
+ * أصدقاء فعلاً" - fetchAcceptedFriends الأصلية فضلت من غير تغيير لأنها
+ * بتتستخدم في loadAndRenderFriends فوق (تحديث بعد كتابة، مش محتاج كاش)
+ * @param {string} userId
+ * @returns {Promise<Array<object>|null>}
+ */
+async function fetchAcceptedFriendsFromServer(userId) {
+    const { data: relations, error: relationsError } = await supabaseClient
+        .from('friends')
+        .select('id, requester_id, addressee_id')
+        .or(`requester_id.eq.${userId},addressee_id.eq.${userId}`)
+        .eq('status', 'accepted');
+
+    if (relationsError) {
+        console.error('خطأ في جلب علاقات الصداقة:', relationsError.message);
+        return null;
+    }
+
+    if (!relations || relations.length === 0) return [];
+
+    const friendIdByRelationId = new Map();
+    relations.forEach((rel) => {
+        const friendId = rel.requester_id === userId ? rel.addressee_id : rel.requester_id;
+        friendIdByRelationId.set(rel.id, friendId);
+    });
+
+    const friendIds = [...new Set(friendIdByRelationId.values())];
+
+    const { data: friendProfiles, error: profilesError } = await supabaseClient
+        .from('public_profiles')
+        .select('id, full_name, avatar_url, points')
+        .in('id', friendIds);
+
+    if (profilesError) {
+        console.error('خطأ في جلب بيانات بروفايلات الأصدقاء:', profilesError.message);
+        return null;
+    }
+
+    const profileById = new Map((friendProfiles || []).map((p) => [p.id, p]));
+
+    return [...friendIdByRelationId.entries()].map(([relationId, friendId]) => {
+        const profile = profileById.get(friendId);
+        return {
+            id: relationId,
+            userId: friendId,
+            name: profile?.full_name || 'بطل',
+            points: profile?.points ?? 0,
+            avatar: profile?.avatar_url || DEFAULT_AVATAR_URI,
+        };
+    });
+}
+
+/**
+ * (كاش الأوفلاين) نفس فكرة fetchAcceptedFriendsFromServer فوق بس
+ * لطلبات الصداقة الواردة - بترجع null عند فشل حقيقي بدل []
+ * @param {string} userId
+ * @returns {Promise<Array<object>|null>}
+ */
+async function fetchIncomingFriendRequestsFromServer(userId) {
+    const { data: relations, error: relationsError } = await supabaseClient
+        .from('friends')
+        .select('id, requester_id')
+        .eq('addressee_id', userId)
+        .eq('status', 'pending');
+
+    if (relationsError) {
+        console.error('خطأ في جلب طلبات الصداقة الواردة:', relationsError.message);
+        return null;
+    }
+
+    if (!relations || relations.length === 0) return [];
+
+    const requesterIds = [...new Set(relations.map((r) => r.requester_id))];
+
+    const { data: requesterProfiles, error: profilesError } = await supabaseClient
+        .from('public_profiles')
+        .select('id, full_name, avatar_url')
+        .in('id', requesterIds);
+
+    if (profilesError) {
+        console.error('خطأ في جلب بيانات مُرسلي طلبات الصداقة:', profilesError.message);
+        return null;
+    }
+
+    const profileById = new Map((requesterProfiles || []).map((p) => [p.id, p]));
+
+    return relations.map((rel) => {
+        const profile = profileById.get(rel.requester_id);
+        return {
+            id: rel.id,
+            requesterId: rel.requester_id,
+            name: profile?.full_name || 'بطل',
+            avatar: profile?.avatar_url || DEFAULT_AVATAR_URI,
+        };
+    });
+}
+
+/**
+ * (كاش الأوفلاين) نقطة الدخول لتحميل الأصدقاء وطلبات الصداقة الواردة
+ * أول ما تبويب البروفايل يتفتح (شوف loadAndRenderRealProfile) - بتعرض
+ * النسخة المخزّنة محلياً فوراً لكل مفتاح لو موجودة، وتحدّثها في الخلفية
+ * تلقائياً بعد كل قراءة ناجحة من الشبكة. مفتاحين مستقلين (cached_friends_list
+ * / cached_friend_requests) عشان كل نوع بيانات يتحدّث لوحده من غير ما
+ * ينتظر التاني. ملحوظة: loadAndRenderFriends() فوق فضلت زي ما هي
+ * (بدون كاش) وبتتستخدم بعد أي عملية إضافة/حذف/قبول/رفض صداقة
+ * @param {string} userId
+ */
+async function loadAndRenderFriendsCached(userId) {
+    await Promise.all([
+        fetchWithCache(`cached_friends_list:${userId}`, () => fetchAcceptedFriendsFromServer(userId), (data) => {
+            friendsData = data;
+            renderFriends();
+        }),
+        fetchWithCache(`cached_friend_requests:${userId}`, () => fetchIncomingFriendRequestsFromServer(userId), (data) => {
+            incomingFriendRequests = data;
+            renderIncomingFriendRequests();
+        }),
+    ]);
 }
 
 /** أقصى عدد أصدقاء بيتعرض في القائمة المختصرة جوه تبويب البروفايل قبل ما زرار "شوف كل الأصدقاء" يظهر بدل الباقي - شوف renderFriends تحت */
@@ -3356,74 +3515,105 @@ async function loadAndRenderRealProfile(user) {
     // كـ"تقدم أعلى" للحساب الجديد
     syncActiveUser(user.id);
 
-    const profile = await fetchUserProfile(user.id);
-    currentProfileRow = profile;
+    // (كاش الأوفلاين) كل الخطوات اللي كانت جوه الدالة دي قبل التعديل
+    // (تسجيل حضور/مزامنة الخطوات/جلب الأوسمة والأصحاب) دلوقتي مجمّعة في
+    // runProfilePipeline تحت، ومحمية بـ pipelineRan عشان تتنفذ **مرة
+    // واحدة بس** لكل نداء لـ loadAndRenderRealProfile - مش مرتين (مرة
+    // بالبروفايل المخزّن محلياً في الكاش لعرض سريع، ومرة تانية بالبروفايل
+    // الحقيقي لما رد الشبكة يوصل)، غير كده كنا هنعمل RPC مزدوج
+    // (apply_steps_progress) وفحص أوسمة/جلب أصحاب مكرر من غير أي فايدة.
+    // الكتابة الفعلية جوه applyDailyCheckIn بتعتمد على السيرفر كمصدر
+    // الحقيقة (RPC مش قيم محلية - شوف applyStepsProgressServerSide)،
+    // فتشغيلها بأول بيانات توصلنا (كاش أو شبكة أيهم الأسرع) آمن.
+    let pipelineRan = false;
 
-    // (إصلاح - باج حقيقي) currentAuthUser/currentProfileRow دلوقتي
-    // متظبطين - أي خطوات اتجمّعت في pendingStepsDelta قبل كده (من غير
-    // ما تتبعت، لأن المستخدم ماكانش مسجّل دخول لسه) موجودة أصلاً في
-    // الذاكرة (recordStepsProgress بتجمّعها هناك مباشرة) - مبنعملش
-    // restorePendingStepsFromStorage هنا عشان مش نضيفها مرة تانية فوق
-    // نفسها (النسخة المحفوظة في localStorage هي نفس القيمة اللي في
-    // الذاكرة، مش قيمة إضافية). بنبعتها فورًا دلوقتي بدل ما تستنى معاد
-    // الـ Flush الدوري (8 ثواني) أو أسوأ من كده تفضل واقفة لو المستخدم
-    // قفل التطبيق قبل ما الـ Timer يجيله دوره. bindStepsFlushLifecycleEvents
-    // (بتتنادى لاحقًا من initProfileUI) هي المسؤولة عن استرجاع أي رصيد
-    // اتحفظ من *جلسة سابقة* فعلاً اتقفلت (شوف restorePendingStepsFromStorage).
-    if (pendingStepsDelta > 0) {
-        flushPendingStepsBatch();
-    }
+    const runProfilePipeline = async (profile) => {
+        if (pipelineRan) return;
+        pipelineRan = true;
 
-    renderProfileHeader(profile, user);
-    updateProfileStats({
-        totalSteps: profile?.total_steps ?? 0,
-        correctAnswers: profile?.correct_answers ?? 0,
-        bestStreakDays: profile?.best_streak_days ?? 0,
-        points: profile?.points ?? 0,
-        streakCount: profile?.streak_count ?? 0,
-        dailyChampionshipWins: profile?.daily_championship_wins ?? 0,
-        weeklyChampionshipWins: profile?.weekly_championship_wins ?? 0,
-        monthlyChampionshipWins: profile?.monthly_championship_wins ?? 0,
+        // (إصلاح - باج حقيقي) currentAuthUser/currentProfileRow دلوقتي
+        // متظبطين - أي خطوات اتجمّعت في pendingStepsDelta قبل كده (من
+        // غير ما تتبعت، لأن المستخدم ماكانش مسجّل دخول لسه) موجودة أصلاً
+        // في الذاكرة (recordStepsProgress بتجمّعها هناك مباشرة) -
+        // مبنعملش restorePendingStepsFromStorage هنا عشان مش نضيفها مرة
+        // تانية فوق نفسها. bindStepsFlushLifecycleEvents (بتتنادى
+        // لاحقًا من initProfileUI) هي المسؤولة عن استرجاع أي رصيد اتحفظ
+        // من *جلسة سابقة* فعلاً اتقفلت (شوف restorePendingStepsFromStorage).
+        if (pendingStepsDelta > 0) {
+            flushPendingStepsBatch();
+        }
+
+        // "تسجيل حضور" اليوم بعد ما البروفايل اتحمّل بنجاح - ده اللي
+        // بيحقق شرط "الستريك +1 عند تسجيل الدخول" (المرحلة 3). بنتجاهلها
+        // لو الصف مش موجود أصلاً (مستخدم لسه معملش "إعداد البطل لأول مرة")
+        if (profile) {
+            await applyDailyCheckIn();
+        }
+
+        // (إصلاح - باج حقيقي) لو دخلنا من جهاز/متصفح جديد، localStorage
+        // هنا فاضي فعداد الخطوات المحلي (sensors.js) بيبدأ من صفر رغم إن
+        // daily_steps الحقيقية موجودة أصلاً في صف البروفايل. بعد
+        // applyDailyCheckIn فوق (اللي ممكن يحدّث currentProfileRow لو
+        // السيرفر عمل Reset ليوم جديد)، بنزبط العداد المحلي على أحدث
+        // قيمة معروفة من Supabase - reconcileWithServerSteps بتتجاهل
+        // النداء لو القيمة المحلية أصلاً أكبر أو مساوية (مفيش تراجع للخلف).
+        if (currentProfileRow) {
+            reconcileWithServerSteps(currentProfileRow.daily_steps ?? 0);
+            // (جديد) نفس فكرة السطر اللي فوق بالظبط بس للرقم القياسي
+            // (best_daily_steps) - عشان "رقمك القياسي" يفضل صح عبر كل
+            // الأجهزة لنفس الحساب، مش بس محفوظ محليًا على جهاز واحد
+            reconcileServerBestSteps(currentProfileRow.best_daily_steps ?? 0);
+        }
+
+        // تحميل الأوسمة الحقيقية وقائمة الأصدقاء (المرحلتين 4 و5) بعد ما
+        // نتأكد إن عندنا currentAuthUser صحيح - loadAndRenderFriendsCached
+        // (كاش الأوفلاين) بدل loadAndRenderFriends هنا تحديداً عشان تبويب
+        // البروفايل يعرض آخر قائمة أصدقاء/طلبات محفوظة فوراً لو النت مقطوع
+        await Promise.all([
+            loadAndRenderBadges(user.id),
+            loadAndRenderFriendsCached(user.id),
+        ]);
+
+        // (إصلاح - تكرار توست الأوسمة) بمجرد ما نجيب الأوسمة الحقيقية أول
+        // مرة في الجلسة دي، بنسجّل كل وسام مفتوح بالفعل دلوقتي كـ"اتبعتله
+        // توست قبل كده" في localStorage (من غير أي توست فعلي هنا - بس
+        // تسجيل). ده بيضمن إن حتى أول مرة يتفعّل فيها الإصلاح ده، أي وسام
+        // المستخدم كسبه من زمان مش هيظهرله توست تاني أبداً - التوست هيفضل
+        // مقصور بس على أي وسام "جديد فعلاً" هيتفتح بعد كده (شوف checkAndUnlockBadges)
+        markBadgesAsNotified(user.id, badgesData.filter((b) => b.unlocked).map((b) => b.id));
+    };
+
+    // (كاش الأوفلاين) نقطة الدخول الرئيسية - تعرض النسخة المخزّنة محلياً
+    // (cached_profile:<userId>) فوراً لو موجودة، وتحدّثها في الخلفية
+    // تلقائياً بعد كل قراءة ناجحة من الشبكة
+    await fetchWithCache(`cached_profile:${user.id}`, () => fetchUserProfileFromServer(user.id), async ({ profile }) => {
+        currentProfileRow = profile;
+
+        renderProfileHeader(profile, user);
+        updateProfileStats({
+            totalSteps: profile?.total_steps ?? 0,
+            correctAnswers: profile?.correct_answers ?? 0,
+            bestStreakDays: profile?.best_streak_days ?? 0,
+            points: profile?.points ?? 0,
+            streakCount: profile?.streak_count ?? 0,
+            dailyChampionshipWins: profile?.daily_championship_wins ?? 0,
+            weeklyChampionshipWins: profile?.weekly_championship_wins ?? 0,
+            monthlyChampionshipWins: profile?.monthly_championship_wins ?? 0,
+        });
+
+        await runProfilePipeline(profile);
     });
 
-    // "تسجيل حضور" اليوم بعد ما البروفايل اتحمّل بنجاح - ده اللي بيحقق
-    // شرط "الستريك +1 عند تسجيل الدخول" (المرحلة 3). بنتجاهلها لو
-    // الصف مش موجود أصلاً (مستخدم لسه معملش "إعداد البطل لأول مرة")
-    if (profile) {
-        await applyDailyCheckIn();
+    // (كاش الأوفلاين) مفيش كاش محفوظ ومفيش رد شبكة نجح خالص (أول فتح
+    // للتطبيق من غير نت ومن غير أي كاش سابق على الجهاز) - fetchWithCache
+    // فوق ماكانتش نادت الـ Callback خالص في الحالة دي، فبنعرض نفس الحالة
+    // الافتراضية اللي initProfileUI بتعرضها قبل استدعاء الدالة دي أصلاً
+    // (البروفايل الحقيقي هيظهر لوحده أول ما المستخدم يفتح الشاشة تاني
+    // والنت يرجع، زي أي شاشة تانية في المشروع - مفيش Sync يدوي هنا)
+    if (!pipelineRan) {
+        renderProfileHeader(null, user);
+        updateProfileStats();
     }
-
-    // (إصلاح - باج حقيقي) لو دخلنا من جهاز/متصفح جديد، localStorage
-    // هنا فاضي فعداد الخطوات المحلي (sensors.js) بيبدأ من صفر رغم إن
-    // daily_steps الحقيقية موجودة أصلاً في صف البروفايل. بعد
-    // applyDailyCheckIn فوق (اللي ممكن يحدّث currentProfileRow لو
-    // السيرفر عمل Reset ليوم جديد)، بنزبط العداد المحلي على أحدث قيمة
-    // معروفة من Supabase - reconcileWithServerSteps بتتجاهل النداء لو
-    // القيمة المحلية أصلاً أكبر أو مساوية (مفيش تراجع للخلف).
-    if (currentProfileRow) {
-        reconcileWithServerSteps(currentProfileRow.daily_steps ?? 0);
-        // (جديد) نفس فكرة السطر اللي فوق بالظبط بس للرقم القياسي
-        // (best_daily_steps) - عشان "رقمك القياسي" يفضل صح عبر كل
-        // الأجهزة لنفس الحساب، مش بس محفوظ محليًا على جهاز واحد
-        reconcileServerBestSteps(currentProfileRow.best_daily_steps ?? 0);
-    }
-
-    // تحميل الأوسمة الحقيقية وقائمة الأصدقاء (المرحلتين 4 و5) بعد ما
-    // نتأكد إن عندنا currentAuthUser صحيح
-    // (ملحوظة: كان هنا كمان جلب "أسئلة الكويز المُجاب عليها النهاردة"
-    // بتاعة تحدي الذكاء اليومي القديم - اتشال مع باقي منطق الكويز القديم)
-    await Promise.all([
-        loadAndRenderBadges(user.id),
-        loadAndRenderFriends(user.id),
-    ]);
-
-    // (إصلاح - تكرار توست الأوسمة) بمجرد ما نجيب الأوسمة الحقيقية أول
-    // مرة في الجلسة دي، بنسجّل كل وسام مفتوح بالفعل دلوقتي كـ"اتبعتله
-    // توست قبل كده" في localStorage (من غير أي توست فعلي هنا - بس
-    // تسجيل). ده بيضمن إن حتى أول مرة يتفعّل فيها الإصلاح ده، أي وسام
-    // المستخدم كسبه من زمان مش هيظهرله توست تاني أبداً - التوست هيفضل
-    // مقصور بس على أي وسام "جديد فعلاً" هيتفتح بعد كده (شوف checkAndUnlockBadges)
-    markBadgesAsNotified(user.id, badgesData.filter((b) => b.unlocked).map((b) => b.id));
 }
 
 /**

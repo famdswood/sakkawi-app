@@ -44,6 +44,8 @@ import { presenceDotHtml, loadAndApplyPresence } from './presence.js';
 // من profiles.js وبتاخد userId - لو الاسم أو التوقيع مختلف عندك هناك
 // عدّل الاستدعاء في setPeerHeader بس.
 import { openPublicProfile } from './profiles.js';
+// (جديد - كاش الأوفلاين) شوف js/offline-cache.js للتفاصيل الكاملة
+import { fetchWithCache } from './offline-cache.js';
 
 /* ------------------------------------------------------------------
    1) حالة الموديول
@@ -169,7 +171,7 @@ export async function openSupportChatWithAdmin() {
     showThreadView();
     setThreadLoading();
 
-    await loadAndRenderConversation(currentUser.id);
+    await loadAndRenderConversationCached(currentUser.id);
     await markAdminMessagesAsReadForMe();
     subscribeToActiveConversation(currentUser.id);
 }
@@ -194,7 +196,7 @@ export async function openSupportChatAsAdminWithUser(targetUserId) {
     showThreadView();
     setThreadLoading();
 
-    await loadAndRenderConversation(targetUserId);
+    await loadAndRenderConversationCached(targetUserId);
     await supabaseClient.rpc('admin_mark_support_conversation_read', { p_user_id: targetUserId });
     await supabaseClient.rpc('admin_mark_conversation_delivered_and_read', { p_user_id: targetUserId });
     refreshAdminUnreadBadge();
@@ -508,7 +510,7 @@ function openAdminInbox() {
     setTitle('صندوق رسائل الدعم');
     setHeaderExitMode('close');
     showListView();
-    loadAndRenderConversationsList();
+    loadAndRenderConversationsListCached();
 }
 
 
@@ -697,7 +699,7 @@ function showConversationsList() {
     setTitle('صندوق رسائل الدعم');
     setHeaderExitMode('close');
     showListView();
-    loadAndRenderConversationsList();
+    loadAndRenderConversationsListCached();
 }
 
 
@@ -705,29 +707,81 @@ function showConversationsList() {
    7) قائمة المحادثات (الأدمن)
    ------------------------------------------------------------------ */
 
+/**
+ * تحميل قائمة محادثات الأدمن مباشرة من الشبكة (بدون كاش) - تُستخدم من
+ * الـ Realtime (subscribeAdminGlobalChannel) عشان القائمة تفضل محدّثة
+ * لحظياً بأحدث ترتيب/آخر رسالة أول ما محادثة جديدة توصل، مش نسخة كاش
+ * قديمة. شوف loadAndRenderConversationsListCached تحت للفتح الأول.
+ */
 async function loadAndRenderConversationsList() {
-    const listEl = document.getElementById('supportChatListView');
-    if (!listEl) return;
+    const conversations = await fetchConversationsListFromServer();
+    // فشل حقيقي - منلمسش المعروض حالياً (زي فلسفة fetchWithCache بالظبط)
+    if (conversations === null) return;
+    renderConversationsList(conversations);
+}
 
-    listEl.innerHTML = `<p class="text-center text-xs text-lux-500 font-bold py-6">جاري التحميل…</p>`;
-
+/**
+ * (كاش الأوفلاين) نسخة "خام" من جلب قائمة محادثات الأدمن - بترجع null
+ * صراحة عند فشل حقيقي (مشكلة شبكة/سيرفر)، أو المصفوفة (حتى لو فاضية -
+ * يعني فعلاً مفيش أي محادثات لسه) في حالة النجاح.
+ * @returns {Promise<Array<object>|null>}
+ */
+async function fetchConversationsListFromServer() {
     const { data, error } = await supabaseClient.rpc('admin_list_support_conversations');
 
     if (error) {
         console.error('[support-chat.js] فشل تحميل قائمة المحادثات:', error);
-        listEl.innerHTML = `<p class="text-center text-xs text-rose-400 font-bold py-6">تعذّر تحميل المحادثات. حاول تاني.</p>`;
-        return;
+        return null;
     }
 
-    if (!data || data.length === 0) {
+    return data || [];
+}
+
+/**
+ * رسم قائمة محادثات الأدمن من مصفوفة جاهزة - مفصولة عن الجلب نفسه
+ * (fetchConversationsListFromServer) عشان تُستخدم مع الكاش والتحديث
+ * اللحظي (Realtime) على السوا من غير تكرار منطق الرسم
+ * @param {Array<object>} conversations
+ */
+function renderConversationsList(conversations) {
+    const listEl = document.getElementById('supportChatListView');
+    if (!listEl) return;
+
+    if (!conversations || conversations.length === 0) {
         listEl.innerHTML = '';
         document.getElementById('supportChatEmptyState')?.classList.remove('hidden');
         return;
     }
 
+    document.getElementById('supportChatEmptyState')?.classList.add('hidden');
     listEl.innerHTML = '';
-    data.forEach((conversation) => listEl.appendChild(buildConversationRow(conversation)));
-    loadAndApplyPresence(data.map((conversation) => conversation.user_id));
+    conversations.forEach((conversation) => listEl.appendChild(buildConversationRow(conversation)));
+    loadAndApplyPresence(conversations.map((conversation) => conversation.user_id));
+}
+
+/**
+ * (كاش الأوفلاين) نقطة الدخول لتحميل قائمة محادثات الأدمن أول ما صندوق
+ * الرسائل يتفتح - بتعرض النسخة المخزّنة محلياً (cached_support_conversations_list)
+ * فوراً لو موجودة، وتحدّثها في الخلفية تلقائياً بعد كل قراءة ناجحة من
+ * الشبكة. تُستخدم بس من showConversationsList (الفتح الأول) - الـ
+ * Realtime بيفضل يستخدم loadAndRenderConversationsList المباشرة فوق
+ */
+async function loadAndRenderConversationsListCached() {
+    const listEl = document.getElementById('supportChatListView');
+    if (listEl) listEl.innerHTML = `<p class="text-center text-xs text-lux-500 font-bold py-6">جاري التحميل…</p>`;
+
+    let hasReceivedData = false;
+
+    await fetchWithCache('cached_support_conversations_list', fetchConversationsListFromServer, (conversations) => {
+        hasReceivedData = true;
+        renderConversationsList(conversations);
+    });
+
+    // مفيش كاش محفوظ ومفيش رد شبكة نجح خالص - نعرض رسالة خطأ واضحة بدل
+    // ما "جاري التحميل…" تفضل معلّقة للأبد (نفس فلسفة fetchPosts في posts.js)
+    if (!hasReceivedData && listEl) {
+        listEl.innerHTML = `<p class="text-center text-xs text-rose-400 font-bold py-6">تعذّر تحميل المحادثات. حاول تاني.</p>`;
+    }
 }
 
 function buildConversationRow(conversation) {
@@ -771,7 +825,7 @@ async function openConversationAsAdmin(userId) {
     showThreadView();
     setThreadLoading();
 
-    await loadAndRenderConversation(userId);
+    await loadAndRenderConversationCached(userId);
     await supabaseClient.rpc('admin_mark_support_conversation_read', { p_user_id: userId });
     await supabaseClient.rpc('admin_mark_conversation_delivered_and_read', { p_user_id: userId });
     refreshAdminUnreadBadge();
@@ -804,6 +858,48 @@ async function loadAndRenderConversation(userId) {
 
     activeConversationMessages = data || [];
     renderConversationMessages();
+}
+
+/**
+ * (كاش الأوفلاين) نسخة "خام" من جلب رسايل محادثة - بترجع null صراحة
+ * عند فشل حقيقي (مشكلة شبكة/سيرفر)، أو المصفوفة (حتى لو فاضية - يعني
+ * فعلاً مفيش رسايل لسه) في حالة النجاح. تُستخدم بس جوه
+ * loadAndRenderConversationCached تحت.
+ * @param {string} userId
+ * @returns {Promise<Array<object>|null>}
+ */
+async function fetchConversationFromServer(userId) {
+    const { data, error } = await supabaseClient
+        .from('support_messages')
+        .select('id, is_from_admin, content, created_at, delivered_at, read_at')
+        .eq('sender_id', userId)
+        .order('created_at', { ascending: true });
+
+    if (error) {
+        console.error('[support-chat.js] فشل تحميل المحادثة:', error);
+        return null;
+    }
+
+    return data || [];
+}
+
+/**
+ * (كاش الأوفلاين) نقطة الدخول لتحميل محادثة أول ما تتفتح - بتعرض النسخة
+ * المخزّنة محلياً (cached_support_chat:<userId>) فوراً لو موجودة،
+ * وتحدّثها في الخلفية تلقائياً بعد كل قراءة ناجحة من الشبكة. تُستخدم بس
+ * من openSupportChatWithAdmin/openConversationAsAdmin/openSupportChatAsAdminWithUser
+ * (فتح المحادثة أول مرة، سواء بادئها المستخدم العادي أو الأدمن). ملحوظة:
+ * loadAndRenderConversation فوق فضلت زي ما هي (بدون كاش)
+ * لأنها بتتستخدم كمان بعد إرسال رسالة (handleSendClick) وفي كل أحداث
+ * الـ Realtime (subscribeToActiveConversation) - المفروض دايماً تجيب
+ * أحدث نسخة فعلية من السيرفر في الحالتين دول، مش نسخة كاش قديمة
+ * @param {string} userId
+ */
+async function loadAndRenderConversationCached(userId) {
+    await fetchWithCache(`cached_support_chat:${userId}`, () => fetchConversationFromServer(userId), (data) => {
+        activeConversationMessages = data;
+        renderConversationMessages();
+    });
 }
 
 function renderConversationMessages() {

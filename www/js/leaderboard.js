@@ -58,6 +58,10 @@
 
 import { supabaseClient } from './supabase-config.js';
 import { restoreSession } from './auth.js';
+// (جديد - كاش الأوفلاين) fetchWithCache بتنفذ نمط Stale-While-Revalidate:
+// تعرض آخر نسخة محفوظة فوراً، وتحدّثها في الخلفية لو النت شغال - شوف
+// js/offline-cache.js للتفاصيل الكاملة
+import { fetchWithCache } from './offline-cache.js';
 // أيقونة "مفيش صورة" الموحّدة المستخدمة في كل مكان تاني بالمشروع (auth.js
 // وprofiles.js) - بدل الاعتماد القديم على placehold.co?text=بطل، اللي كان
 // بيتكسر ويظهر "؟؟؟" لأن خدمة placehold.co مابتعرفش ترندر الحروف العربية
@@ -542,8 +546,19 @@ function renderFeaturedBadgeInline(nameEl, featuredBadgeId) {
  *      rank_position نفسه محسوب صح عالمياً (ROW_NUMBER() على كل صفوف
  *      profiles قبل ما الـ LIMIT يتطبّق)، فمفيش مشكلة في دقة الأرقام
  *      الراجعة حتى لو مقطوعة عند 200.
+ *
+ * (تصحيح - كاش الأوفلاين) كانت الدالة دي بترجع [] عند فشل الـ RPC (نفس
+ * سلوكها الأصلي قبل إضافة الكاش)، وده كان بيسبب باج حقيقي بعد ربطها
+ * بـ fetchWithCache: أي خطأ شبكة/RPC عابر كان بيترجم لـ "نجاح فعلي
+ * برجوع مصفوفة فاضية" من وجهة نظر fetchWithCache (اللي بيفرّق بس بين
+ * null/undefined = فشل، وأي حاجة تانية = نجاح) - يعني الليدربورد
+ * المخزّن والمعروض صح كان بيتمسح وتحل محله شاشة فاضية لمجرد خطأ شبكة
+ * عابر، بدل ما يفضل زي ما هو زي فلسفة الكاش الأساسية. الدالة دي مش
+ * مستخدمة في أي مكان تاني في الملف غير جوه fetchWithCache (سطر ~1108)،
+ * فمفيش داعي نفصلها لنسخة "خام" منفصلة زي ما اتعمل في profiles.js -
+ * بنرجّع null صراحة عند الفشل هنا مباشرة بدل [].
  * @param {'today'|'week'|'month'} periodKey
- * @returns {Promise<Array<{id:string, full_name:string, avatar_url:string|null, points:number, total_steps:number, rank:number}>>}
+ * @returns {Promise<Array<object>|null>} null يعني فشل الجلب (خطأ شبكة/RPC)
  */
 async function fetchLeaderboardData(periodKey) {
     const periodType = PERIOD_TYPE_MAP[periodKey] || PERIOD_TYPE_MAP.today;
@@ -555,7 +570,7 @@ async function fetchLeaderboardData(periodKey) {
 
     if (error) {
         console.error(`خطأ في تنفيذ get_leaderboard(period_type: '${periodType}'):`, error.message);
-        return [];
+        return null;
     }
 
     return dedupeLeaderboardRowsById((data || []).map(normalizeLeaderboardRow), periodType);
@@ -1081,39 +1096,67 @@ async function loadAndRenderPeriod(periodKey) {
     if (!config) return;
 
     const requestToken = ++leaderboardFetchToken;
+
+    // بنعرض حالة التحميل (Skeleton) فوراً زي الأول - لو فيه كاش
+    // محفوظ، قراءته من IndexedDB هتوصل بعد أجزاء من الثانية وهتستبدل
+    // الـ Skeleton ده على طول (شوف renderLeaderboardResult تحت)، فمش
+    // هيبان فعلياً كـ "Flash" ملحوظ للمستخدم. لو مفيش كاش خالص (أول
+    // فتح للتطبيق على الجهاز ده)، دي هي الحالة اللي محتاجينها أصلاً
+    // لحد ما رد الشبكة يوصل.
     renderLeaderboardLoadingState();
 
-    let rows = [];
-    let totalUsersCount = null;
-    try {
-        // (المرحلة 7) بنجيب كتالوج الأوسمة بالتوازي مع صفوف الليدربورد
-        // نفسها (مش بعدها) - عشان لما نوصل لمرحلة الرسم (renderLeaderboardPodium/
-        // renderLeaderboardRemainingList) يكون الكاش جاهز فعلاً ونقدر
-        // نستخدمه sync جوه template الـ innerHTML، من غير Flicker
-        // (الشارة تظهر بعد الاسم بلحظة) زي لو جبناها بعد الرسم.
-        // (تحديث) وبرضه بالتوازي: إجمالي عدد المستخدمين المسجلين -
-        // مش مربوط بالفترة نفسها فعليًا، لكن بنجيبه هنا كل مرة (بدل
-        // تخزينه مرة واحدة بس) عشان يفضل محدّث مع أي تسجيل جديد
-        [rows, , totalUsersCount] = await Promise.all([
-            fetchLeaderboardData(periodKey),
-            ensureLeaderboardBadgesCatalogCache(),
-            fetchTotalRegisteredUsersCount(),
-        ]);
-    } catch (err) {
-        console.error('استثناء غير متوقع أثناء تحميل بيانات البطولة:', err);
+    // (جديد - كاش الأوفلاين) دالة الرسم بقت مفصولة في renderLeaderboardResult
+    // تحت عشان تتنادى مرتين محتمل: مرة فورية بالنسخة المخزّنة محلياً
+    // (لو موجودة، وده اللي بيحصل جوه fetchWithCache نفسها)، ومرة تانية
+    // لما رد الشبكة الحقيقي يوصل. Request Token بيتفحص جوه الدالة دي
+    // نفسها في الحالتين عشان لو المستخدم بدّل تبويب في الوقت ده، مفيش
+    // رسم قديم متأخر يظهر فوق التبويب الجديد.
+    let hasRenderedRows = false;
+
+    await Promise.all([
+        fetchWithCache(
+            `cached_leaderboard:${periodKey}`,
+            () => fetchLeaderboardData(periodKey),
+            (rows, _source) => {
+                if (requestToken !== leaderboardFetchToken) return;
+                hasRenderedRows = true;
+                renderLeaderboardResult(rows, config);
+            },
+        ),
+        fetchWithCache(
+            'cached_total_registered_users',
+            () => fetchTotalRegisteredUsersCount(),
+            (totalUsersCount) => {
+                if (requestToken !== leaderboardFetchToken) return;
+                renderRemainingParticipantsCount(totalUsersCount);
+            },
+        ),
+        // (المرحلة 7) كتالوج الأوسمة - نفس منطقه القديم زي ما هو، مش
+        // جزء من كاش الأوفلاين الجديد (كاش داخلي خاص بيه أصلاً)
+        ensureLeaderboardBadgesCatalogCache(),
+    ]);
+
+    // لو مفيش ولا كاش ولا رد شبكة نجح خالص (أول فتح للتطبيق من غير نت
+    // ومن غير أي كاش سابق على الجهاز ده) - نفضّي حالة التحميل بدل ما
+    // تفضل شغالة للأبد (Skeleton معلّق من غير أي محتوى ولا رسالة خطأ)
+    if (requestToken === leaderboardFetchToken && !hasRenderedRows) {
+        clearLeaderboardLoadingState();
     }
+}
 
-    // Request قديم وصل متأخر بعد ما المستخدم بدّل تبويب تاني بالفعل -
-    // بنتجاهل نتيجته تماماً (لا رسم ولا حتى إخفاء الـ Skeleton، عشان
-    // الـ Request الأحدث هو اللي هيتكفل بده لما يخلص هو)
-    if (requestToken !== leaderboardFetchToken) return;
-
+/**
+ * (جديد - كاش الأوفلاين) رسم نتيجة فترة بطولة معينة - مفصولة عن
+ * loadAndRenderPeriod عشان تتنادى مرتين: مرة بالداتا المخزّنة محلياً
+ * (فوراً)، ومرة بالداتا الحقيقية الجديدة من الشبكة لما توصل.
+ * @param {Array<object>} rows
+ * @param {{metric: string}} config - إعدادات الفترة النشطة (CHAMPIONSHIP_PERIODS[periodKey])
+ */
+function renderLeaderboardResult(rows, config) {
     leaderboardRows = rows;
 
     clearLeaderboardLoadingState();
     renderLeaderboardPodium(rows);
     renderLeaderboardRemainingList(rows);
-    renderRemainingParticipantsCount(totalUsersCount);
     renderSelfRankBar(rows, config.metric);
 
     // (نُقل من js/profiles.js - إصلاح باج "الأرقام الوهمية"): فتح وسام
@@ -1125,6 +1168,11 @@ async function loadAndRenderPeriod(periodKey) {
     // all-time وهمي) - الوسام ده مستثنى عمداً من Triggers قاعدة
     // البيانات لأن شرطه نسبي وسط كل المستخدمين مش عمود ثابت (شوف
     // الملحوظة في profiles.js فوق checkAndUnlockBadges)
+    //
+    // (ملحوظة - كاش الأوفلاين): الشرط ده ممكن يتنفذ مرتين (مرة بالكاش
+    // ومرة بالشبكة) لو المستخدم فعلاً تحت أول 3 - unlockBadge نفسها
+    // المفروض idempotent (فتح وسام مفتوح أصلاً مايعملش حاجة) زي ما هي
+    // شغالة دلوقتي مع أي إعادة نداء تانية للدالة دي أصلاً
     if (config.metric === 'points') {
         const currentUserId = getCurrentUserId();
         const myRow = currentUserId ? rows.find((row) => row.id === currentUserId) : null;

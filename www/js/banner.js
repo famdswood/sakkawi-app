@@ -17,6 +17,8 @@
    ================================================================== */
 
 import { supabaseClient } from './supabase-config.js';
+// (جديد - كاش الأوفلاين) شوف js/offline-cache.js للتفاصيل الكاملة
+import { fetchWithCache } from './offline-cache.js';
 
 /** اشتراك Realtime الحالي (لو شغال) - محفوظ عشان نقدر نلغيه لو الصفحة اتقفلت */
 let bannerRealtimeChannel = null;
@@ -87,8 +89,15 @@ function renderHomeBanner(row) {
     bannerEl.classList.remove('hidden');
 }
 
-/** بتجيب الصف الحالي من home_banner وترسمه - بتتنادى مرة عند فتح التطبيق */
-async function loadHomeBannerOnce() {
+/**
+ * بتجيب الصف الخام من home_banner من Supabase فقط (من غير رسم) - بترجع
+ * null فقط لو حصل خطأ فعلي (مشكلة شبكة/سيرفر)، وبترجع { row: data }
+ * (حتى لو data نفسها null، يعني "مفيش بانر فعلاً") في حالة النجاح - عشان
+ * fetchWithCache تقدر تفرّق بين "الطلب فشل، سيب المعروض زي ما هو" و
+ * "الطلب نجح ورجع إن مفيش بانر، اخفيه فعلاً واحفظ الحالة دي في الكاش"
+ * @returns {Promise<{row: object|null}|null>}
+ */
+async function fetchHomeBannerRow() {
     const { data, error } = await supabaseClient
         .from('home_banner')
         // [تعديل] لازم نجيب الأعمدة الجديدة هنا برضه، وإلا أول Refresh
@@ -99,13 +108,25 @@ async function loadHomeBannerOnce() {
         .maybeSingle();
 
     if (error) {
-        // فشل القراءة (مثلاً مشكلة شبكة مؤقتة) - مش هنعطّل باقي
-        // الصفحة، البانر ببساطة هيفضل مخفي (الحالة الافتراضية أصلاً)
+        // فشل القراءة (مثلاً مشكلة شبكة مؤقتة) - بنرجع null صراحة عشان
+        // fetchWithCache تعرف إن ده فشل حقيقي، مش "مفيش بانر فعلاً"
         console.error('[banner.js] فشل تحميل البانر:', error.message || error);
-        return;
+        return null;
     }
 
-    renderHomeBanner(data);
+    return { row: data };
+}
+
+/**
+ * (جديد - كاش الأوفلاين) بتجيب الصف الحالي من home_banner وترسمه -
+ * بتعرض النسخة المخزّنة محلياً فوراً (لو موجودة) قبل ما رد الشبكة
+ * يوصل، وتحدّث الكاش تلقائياً بعد كل قراءة ناجحة. بتتنادى مرة عند فتح
+ * التطبيق.
+ */
+async function loadHomeBannerOnce() {
+    await fetchWithCache('cached_home_banner', fetchHomeBannerRow, ({ row }) => {
+        renderHomeBanner(row);
+    });
 }
 
 /**

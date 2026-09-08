@@ -73,6 +73,8 @@ import { supabaseClient } from './supabase-config.js';
 import { getCurrentUser } from './auth.js';
 import { openPublicProfile, DEFAULT_AVATAR_URI } from './profiles.js';
 import { pushModalState, closeModal } from './modal-history.js';
+// (جديد - كاش الأوفلاين) شوف js/offline-cache.js للتفاصيل الكاملة
+import { fetchWithCache, setCached } from './offline-cache.js';
 // (المرحلة 4-أ) ملصق الإنجاز الحي (Live Stat Sticker) - بنقرأ عدد خطوات
 // اليوم الفعلية من sensors.js عشان نعرضها كبادج فوق المعاينة الحية
 // لإنشاء الاستوري (شوف bindCreateStoryModalEvents تحت)
@@ -479,18 +481,21 @@ function mapRpcRowToStory(row) {
 /**
  * جلب الاستوريات النشطة (غير المنتهية) من Supabase عن طريق دالة RPC
  * get_active_text_stories()، وتحويلها لشكل storiesData الداخلي.
- * بترجع مصفوفة فاضية (بدل ما توقف التطبيق) لو حصل أي خطأ في الجلب
- * @returns {Promise<Array<Object>>}
+ *
+ * (تعديل - كاش الأوفلاين): بترجع null صراحة عند فشل الجلب، بدل []
+ * زي الأول، عشان الكود اللي بينادّيها (initStoriesUI/refreshStories
+ * تحت) يقدر يفرّق بين "الطلب فشل - سيب المعروض الحالي/المخزّن زي ما
+ * هو" و"الطلب نجح ورجع فعلاً إن مفيش استوريز نشطة دلوقتي" (نتيجة []
+ * حقيقية). قبل التعديل ده، أي فشل شبكة (مثلاً وقت قطع النت) كان بيتحط
+ * بنفس شكل "مفيش استوريز" فيمسح أي استوريز كانت متعرضة قبل كده.
+ * @returns {Promise<Array<Object>|null>}
  */
 async function fetchActiveStories() {
     const { data, error } = await supabaseClient.rpc('get_active_text_stories');
 
     if (error) {
         console.error('خطأ في جلب الاستوريات النشطة:', error.message);
-        document.dispatchEvent(new CustomEvent('app:toast', {
-            detail: { message: 'تعذر تحميل الاستوريات، حاول تاني لاحقاً', type: 'error' },
-        }));
-        return [];
+        return null;
     }
 
     const stories = (data || []).map(mapRpcRowToStory);
@@ -542,11 +547,30 @@ async function enrichStoriesWithFreshProfileData(stories) {
 /**
  * إعادة جلب الاستوريات النشطة من الباك إند وتحديث شريط الستوريز.
  * مُصدَّرة عشان أي ملف تاني (زي بعد نشر استوري جديدة، أو Pull-to-refresh
- * مستقبلاً) يقدر يطلب تحديث الشريط من غير Reload كامل للصفحة
+ * مستقبلاً) يقدر يطلب تحديث الشريط من غير Reload كامل للصفحة.
+ *
+ * (تعديل - كاش الأوفلاين): الدالة دي عمداً **مش** بتعرض الكاش المحفوظ
+ * الأول زي fetchWithCache العادية - لأنها بتتنادى في حالات فيها
+ * storiesData أصلاً معروضة وأحدث من أي نسخة كاش قديمة (بعد نشر استوري
+ * جديدة، من Realtime، أو من مؤقت الـ 5 دقايق التلقائي)، فلو عرضنا
+ * الكاش الأول كان هيرجّع الشاشة لبيانات أقدم للحظة قبل ما يستبدلها
+ * تاني - "قفزة بصرية" للخلف وقدام من غير أي داعي. بدل كده: بنجيب من
+ * الشبكة مباشرة، ولو نجح بنحدّث الكاش يدوياً (setCached) عشان يفضل
+ * محدّث لأي فتح تاني للتطبيق لاحقاً. لو فشل (مفيش نت)، بنسيب
+ * storiesData المعروضة حالياً زي ما هي تماماً - بدون مسح وبدون رسالة
+ * خطأ مزعجة (خصوصاً إن الدالة دي بتتنادى تلقائياً كل 5 دقايق، فرسالة
+ * خطأ كل مرة النت مقطوع هتبقى مزعجة أوي).
  */
 export async function refreshStories() {
-    storiesData = await fetchActiveStories();
+    const stories = await fetchActiveStories();
+    if (stories === null) {
+        console.warn('[stories.js] فشل تحديث الاستوريات (غالباً مفيش نت) - سيب المعروض الحالي زي ما هو');
+        return;
+    }
+
+    storiesData = stories;
     renderStoriesBar();
+    await setCached('cached_stories', stories);
 }
 
 /**
@@ -1647,8 +1671,14 @@ export async function initStoriesUI() {
         renderStoriesBar();
     });
 
-    storiesData = await fetchActiveStories();
-    renderStoriesBar();
+    // (تعديل - كاش الأوفلاين): هنا (أول فتح للتطبيق) هو المكان الصح
+    // لعرض النسخة المخزّنة محلياً فوراً (لو موجودة) قبل ما رد الشبكة
+    // يوصل - بعكس refreshStories() فوق، هنا مفيش أي storiesData
+    // معروضة أصلاً قبل كده، فمفيش خطر "قفزة بصرية للخلف".
+    await fetchWithCache('cached_stories', fetchActiveStories, (stories) => {
+        storiesData = stories;
+        renderStoriesBar();
+    });
 
     // إعادة جلب الاستوريات تلقائياً كل AUTO_REFRESH_INTERVAL_MS (5 دقايق)
     // في الخلفية، عشان نتخلص من أي استوري انتهت صلاحيتها لو المستخدم

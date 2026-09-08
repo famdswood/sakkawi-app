@@ -42,6 +42,7 @@
 
 import { supabaseClient } from './supabase-config.js';
 import { sendNotification } from './notifications.js';
+import { fetchWithCache } from './offline-cache.js';
 
 /** مدة السؤال بالثواني (شرط الميزة: 25 ثانية) - نفس القيمة لكل سؤال
  *  من السؤالين */
@@ -390,39 +391,73 @@ async function finalizeSlot(slot, status, extra = {}) {
 }
 
 /**
+ * (كاش الأوفلاين) نسخة "خام" من جلب حالة سؤالي النهاردة (الاتنين) من
+ * Supabase - بترجع null صراحة عند فشل حقيقي (مشكلة شبكة/سيرفر)، أو
+ * المصفوفة (حتى لو فاضية - يعني فعلاً لسه ما جاوبش على أي سؤال
+ * النهاردة) في حالة النجاح. تُستخدم بس جوه reconcileTodayStatusFromSupabase
+ * تحت.
+ * @returns {Promise<Array<object>|null>}
+ */
+async function fetchTodayStatusFromServer() {
+    const { data, error } = await supabaseClient
+        .from('daily_question_status')
+        .select('question_slot, status, is_correct')
+        .eq('user_id', currentUserId)
+        .eq('question_date', getTodayDateKey());
+
+    if (error) {
+        console.error('[daily-question.js] فشل جلب حالة السؤال اليومي من Supabase:', error.message);
+        return null;
+    }
+
+    return data || [];
+}
+
+/**
+ * تطبيق صفوف حالة السؤال (من الكاش أو من السيرفر) على الكاش المحلي
+ * (localStorage) وعلى واجهة الكارتين - مفصولة عن الجلب نفسه عشان
+ * تُستخدم مع النسختين (المخزّنة والجاية من الشبكة) من غير تكرار
+ * @param {Array<object>} data
+ */
+function applyTodayStatusRows(data) {
+    if (!Array.isArray(data) || data.length === 0) return;
+
+    // نحدّث الكاش المحلي كمان عشان لو الجهاز ده جديد (localStorage
+    // فاضي) يتظبط من أول مرة، وبعدين نرسم حالة كل كارت لوحده
+    data.forEach((row) => {
+        if (row?.question_slot) {
+            storeSlotStatus(row.question_slot, row.status, row.is_correct);
+        }
+    });
+    const slots = getStoredDailyState();
+    applyLockedUIForSlot(1, slots[1]);
+    applyLockedUIForSlot(2, slots[2]);
+}
+
+/**
  * جلب نتيجة سؤالي النهاردة (الاتنين) من Supabase (لو المستخدم مسجّل
  * دخول) عشان نتأكد إن كل كارت يفضل بالحالة الصح حتى لو المستخدم عمل
  * Refresh أو فتح التطبيق من جهاز تاني - مش بس معتمدين على
  * localStorage الجهاز الحالي. بتتنادى مرة واحدة كل ما هوية المستخدم
- * تتأكد (حدث 'auth:login')
+ * تتأكد (حدث 'auth:login').
+ *
+ * (كاش الأوفلاين) بتعرض النسخة المخزّنة محلياً
+ * (cached_daily_question_status:<userId>:<تاريخ اليوم>) فوراً لو
+ * موجودة (مفيدة أساساً وقت فتح التطبيق أوفلاين بعد تسجيل الدخول من
+ * قبل)، وتحدّثها في الخلفية تلقائياً بعد كل قراءة ناجحة من الشبكة -
+ * نفس منطق التطبيق القديم (بدون كاش) فضل زي ما هو تماماً، بس اتقسم
+ * لدالتين (fetchTodayStatusFromServer + applyTodayStatusRows) عشان
+ * يتقدروا يتستخدموا مع fetchWithCache
  */
 async function reconcileTodayStatusFromSupabase() {
     if (!currentUserId) return;
 
     try {
-        const { data, error } = await supabaseClient
-            .from('daily_question_status')
-            .select('question_slot, status, is_correct')
-            .eq('user_id', currentUserId)
-            .eq('question_date', getTodayDateKey());
-
-        if (error) {
-            console.error('[daily-question.js] فشل جلب حالة السؤال اليومي من Supabase:', error.message);
-            return;
-        }
-
-        if (Array.isArray(data) && data.length > 0) {
-            // نحدّث الكاش المحلي كمان عشان لو الجهاز ده جديد (localStorage
-            // فاضي) يتظبط من أول مرة، وبعدين نرسم حالة كل كارت لوحده
-            data.forEach((row) => {
-                if (row?.question_slot) {
-                    storeSlotStatus(row.question_slot, row.status, row.is_correct);
-                }
-            });
-            const slots = getStoredDailyState();
-            applyLockedUIForSlot(1, slots[1]);
-            applyLockedUIForSlot(2, slots[2]);
-        }
+        await fetchWithCache(
+            `cached_daily_question_status:${currentUserId}:${getTodayDateKey()}`,
+            fetchTodayStatusFromServer,
+            applyTodayStatusRows,
+        );
     } catch (err) {
         console.error('[daily-question.js] استثناء غير متوقع أثناء جلب حالة السؤال اليومي:', err);
     }
@@ -433,42 +468,63 @@ async function reconcileTodayStatusFromSupabase() {
    ------------------------------------------------------------------ */
 
 /**
- * تجيب سؤالي اليوم (Slot 1 و2) من دالة public.get_todays_daily_questions
- * وتخزّنهم في dynamicQuestionBank بنفس شكل DAILY_QUESTION_BANK القديم
- * بالظبط (id/text/options/correctOptionId) عشان renderQuestionForSlot
- * تشتغل من غير أي تعديل تاني في منطقها. بتتنادى مرة واحدة بس من
- * initDailyQuestionCard() - لو فشلت لأي سبب (شبكة، السيرفر لسه ما
- * جهزش الأسئلة..) بيفضل dynamicQuestionBank = null وgetQuestionBankForSlot
- * بترجع لـ DAILY_QUESTION_BANK الثابت تلقائياً كشبكة أمان
+ * (كاش الأوفلاين) نسخة "خام" من جلب سؤالي اليوم من
+ * public.get_todays_daily_questions وتحويلهم لنفس شكل
+ * DAILY_QUESTION_BANK (id/text/options/correctOptionId) - بترجع null
+ * صراحة عند فشل حقيقي أو لو الاتنين Slot 1 وSlot 2 مجاش سليمين (نفس
+ * فلسفة "نرجع للاحتياطي كامل بدل ما نخلط سؤال حقيقي مع Placeholder"
+ * الأصلية)، وإلا بترجع الـ bank كامل. تُستخدم بس جوه
+ * loadTodaysQuestionsFromServer تحت.
+ * @returns {Promise<object|null>}
+ */
+async function fetchTodaysQuestionsFromServer() {
+    const { data, error } = await supabaseClient.rpc('get_todays_daily_questions');
+
+    if (error) {
+        console.error('[daily-question.js] فشل جلب أسئلة اليوم من السيرفر، هنستخدم الأسئلة الاحتياطية:', error.message);
+        return null;
+    }
+
+    if (!Array.isArray(data) || data.length === 0) return null;
+
+    const bank = {};
+    data.forEach((row) => {
+        if (!row || (row.slot !== 1 && row.slot !== 2)) return;
+        bank[row.slot] = {
+            id: row.question_id,
+            text: row.question_text,
+            options: Array.isArray(row.options) ? row.options : [],
+            correctOptionId: row.correct_option_id,
+        };
+    });
+
+    return (bank[1] && bank[2]) ? bank : null;
+}
+
+/**
+ * تجيب سؤالي اليوم (Slot 1 و2) وتخزّنهم في dynamicQuestionBank عشان
+ * renderQuestionForSlot تشتغل من غير أي تعديل تاني في منطقها. بتتنادى
+ * مرة واحدة بس من initDailyQuestionCard() - لو فشلت لأي سبب (شبكة،
+ * السيرفر لسه ما جهزش الأسئلة..) بيفضل dynamicQuestionBank = null
+ * وgetQuestionBankForSlot بترجع لـ DAILY_QUESTION_BANK الثابت تلقائياً
+ * كشبكة أمان.
+ *
+ * (كاش الأوفلاين) بتعرض النسخة المخزّنة محلياً
+ * (cached_daily_questions:<تاريخ اليوم>) فوراً لو موجودة (مش شخصية -
+ * نفس السؤالين لكل الناس)، وتحدّثها في الخلفية تلقائياً بعد كل قراءة
+ * ناجحة من الشبكة. ده تحسين إضافي بس مش أساسي (الشبكة الأمان الثابتة
+ * DAILY_QUESTION_BANK موجودة أصلاً) - شوف ملحوظة الأولوية في خطة
+ * التخزين المؤقت
  */
 async function loadTodaysQuestionsFromServer() {
     try {
-        const { data, error } = await supabaseClient.rpc('get_todays_daily_questions');
-
-        if (error) {
-            console.error('[daily-question.js] فشل جلب أسئلة اليوم من السيرفر، هنستخدم الأسئلة الاحتياطية:', error.message);
-            return;
-        }
-
-        if (!Array.isArray(data) || data.length === 0) return;
-
-        const bank = {};
-        data.forEach((row) => {
-            if (!row || (row.slot !== 1 && row.slot !== 2)) return;
-            bank[row.slot] = {
-                id: row.question_id,
-                text: row.question_text,
-                options: Array.isArray(row.options) ? row.options : [],
-                correctOptionId: row.correct_option_id,
-            };
-        });
-
-        // بنفعّل البنك الجديد بس لو الاتنين Slot 1 وSlot 2 جم سليمين -
-        // نفضّل نرجع للاحتياطي كامل بدل ما نخلط سؤال حقيقي مع سؤال
-        // Placeholder في نفس اليوم
-        if (bank[1] && bank[2]) {
-            dynamicQuestionBank = bank;
-        }
+        await fetchWithCache(
+            `cached_daily_questions:${getTodayDateKey()}`,
+            fetchTodaysQuestionsFromServer,
+            (bank) => {
+                dynamicQuestionBank = bank;
+            },
+        );
     } catch (err) {
         console.error('[daily-question.js] استثناء غير متوقع أثناء جلب أسئلة اليوم:', err);
     }

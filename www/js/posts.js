@@ -27,6 +27,8 @@ import { getCurrentUser } from './auth.js';
 import { sendNotification } from './notifications.js';
 import { openPublicProfile } from './profiles.js';
 import { showGuestLockedToast } from './geofence.js';
+// (جديد - كاش الأوفلاين) شوف js/offline-cache.js للتفاصيل الكاملة
+import { fetchWithCache } from './offline-cache.js';
 
 /* ------------------------------------------------------------------
    0) حالة محلية
@@ -136,10 +138,19 @@ function setStatusText(el, message, state) {
  * الحالي عامل لايك ولا لأ - كل ده في 4 استعلامات بس (مش N+1) عن طريق
  * تجميع النتايج محلياً بعد الجلب
  */
-async function fetchPosts() {
-    const statusEl = document.getElementById('postsFeedStatus');
-    setStatusText(statusEl, 'جاري تحميل المنشورات…', 'loading');
-
+/**
+ * تجيب أحدث المنشورات + عدد اللايكات/الكومنتات لكل واحد + هل المستخدم
+ * الحالي عامل لايك ولا لأ - كل ده في 4 استعلامات بس (مش N+1) عن طريق
+ * تجميع النتايج محلياً بعد الجلب.
+ *
+ * (تعديل - كاش الأوفلاين): الدالة دي بقت جلب خام بس (من غير أي لمس
+ * للـ DOM) - منطق الرسم/الحالة اتنقل لـ fetchPosts() تحت اللي بتنادّيها
+ * عن طريق fetchWithCache. بترجع null صراحة عند فشل حقيقي في جلب
+ * المنشورات نفسها (postsError)، أو [] لو فعلاً مفيش منشورات - نفس
+ * منطق التفرقة المستخدم في stories.js وbanner.js.
+ * @returns {Promise<Array<object>|null>}
+ */
+async function fetchPostsFromServer() {
     const { data: posts, error: postsError } = await supabaseClient
         .from('posts')
         .select('id, content, image_url, created_at')
@@ -148,15 +159,11 @@ async function fetchPosts() {
 
     if (postsError) {
         console.error('[posts.js] فشل تحميل المنشورات:', postsError);
-        setStatusText(statusEl, 'تعذّر تحميل المنشورات. حاول تاني.', 'error');
-        return;
+        return null;
     }
 
     if (!posts || posts.length === 0) {
-        postsList = [];
-        renderPosts();
-        setStatusText(statusEl, '', null);
-        return;
+        return [];
     }
 
     const postIds = posts.map((p) => p.id);
@@ -175,16 +182,76 @@ async function fetchPosts() {
     const commentsCountMap = countByPostId(commentCountsResult.data);
     const myLikedSet = new Set((myLikesResult.data || []).map((row) => row.post_id));
 
-    postsList = posts.map((post) => ({
+    return posts.map((post) => ({
         ...post,
         likesCount: likesCountMap.get(post.id) || 0,
         commentsCount: commentsCountMap.get(post.id) || 0,
         likedByMe: myLikedSet.has(post.id),
         comments: null,
     }));
+}
 
-    renderPosts();
-    setStatusText(statusEl, '', null);
+/** آخر "توقيع" (fingerprint) اتعمله رسم فعلي بيه - بنستخدمه عشان
+ *  نتجنب إعادة رسم كاملة (feedEl.innerHTML = '' وإعادة بناء كل
+ *  الكروت) لو الداتا الجديدة الجاية من الشبكة في الخلفية مطابقة
+ *  تماماً للمعروض حالياً بالفعل. من غير الفحص ده، أي Sync في الخلفية
+ *  (حتى لو مفيش تغيير فعلي) كان هيرجّع المستخدم لأول القائمة كل مرة
+ *  لو كان عامل سكرول لتحت وقت ما الـ Sync حصل. */
+let lastRenderedPostsSignature = null;
+
+/**
+ * توقيع خفيف لمصفوفة منشورات (id + likesCount + commentsCount +
+ * likedByMe لكل منشور) - كفاية عشان نقارن "هل فعلاً فيه تغيير محتاج
+ * إعادة رسم" من غير ما نعمل مقارنة عميقة لكل حقل
+ * @param {Array<object>} posts
+ * @returns {string}
+ */
+function computePostsSignature(posts) {
+    return posts.map((p) => `${p.id}:${p.likesCount}:${p.commentsCount}:${p.likedByMe}`).join('|');
+}
+
+/**
+ * (جديد - كاش الأوفلاين) نقطة الدخول الرئيسية لتحميل المنشورات - بتعرض
+ * النسخة المخزّنة محلياً (cached_posts) فوراً لو موجودة، وتحدّثها في
+ * الخلفية تلقائياً بعد كل قراءة ناجحة من الشبكة.
+ *
+ * ملحوظة عن likedByMe: مفتاح الكاش (cached_posts) مش خاص بمستخدم
+ * معيّن (المنشورات نفسها عامة/مشتركة بين الكل)، بس حقل likedByMe جوه
+ * كل منشور خاص بالمستخدم اللي كان مسجّل دخول وقت آخر حفظ للكاش. يعني
+ * لو مستخدم B سجّل دخول بعد مستخدم A على نفس الجهاز، ممكن يشوف لمدة
+ * أجزاء من الثانية حالة "لايك" خاطئة (بتاعة A) لحد ما رد الشبكة الحقيقي
+ * (بحساب حالة B الصح) يوصل ويصحّحها تلقائياً - ده تكلفة بسيطة ومقبولة
+ * (مش تسريب بيانات حساسة، مجرد لون قلب يتصحّح لوحده بعد لحظة) في مقابل
+ * تبسيط الكاش (مفيش داعي لمفتاح منفصل لكل مستخدم لبيانات أصلاً عامة).
+ */
+async function fetchPosts() {
+    const statusEl = document.getElementById('postsFeedStatus');
+    setStatusText(statusEl, 'جاري تحميل المنشورات…', 'loading');
+
+    let hasReceivedData = false;
+
+    await fetchWithCache('cached_posts', fetchPostsFromServer, (posts) => {
+        hasReceivedData = true;
+
+        const signature = computePostsSignature(posts);
+        postsList = posts;
+
+        // نعيد الرسم الكامل بس لو فعلاً فيه تغيير - غير كده منلمسش
+        // الـ DOM خالص (شوف تعليق lastRenderedPostsSignature فوق)
+        if (signature !== lastRenderedPostsSignature) {
+            lastRenderedPostsSignature = signature;
+            renderPosts();
+        }
+
+        setStatusText(statusEl, '', null);
+    });
+
+    // مفيش كاش محفوظ ومفيش رد شبكة نجح خالص (أول فتح للتطبيق من غير
+    // نت ومن غير أي كاش سابق على الجهاز) - نعرض رسالة خطأ واضحة بدل
+    // ما "جاري تحميل المنشورات…" تفضل معلّقة للأبد
+    if (!hasReceivedData) {
+        setStatusText(statusEl, 'تعذّر تحميل المنشورات. حاول تاني.', 'error');
+    }
 }
 
 /**
@@ -442,6 +509,13 @@ async function handleLikeToggle(likeBtn, post) {
         post.likesCount += wasLiked ? 1 : -1;
         updateLikeButtonUI(likeBtn, post);
     }
+
+    // (كاش الأوفلاين) لازم نحدّث التوقيع المحفوظ هنا كمان (نجاح أو
+    // Rollback، في الحالتين postsList اتغيّرت فعلياً) - وإلا أول Sync في
+    // الخلفية بعد اللايك ده هيلاقي السيرفر راجع بنفس الحالة المعروضة
+    // بالظبط، بس السيغنتشر القديمة (من قبل اللايك) مش متطابقة معاها،
+    // فهيعمل renderPosts() كاملة من غير داعي ويرجّع سكرول المستخدم لفوق
+    lastRenderedPostsSignature = computePostsSignature(postsList);
 }
 
 function updateLikeButtonUI(likeBtn, post) {
@@ -728,6 +802,9 @@ async function handleCommentSubmit(card, post, formEl, parentCommentId = null) {
         post.comments.push(data);
     }
     post.commentsCount += 1;
+    // (كاش الأوفلاين) شوف نفس التعليق في handleLikeToggle - نفس السبب
+    // بالظبط، بس هنا لعدد الكومنتات بدل اللايكات
+    lastRenderedPostsSignature = computePostsSignature(postsList);
 
     renderCommentsList(card, post);
     updateCommentCountUI(card, post);
@@ -756,6 +833,8 @@ async function handleCommentDelete(card, post, commentId) {
 
     post.comments = (post.comments || []).filter((c) => !removedIds.has(c.id));
     post.commentsCount = Math.max(0, post.commentsCount - removedIds.size);
+    // (كاش الأوفلاين) نفس السبب في handleLikeToggle/handleCommentSubmit
+    lastRenderedPostsSignature = computePostsSignature(postsList);
 
     renderCommentsList(card, post);
     updateCommentCountUI(card, post);
@@ -905,12 +984,17 @@ function handlePostInserted(newPostRow) {
         comments: null,
     });
     renderPosts();
+    // (كاش الأوفلاين) نحدّث التوقيع المحفوظ عشان مقارنة fetchPosts()
+    // الجاية تفضل دقيقة على أساس آخر حالة معروضة فعلياً على الشاشة،
+    // مش نسخة قديمة من قبل التغيير الـ Realtime ده
+    lastRenderedPostsSignature = computePostsSignature(postsList);
 }
 
 function handlePostDeleted(oldPostRow) {
     postsList = postsList.filter((p) => p.id !== oldPostRow.id);
     openCommentSections.delete(oldPostRow.id);
     renderPosts();
+    lastRenderedPostsSignature = computePostsSignature(postsList);
 }
 
 function handleLikeRealtimeChange(postId, delta, byUserId) {
@@ -927,6 +1011,10 @@ function handleLikeRealtimeChange(postId, delta, byUserId) {
         const countEl = card.querySelector('.post-like-count');
         if (countEl) countEl.textContent = post.likesCount.toLocaleString('ar-EG');
     }
+    // (كاش الأوفلاين) تحديث مباشر للـ DOM من غير renderPosts() كاملة -
+    // بس برضه لازم نحدّث التوقيع المحفوظ عشان يفضل معبّر عن الحالة
+    // الحقيقية المعروضة دلوقتي
+    lastRenderedPostsSignature = computePostsSignature(postsList);
 }
 
 function handleCommentInsertedRealtime(newCommentRow) {
@@ -936,6 +1024,8 @@ function handleCommentInsertedRealtime(newCommentRow) {
     post.commentsCount += 1;
     const card = document.querySelector(`.post-card[data-post-id="${post.id}"]`);
     if (card) updateCommentCountUI(card, post);
+    // (كاش الأوفلاين) نفس منطق handleLikeRealtimeChange فوق
+    lastRenderedPostsSignature = computePostsSignature(postsList);
 
     // لو قسم الكومنتات مفتوح دلوقتي وقاعدين محمّلين الكومنتات، نضيف
     // الصف الجديد فعلياً (لو مش موجود بالفعل - زي كومنت المستخدم الحالي
@@ -964,6 +1054,10 @@ function handleCommentDeletedRealtime(oldCommentRow) {
     if (post.comments) {
         post.comments = post.comments.filter((c) => c.id !== oldCommentRow.id);
     }
+    // (كاش الأوفلاين) نفس منطق handleCommentInsertedRealtime فوق - كان
+    // ناقص هنا، وده كان بيخلّي أي Sync في الخلفية بعد حذف كومنت (من
+    // مستخدم تاني) يعمل إعادة رسم كاملة من غير داعي
+    lastRenderedPostsSignature = computePostsSignature(postsList);
 
     const card = document.querySelector(`.post-card[data-post-id="${post.id}"]`);
     if (card) {

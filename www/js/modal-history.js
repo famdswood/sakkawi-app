@@ -27,13 +27,35 @@ const modalStack = [];
  * تُستدعى عند فتح أي مودال في التطبيق (فور ما تظهره على الشاشة).
  * بتضيف خطوة جديدة في تاريخ المتصفح وبتسجل دالة إغلاقه في الـ Stack.
  *
+ * (إصلاح باج حقيقي "زرار الرجوع بيقفل التطبيق جوه أي مودال"): كانت
+ * الدالة دي بتنادي history.pushState(state, '') من غير أي URL خالص
+ * (المعامل التالت اختياري وكانت متسابة فاضية) - ده شغال 100% صح مع
+ * تاريخ المتصفح "المنطقي" اللي history.back()/popstate بيعتمدوا عليه
+ * (ولذلك كان شغال تمام في متصفح عادي وقت التطوير)، لكن جوه WebView
+ * أندرويد بتاع Capacitor، زرار الرجوع الفعلي (الهاردوير) بيعتمد على
+ * قيمة canGoBack اللي الأندرويد الأصلي بيحسبها من الـ Back/Forward List
+ * الداخلي بتاعه (WebView.canGoBack())، ومحتاج الـ URL يتغيّر فعليًا
+ * (حتى لو Fragment/Hash بس) عشان يسجّل الخطوة كـ"خطوة تنقل" في اللستة
+ * دي - state-only pushState من غير أي تغيير في الـ URL بيتجاهله. ده
+ * كان بالظبط سبب باج "بروفايل شخص/شات الدعم بيقفل التطبيق كله" (شوف
+ * js/back-button.js) - لأن canGoBack كان بيرجع false دايمًا لأي مودال
+ * فاتح، حتى لو المودال فعلاً مسجّل صح في تاريخ المتصفح المنطقي.
+ *
+ * الحل: بنضيف Hash Fragment مميز (#modal-<depth>) للـ URL مع كل
+ * pushState، بنفس أسلوب switchTab() في js/app.js بالظبط (اللي بيستخدم
+ * #<tabId> ولذلك زرار الرجوع الفعلي شغال معاه صح من الأساس) - ده بيخلي
+ * WebView يسجّل الخطوة في الـ Back/Forward List بتاعه فعليًا من غير ما
+ * يغيّر أي منطق تاني (مفيش أي كود تاني في المشروع بيقرا location.hash
+ * مباشرة، فمفيش تعارض).
+ *
  * @param {Function} hideModalFn - دالة الإخفاء "الخام" بتاعة المودال
  *   ده (اللي بتشيل hidden/تضيف hidden..إلخ) - من غير ما تنادي
  *   history.back() جواها أبداً، عشان منعملش حلقة أو نستهلك خطوتين.
  */
 export function pushModalState(hideModalFn) {
     modalStack.push(hideModalFn);
-    history.pushState({ appModal: true, depth: modalStack.length }, '');
+    const url = `${location.pathname}${location.search}#modal-${modalStack.length}`;
+    history.pushState({ appModal: true, depth: modalStack.length }, '', url);
 }
 
 /**
@@ -77,7 +99,12 @@ export function closeModal() {
 export function replaceModalState(hideModalFn) {
     if (modalStack.length > 0) modalStack.pop();
     modalStack.push(hideModalFn);
-    history.replaceState({ appModal: true, depth: modalStack.length }, '');
+    // نفس إصلاح الـ Hash Fragment بتاع pushModalState فوق - لازم الـ URL
+    // يتغيّر هنا كمان (بنفس الـ depth، حتى لو نفس الرقم اللي كان قبله
+    // بالظبط أحياناً) عشان WebView يفضل شايف الخطوة دي في الـ Back/Forward
+    // List بتاعه، ومنرجعش لنفس باج "زرار الرجوع بيقفل التطبيق"
+    const url = `${location.pathname}${location.search}#modal-${modalStack.length}`;
+    history.replaceState({ appModal: true, depth: modalStack.length }, '', url);
 }
 
 // نقطة الالتقاط الوحيدة لزرار رجوع الموبايل (أو السحب من حافة الشاشة)

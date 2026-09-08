@@ -43,6 +43,9 @@ import { initDailyQuestionCard } from './daily-question.js';
 // ليه في index.html
 import { initPostsUI } from './posts.js';
 import { supabaseClient } from './supabase-config.js';
+// (خطة الأوفلاين - القسم 5) مراقبة رجوع النت + إطلاق حدث app:online
+// عالمي لأي ملف محتاج يعرف - شوف initApp() تحت
+import { initNetworkStatusWatcher } from './network-status.js';
 
 /* ------------------------------------------------------------------
    0) نظام مراحل الخطوات (بدل هدف ثابت 10,000)
@@ -1028,6 +1031,12 @@ function initSharedUIBridge() {
    6) نقطة انطلاق التطبيق
    ------------------------------------------------------------------ */
 function initApp() {
+    // (خطة الأوفلاين - القسم 5) أول سطر تقريباً بنفس منطق initTheme()
+    // تحت - بس بيسجّل مستمع 'online' على window ويطلق حدث 'app:online'
+    // مخصّص على document كل ما النت يرجع، عشان أي ملف تاني (لو حب
+    // يستخدمها لاحقاً) يقدر يسمعه من غير ما يكرر addEventListener بنفسه
+    initNetworkStatusWatcher();
+
     // بتتنادى الأول عشان تطبّق تفضيل المستخدم (داكن/فاتح) بأسرع وقت ممكن
     // وتقلل احتمال ظهور "ومضة" لونية قبل ما باقي الواجهة تتظبط. بتتنادى
     // حتى لو شاشات الترحيب هتظهر بعدها، عشان خلفية الصفحة اللي وراء
