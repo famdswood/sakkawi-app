@@ -208,6 +208,17 @@ function switchTab(tabId, { fromPopState = false } = {}) {
 // WebView تطبيق الـ APK) - بيرجّع للتبويب المحفوظ في الحالة، أو
 // "الرئيسية" كافتراضي لو مفيش حالة محفوظة أصلاً (أول فتحة للتطبيق)
 window.addEventListener('popstate', (event) => {
+    // (إصلاح - باج حقيقي) لو الـ popstate ده سببه إغلاق مودال (مسجّل من
+    // js/modal-history.js بعلامة appModal: true في الـ state)، مش شغلنا
+    // هنا خالص - سيبها لمستمع popstate بتاع modal-history.js يتعامل
+    // معاه لوحده. من غير التحقق ده، كنا بنقرا event.state?.sakkawyTab
+    // (اللي مش موجودة في state المودالات أصلاً) فبترجع undefined
+    // وبنفتكرها 'home' افتراضيًا، فبنبدّل التبويب بالغلط فوق أي مودال/
+    // صفحة فرعية مفتوحة (زي إعدادات الحساب) في نفس اللحظة اللي
+    // modal-history.js بتقفل مودال داخلي (زي قص الصورة) بس - وده كان
+    // سبب باج "تأكيد قص الصورة بيطلعني برّه صفحة الإعدادات بالكامل"
+    if (event.state?.appModal) return;
+
     const tabId = event.state?.sakkawyTab || 'home';
     switchTab(tabId, { fromPopState: true });
 });

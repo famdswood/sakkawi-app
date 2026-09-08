@@ -59,7 +59,7 @@ import { supabaseClient } from './supabase-config.js';
 // reconcileWithServerSteps تحت في loadAndRenderRealProfile
 import { reconcileWithServerSteps, reconcileServerBestSteps, syncActiveUser } from './sensors.js';
 import { pushModalState, closeModal, replaceModalState } from './modal-history.js';
-import { signOut } from './auth.js';
+import { signOut, validateAvatarFile } from './auth.js';
 import { initChampionshipTabs, refreshActiveLeaderboard, getActiveMetric } from './leaderboard.js';
 // (المرحلة 8) رسائل الدعم - بنستورد بس نقطة الفتح + دالة معرفة الأدمن
 // من support-chat.js (اتجاه استيراد واحد؛ support-chat.js مايستورد منا
@@ -123,6 +123,14 @@ let editAvatarRemoved = false;
 
 /** نسخة Cropper.js الحالية الشغالة على صورة مودال قص صورة التعديل (لو المودال مفتوح) */
 let editAvatarCropperInstance = null;
+
+// (إصلاح - باج حقيقي) true من لحظة ما confirmEditAvatarCrop تبدأ لحد ما
+// toBlob تخلّص - كانت الدالة بتاخد وقت ملموس (Cropper.js + توليد Blob)،
+// فلو المستخدم ضغط "تأكيد القص" تاني بسرعة (حاسس الزرار "مش بيستجيب")،
+// الدالة كانت بتتنفّذ مرتين وكل مرة بتنادي closeModal() - يعني مودالين
+// بيتقفلوا بدل واحد (مودال القص + مودال التعديل اللي تحته)، فيرجع
+// المستخدم للصفحة الرئيسية بالغلط بدل ما يوقف عند مودال التعديل
+let isConfirmingEditAvatarCrop = false;
 
 /** true بمجرد ما نربط أحداث مودال التعديل مرة، عشان منربطهاش تاني كل ما initProfileUI تتنادى (بعد أي تسجيل دخول جديد مثلاً) ويحصل تكرار submit */
 let editProfileEventsBound = false;
@@ -3653,6 +3661,8 @@ async function loadAndRenderRealProfile(user) {
  * @returns {Promise<string>}
  */
 async function uploadEditAvatarFile(userId, file) {
+    validateAvatarFile(file); // (إصلاح أمني) نفس التحقق المستخدم وقت التسجيل - شوف auth.js
+
     const fileExtension = (file.name && file.name.includes('.'))
         ? file.name.split('.').pop()
         : (file.type && file.type.includes('/') ? file.type.split('/').pop() : 'jpg');
@@ -4047,10 +4057,30 @@ function openEditAvatarCropModal(file) {
         return;
     }
 
+    // (إصلاح - باج حقيقي) لو المودال ده مفتوح بالفعل (نداء تاني وصل قبل
+    // ما الأول يخلّص - زي Bubbling بين زرار الرفع وصورة المعاينة اللي
+    // بيعملوا نفس الفعل، أو أي سبب تاني يخلي الدالة دي تتنادى مرتين
+    // لفتحة واحدة)، منعملش push تاني في تاريخ المتصفح - بس نبدّل الصورة
+    // جوه نفس المودال المفتوح أصلاً. من غير الحماية دي، push إضافي كان
+    // بيخلي Stack تاريخ المودالات مش متزامن مع الشاشة الظاهرة فعليًا،
+    // وبيسبب زرار "تأكيد القص" يقفل مودال غلط (يرجّع المستخدم لصفحة
+    // تانية بدل ما يوقف عند صفحة إعدادات الحساب)
+    const isAlreadyOpen = !modal.classList.contains('hidden');
+
     cropImage.src = URL.createObjectURL(file);
     modal.classList.remove('hidden');
 
-    pushModalState(hideEditAvatarCropModal);
+    // (إصلاح - باج حقيقي) تصفير احترازي للقفل وحالة الزرار - شوف تعليق
+    // isConfirmingEditAvatarCrop فوق. مش المفروض يفضلوا معلّقين أصلاً
+    // بفضل التصفير في كل مسار خروج جوه confirmEditAvatarCrop، بس ده
+    // شبكة أمان لو المودال اتفتح من حالة غير متوقعة
+    isConfirmingEditAvatarCrop = false;
+    const btnConfirmEditAvatarCrop = document.getElementById('btnConfirmEditAvatarCrop');
+    if (btnConfirmEditAvatarCrop) btnConfirmEditAvatarCrop.disabled = false;
+
+    if (!isAlreadyOpen) {
+        pushModalState(hideEditAvatarCropModal);
+    }
 
     // Cropper.js محتاج الصورة تكون معمولها render فعلياً في الـ DOM
     // قبل ما نبنيه عليها، فبنستنى فريم واحد (requestAnimationFrame)
@@ -4110,10 +4140,20 @@ function closeEditAvatarCropModal() {
  * أصلاً بيتعامل مع الحالة دي حتى لو الـ Blob من غير اسم ملف)
  */
 function confirmEditAvatarCrop() {
+    // (إصلاح - باج حقيقي) شوف تعليق isConfirmingEditAvatarCrop فوق - بنمنع
+    // أي تنفيذ تاني لحد ما التنفيذ الحالي يخلّص بالكامل (حتى لو الزرار
+    // اتضغط تاني بسرعة أثناء المعالجة)
+    if (isConfirmingEditAvatarCrop) return;
+
     if (!editAvatarCropperInstance) {
         closeEditAvatarCropModal();
         return;
     }
+
+    isConfirmingEditAvatarCrop = true;
+
+    const btnConfirmEditAvatarCrop = document.getElementById('btnConfirmEditAvatarCrop');
+    if (btnConfirmEditAvatarCrop) btnConfirmEditAvatarCrop.disabled = true;
 
     const canvas = editAvatarCropperInstance.getCroppedCanvas({
         width: 400,
@@ -4125,6 +4165,8 @@ function confirmEditAvatarCrop() {
         document.dispatchEvent(new CustomEvent('app:toast', {
             detail: { message: 'تعذّر قص الصورة، جرّب تاني', type: 'error' },
         }));
+        isConfirmingEditAvatarCrop = false;
+        if (btnConfirmEditAvatarCrop) btnConfirmEditAvatarCrop.disabled = false;
         closeEditAvatarCropModal();
         return;
     }
@@ -4134,6 +4176,8 @@ function confirmEditAvatarCrop() {
             document.dispatchEvent(new CustomEvent('app:toast', {
                 detail: { message: 'تعذّر قص الصورة، جرّب تاني', type: 'error' },
             }));
+            isConfirmingEditAvatarCrop = false;
+            if (btnConfirmEditAvatarCrop) btnConfirmEditAvatarCrop.disabled = false;
             closeEditAvatarCropModal();
             return;
         }
@@ -4145,6 +4189,8 @@ function confirmEditAvatarCrop() {
         if (previewImg) previewImg.src = URL.createObjectURL(blob);
         updateEditAvatarDeleteButtonVisibility();
 
+        isConfirmingEditAvatarCrop = false;
+        if (btnConfirmEditAvatarCrop) btnConfirmEditAvatarCrop.disabled = false;
         closeEditAvatarCropModal();
     }, 'image/jpeg', 0.92);
 }
@@ -4223,8 +4269,16 @@ function bindEditProfileEvents() {
     if (uploadBtn && fileInput) uploadBtn.addEventListener('click', () => fileInput.click());
     if (deleteAvatarBtn) deleteAvatarBtn.addEventListener('click', handleDeleteEditAvatar);
     // الضغط على الصورة نفسها بيفتح نفس نافذة اختيار الملف كمان (زي
-    // نفس التجربة المستخدمة في فورم التسجيل بـ auth.js)
-    if (previewImg && fileInput) previewImg.addEventListener('click', () => fileInput.click());
+    // نفس التجربة المستخدمة في فورم التسجيل بـ auth.js). event.stopPropagation()
+    // (إصلاح - باج حقيقي): لو previewImg جوه uploadBtn في الـHTML، ضغطة
+    // واحدة كانت ممكن تشغّل المستمعين الاتنين (Bubbling) فتتنادى
+    // fileInput.click() مرتين لفعل مستخدم واحد - وده كان بيقدر يسبب
+    // فتح مودال القص مرتين (شوف تعليق isAlreadyOpen في
+    // openEditAvatarCropModal فوق للأثر الكامل)
+    if (previewImg && fileInput) previewImg.addEventListener('click', (event) => {
+        event.stopPropagation();
+        fileInput.click();
+    });
 
     if (fileInput) {
         fileInput.addEventListener('change', () => {

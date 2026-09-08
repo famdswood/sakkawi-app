@@ -202,11 +202,23 @@
     justify-content: flex-end;
 }
 
-.champ-time-box {
+/* [تعديل - إصلاح باج]: البطولة اليومية كانت بتظهر صندوق "00 يوم" زيادة
+   في التايمر برغم إنها أصلاً بطولة 24 ساعة (يوم = صفر دايماً ليها).
+   السبب: js/leaderboard.js بيحط كلاس "hidden" على #champDaysBox لما
+   days === 0 (شوف tickCountdown) - بس .champ-time-box هنا تحت كانت
+   بتحدد display:flex بنفس قوة الـ specificity بتاعة .hidden (كلاس واحد
+   لكل واحد)، وبما إن الملف ده بيتحمّل بعد الـ Tailwind CDN في <head>،
+   فـ display:flex كانت بتكسب الترتيب وتلغي display:none بتاعة .hidden -
+   نفس السبب بالظبط اللي كان وراء باج شريط "و X بطل" قبل كده.
+   :not(.hidden) هنا بيخلي display:flex تتطبق بس لو العنصر مش .hidden،
+   فـ .hidden تفضل قادرة تخفيه بثقة 100% في كل الحالات */
+.champ-time-box:not(.hidden) {
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
+}
+.champ-time-box {
     min-width: 2.5rem;
     padding: 0.25rem 0.3rem;
 }
@@ -331,6 +343,47 @@
        شريط الإحصائيات (.dual-stat-badge) فيه أرقام طويلة. min-width:0
        بيسمح للكارت فعلياً ينكمش لعرض عموده الحقيقي */
     min-width: 0;
+    /* [تعديل - تحصين وقائي]: z-index صريح (حتى لو 0) بيخلي كل كارت
+       (دهب/فضة/برونز) بيأسس Stacking Context خاص بيه بنفسه. كده أي طبقة
+       تتضاف على الكارت مستقبلاً (badge، حلقة تمييز، أنيميشن...) هتترتب
+       تلقائياً جوه نفس السياق المحلي للكارت ده، وهتفضل تحت التاج/الميدالية
+       (z-index:3) من غير ما حد يحتاج يفتكر يظبط أرقام z-index يدوي كل
+       مرة زي ما حصل قبل كده. .podium-gold بتاعته z-index:1 بيفضل شغال
+       فوق الكارتين التانيين زي ما هو، الرقم صفر هنا بس بيثبت السياق. */
+    z-index: 0;
+}
+
+/* [تعديل - طلب صريح]: ملمس خفيف جدًا (Diagonal Hairlines) على الكروت
+   التلاتة (دهب/فضة/برونز) عشان تدّي إحساس عمق/نسيج فاخر (Dark Luxury)
+   بدل الخلفية المسطحة تمامًا. ::before بدل ما نلمس الـ background
+   الأساسي لكل رانك (اللي بيحدد التلوين نفسه) - عشان تفضل شغالة فوق أي
+   لون من غير ما نكرر التعديل 3 مرات. z-index:-1 هنا آمن ومحصور جوه
+   Stacking Context الكارت نفسه بس (شوف تعليق z-index فوق) فمش هيأثر
+   على أي حاجة برّه الكارت. opacity منخفضة جدًا (3.5%) عشان يبقى ملمس
+   حقيقي حسّاس مش خطوط واضحة تلفت النظر */
+.podium-card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    background-image: repeating-linear-gradient(
+        135deg,
+        rgba(255, 255, 255, 0.035) 0px,
+        rgba(255, 255, 255, 0.035) 1px,
+        transparent 1px,
+        transparent 6px
+    );
+    pointer-events: none;
+}
+html:not(.dark) .podium-card::before {
+    background-image: repeating-linear-gradient(
+        135deg,
+        rgba(0, 0, 0, 0.035) 0px,
+        rgba(0, 0, 0, 0.035) 1px,
+        transparent 1px,
+        transparent 6px
+    );
 }
 
 .podium-medal,
@@ -340,6 +393,12 @@
     width: 1.6rem;
     height: 1.6rem;
     filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.4));
+    /* [تعديل - إصلاح باج]: التاج/الميدالية بارزين فوق حدود الكارت
+       (top سالب)، فبيقطعهم خط حلقة التمييز بتاعة .podium-card-self::after
+       (اللي بتتحط لو إنت نفسك الفايز) لأنها كانت بتترسم بعدهم في الـ DOM
+       من غير z-index. z-index هنا بيضمن إنهم فوق أي طبقة تانية جوه الكارت
+       دايمًا (الحلقة، الخلفية، أي كارت مجاور) */
+    z-index: 3;
 }
 .podium-crown {
     width: 2rem;
@@ -446,12 +505,21 @@
 .podium-silver {
     background: linear-gradient(180deg, rgba(185, 194, 206, 0.12), transparent 70%);
 }
-.podium-silver .podium-medal { color: var(--champ-silver-300); }
+.podium-silver .podium-medal {
+    color: var(--champ-silver-300);
+    /* [تعديل - توهج فضي يماثل توهج التاج الذهبي، عشان الميدالية الجديدة
+       تبقى بارزة زي التاج بالظبط مش مسطحة] */
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.4)) drop-shadow(0 0 6px rgba(185, 194, 206, 0.55));
+}
 
 .podium-bronze {
     background: linear-gradient(180deg, rgba(198, 119, 59, 0.14), transparent 70%);
 }
-.podium-bronze .podium-medal { color: var(--champ-bronze-300); }
+.podium-bronze .podium-medal {
+    color: var(--champ-bronze-300);
+    /* [تعديل - نفس فكرة التوهج بس بلون البرونز] */
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.4)) drop-shadow(0 0 6px rgba(198, 119, 59, 0.55));
+}
 
 .podium-gold {
     background: linear-gradient(180deg, rgba(212, 175, 55, 0.22), transparent 75%);
@@ -484,6 +552,10 @@
     border-radius: 1.1rem 1.1rem 0 0;
     box-shadow: 0 0 0 1px rgba(var(--champ-daily-rgb), 0.35) inset;
     pointer-events: none;
+    /* [تعديل - إصلاح باج]: z-index صريح أقل من التاج/الميدالية (اللي
+       z-index بتاعهم 3) عشان حلقة التمييز دي تفضل دايمًا تحتهم، بدل ما
+       تعتمد على ترتيبها في الـ DOM (اللي كان بيخليها فوقهم زي ما وضّحت) */
+    z-index: 2;
 }
 
 /* ==================================================================
@@ -836,10 +908,6 @@ html:not(.dark) .self-rank-bar-inner {
 @keyframes champHaloSpin {
     to { transform: rotate(360deg); }
 }
-@keyframes champTimeBoxBreathe {
-    0%, 100% { box-shadow: 0 0 0 rgba(212, 175, 55, 0); }
-    50%      { box-shadow: 0 0 10px rgba(212, 175, 55, 0.22); }
-}
 @keyframes champCountdownBreathe {
     0%, 100% { transform: scale(1); }
     50%      { transform: scale(1.006); }
@@ -913,12 +981,15 @@ html:not(.dark) .self-rank-bar-inner {
    is-urgent من المرحلة 2) لإضفاء حس خفيف بالحماس/السرعة. مفيش أي
    تعارض مع نبضة الإلحاح الأقوى: .champ-countdown.is-urgent فوق نفس
    الـ Selector لكن بـ Specificity أعلى، فبتغلبها تلقائياً وقت آخر دقيقة.
+
+   [تعديل - طلب صريح]: شيلنا توهج champTimeBoxBreathe (box-shadow ذهبي
+   نابض) اللي كان شغال طول الوقت على صناديق الأرقام في التايمر في
+   الثلاث بطولات كلهم (يومي/أسبوعي/شهري) - مش مربوط بثيم معين عشان كده
+   كان ظاهر في كل حتة. سايبين بس نبضة الحجم الخفيفة جداً (scale) على
+   الشريط ككل لأنها مش "توهج" أصلاً (مفيش لون/ظل فيها).
 */
 .champ-countdown {
     animation: champCountdownBreathe 3.6s ease-in-out infinite;
-}
-.champ-time-box {
-    animation: champTimeBoxBreathe 2.4s ease-in-out infinite;
 }
 
 /* ------------------------------------------------------------------
@@ -1184,4 +1255,52 @@ html:not(.dark) .champ-skel::after {
 }
 #leaderboardMainContent.theme-month .champ-podium-frame-sub {
     color: var(--champ-monthly-400);
+}
+
+/* ==================================================================
+   10) جملة "(رقم) بطل تاني داخلين في السباق على مركزك 🏆" - Chip احترافي
+   ------------------------------------------------------------------
+   [تعديل - طلب صريح]: كانت مجرد نص عادي (Tailwind utility classes:
+   text-center/text-sm/font-bold/text-gold-400) واقف لوحده تحت القائمة.
+   حوّلناها لـ "chip"/badge حقيقي بخلفية متدرجة وحدود وتوهج ذهبي خفيف
+   نابض، بنفس لغة التصميم المستخدمة في champ-tab.is-active و
+   dual-stat-badge في باقي الصفحة، عشان الجملة تبان كعنصر تصميم مقصود
+   مش سطر نص عابر.
+
+   ملحوظة تقنية مهمة: العنصر ده id="leaderboardParticipantsCount" هو
+   نفسه اللي js/leaderboard.js (renderRemainingParticipantsCount) بيحط/
+   يشيل عليه كلاس Tailwind "hidden" (display:none) على حسب العدد، وبرضه
+   بيكتب فيه النص مباشرة بـ el.textContent (من غير أي عناصر جواه) - يعني
+   مينفعش نضيف أيقونة كـ span منفصل جواه (هتتمسح كل تحديث). عشان كده
+   التوهج/الشكل هنا كله CSS بحت على العنصر نفسه من غير ما نحتاج نلمس
+   js/leaderboard.js خالص.
+
+   قاعدة :not(.hidden) هنا مقصودة: بما إن كلاس .hidden بتاع Tailwind
+   وكلاسنا الجديد ليهم نفس قوة الـ specificity (كلاس واحد لكل واحد)،
+   فترتيبهم في ملفات الـ CSS هو اللي كان هيحسم مين يكسب - عشان منعتمدش
+   على الترتيب ده خالص (لو حد غيّر ترتيب الروابط في <head> بعدين)، خلينا
+   display:table بس شغالة وقت العنصر مش .hidden، فـ .hidden فاضل قادر
+   يخفيه بثقة 100% في كل الحالات */
+.participants-count-chip:not(.hidden) {
+    display: table;
+}
+.participants-count-chip {
+    margin: 0.85rem auto 0.25rem;
+    padding: 0.5rem 1.1rem;
+    border-radius: 999px;
+    font-size: 0.8rem;
+    font-weight: 800;
+    letter-spacing: 0.01em;
+    color: var(--gold-300);
+    text-align: center;
+    background: linear-gradient(160deg, rgba(212, 175, 55, 0.18), rgba(212, 175, 55, 0.05));
+    border: 1px solid rgba(212, 175, 55, 0.3);
+    /* [تعديل - طلب صريح]: شيلنا توهج الـ box-shadow الملوّن والنبض
+       (animation) اللي كانوا هنا - الشكل شكله مش حلو حسب الملاحظة. خلّينا
+       ظل بسيط عادي للعمق بس، من غير أي لون ذهبي أو حركة نبض */
+    box-shadow: 0 3px 8px -3px rgba(0, 0, 0, 0.4);
+}
+html:not(.dark) .participants-count-chip {
+    color: var(--gold-600);
+    background: linear-gradient(160deg, rgba(212, 175, 55, 0.14), rgba(212, 175, 55, 0.04));
 }

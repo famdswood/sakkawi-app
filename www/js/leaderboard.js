@@ -700,9 +700,13 @@ function metricUnitLabel(metric) {
 }
 
 /**
- * بترجع جملة "و (رقم) بطل كمان بينافسوك عليها" بصيغة عربية سليمة حسب
- * قواعد عدد/معدود العربي (١ مفرد، ٢ مثنى، ٣-١٠ جمع "أبطال"، ١١+ مفرد
- * "بطل" - نفس قاعدة "أعلى 3 أبطال" المستخدمة في نص podiumSubtitle فوق).
+ * بترجع جملة "(رقم) بطل تاني داخلين في السباق على مركزك 🏆" بصيغة عربية
+ * سليمة حسب قواعد عدد/معدود العربي (١ مفرد، ٢ مثنى، ٣-١٠ جمع "أبطال"،
+ * ١١+ مفرد "بطل" - نفس قاعدة "أعلى 3 أبطال" المستخدمة في نص
+ * podiumSubtitle فوق).
+ * [تعديل - طلب صريح]: الأسلوب القديم كان "تحذير/استعجال" (بينافسوك
+ * عليها 🔥)، واتغيّر لأسلوب "إحصائية فخمة" بيوصف حجم السباق نفسه بدل ما
+ * يحذّر المستخدم - نفس الفكرة بس نبرة أرقى تناسب شكل الـ chip الجديد.
  * الدالة دي بترجع الجملة كاملة جاهزة للعرض، أو null لو count <= 0 (يبقى
  * المفروض العنصر يتخفي تمامًا مش يتحط له نص فاضي)
  * @param {number} count - عدد "الأبطال" (المشاركين الفعليين) بره أول 10
@@ -710,10 +714,10 @@ function metricUnitLabel(metric) {
  */
 function buildRemainingParticipantsPhrase(count) {
     if (!count || count <= 0) return null;
-    if (count === 1) return 'و بطل واحد كمان بينافسوك عليها 🔥';
-    if (count === 2) return 'و بطلين كمان بينافسوك عليها 🔥';
-    if (count <= 10) return `و ${count} أبطال كمان بينافسوك عليها 🔥`;
-    return `و ${count} بطل كمان بينافسوك عليها 🔥`;
+    if (count === 1) return 'و بطل واحد تاني داخل في السباق على مركزك 🏆';
+    if (count === 2) return 'و بطلين تانيين داخلين في السباق على مركزك 🏆';
+    if (count <= 10) return `و ${count} أبطال تانيين داخلين في السباق على مركزك 🏆`;
+    return `و ${count} بطل تاني داخلين في السباق على مركزك 🏆`;
 }
 
 /**
@@ -817,9 +821,20 @@ async function openLeaderboardUserProfile(userId) {
  * get_leaderboard. كل صف بييجي معاه points وtotal_steps سوا دايماً،
  * فبنعرض الاتنين في الـ Dual-Stat Badge بغض النظر عن أي المقياسين هو
  * الأساس في ترتيب البطولة الحالية.
+ * (تحديث - إصلاح باج "هبهبة سريعة عند فتح الليدربورد/تبديل البطولات"):
+ * الدالة بقت بتاخد shouldAnimate - لما loadAndRenderPeriod ترسم مرتين
+ * في نفس دورة التحميل (مرة بالكاش المحلي فوراً، ومرة تانية برد الشبكة
+ * الحقيقي لما يوصل بعد كده - شوف fetchWithCache)، كانت replayEntranceAnimation
+ * بتتنفذ في المرتين، يعني حركة الدخول (champFadeInUp) بتشتغل تاني من
+ * الصفر خلال أجزاء من الثانية بعد أول ظهور - وده بالظبط اللي بيبان
+ * كـ"هبهبة" سريعة قبل ما تستقر. دلوقتي بنشغّل الحركة أول مرة بس في كل
+ * دورة تحميل (أول رسم فعلي بعد الـ Skeleton)، والرسم اللي بعده في نفس
+ * الدورة (تحديث بالبيانات الحقيقية) بيحدّث القيم في مكانها من غير ما
+ * يعيد تشغيل الحركة.
  * @param {Array<object>} rows
+ * @param {boolean} [shouldAnimate=true]
  */
-function renderLeaderboardPodium(rows) {
+function renderLeaderboardPodium(rows, shouldAnimate = true) {
     const podiumUserIds = [];
     const currentUserId = getCurrentUserId();
 
@@ -884,7 +899,7 @@ function renderLeaderboardPodium(rows) {
         if (cardEl) {
             cardEl.style.setProperty('--stagger-index', String(index));
             cardEl.classList.toggle('podium-card-self', isCurrentUser);
-            replayEntranceAnimation(cardEl);
+            if (shouldAnimate) replayEntranceAnimation(cardEl);
         }
     });
 
@@ -895,9 +910,18 @@ function renderLeaderboardPodium(rows) {
  * رسم باقي القائمة (المراكز من 4 لحد LEADERBOARD_DISPLAY_LIMIT) وإبراز
  * صف المستخدم الحالي لو موجود ضمنهم - كروت زجاجية (.rank-card) بشريط
  * إحصائيات مزدوج (خطوات + نقاط سوا).
+ * (تحديث - إصلاح باج "هبهبة سريعة عند فتح الليدربورد/تبديل البطولات"):
+ * الدالة بقت بتاخد shouldAnimate بنفس فلسفة renderLeaderboardPodium فوق -
+ * القائمة دي بتتحذف وتتعاد بالكامل (innerHTML) مع كل رسم، فلو الرسمتين
+ * (كاش محلي فوري + رد شبكة حقيقي بعد كده) ضافوا كلاس champ-pop-in
+ * الاتنين، الحركة كانت بتشتغل مرتين خلال أجزاء من الثانية - نفس سبب
+ * الـ"هبهبة". دلوقتي كلاس champ-pop-in (وبالتالي حركة الدخول) بيتضاف
+ * بس لما shouldAnimate = true (أول رسم فعلي في دورة التحميل)؛ الرسم
+ * التاني في نفس الدورة بيحدّث الكروت من غير ما يعيد الحركة.
  * @param {Array<object>} rows
+ * @param {boolean} [shouldAnimate=true]
  */
-function renderLeaderboardRemainingList(rows) {
+function renderLeaderboardRemainingList(rows, shouldAnimate = true) {
     const list = document.getElementById('leaderboardList');
     if (!list) return;
 
@@ -920,9 +944,10 @@ function renderLeaderboardRemainingList(rows) {
         // ما العنصر الجديد يتضاف للـ DOM، الحركة (.champ-pop-in في CSS)
         // بتشتغل تلقائياً من غير أي Reflow-Trick زي منصّة التتويج فوق
         const staggerIndex = Math.min(index, CHAMP_MAX_STAGGER_INDEX);
+        const popInClass = shouldAnimate ? ' champ-pop-in' : '';
 
         return `
-            <article class="rank-card champ-pop-in${isCurrentUser ? ' rank-card-self' : ''}" data-leaderboard-user-id="${row.id}" style="--stagger-index:${staggerIndex}">
+            <article class="rank-card${popInClass}${isCurrentUser ? ' rank-card-self' : ''}" data-leaderboard-user-id="${row.id}" style="--stagger-index:${staggerIndex}">
                 <span class="rank-card-number">${row.rank}</span>
                 <span class="relative inline-block shrink-0">
                     <img src="${row.avatar_url || DEFAULT_AVATAR_URI}" alt="${escapeHtml(row.full_name)}"
@@ -1112,6 +1137,16 @@ async function loadAndRenderPeriod(periodKey) {
     // نفسها في الحالتين عشان لو المستخدم بدّل تبويب في الوقت ده، مفيش
     // رسم قديم متأخر يظهر فوق التبويب الجديد.
     let hasRenderedRows = false;
+    // (تحديث - إصلاح باج "هبهبة سريعة عند فتح الليدربورد/تبديل البطولات"):
+    // fetchWithCache ممكن ينادي الـ callback ده مرتين في نفس دورة التحميل
+    // دي - مرة فورية بالنسخة المخزّنة محلياً (لو موجودة)، ومرة تانية برد
+    // الشبكة الحقيقي لما يوصل بعد كده. لو الاتنين شغّلوا حركة الدخول
+    // (champFadeInUp/champ-pop-in) من الصفر، كانت الحركة بتتكرر خلال
+    // أجزاء من الثانية - وده أصل الـ"هبهبة" اللي بتحصل بسرعة وبعدين
+    // تستقر. بنشغّل الحركة أول مرة بس (hasAnimatedThisCycle لسه false)،
+    // وأي رسم تاني بعد كده في نفس الدورة بيحدّث القيم من غير ما يعيد
+    // الحركة تاني.
+    let hasAnimatedThisCycle = false;
 
     await Promise.all([
         fetchWithCache(
@@ -1120,7 +1155,8 @@ async function loadAndRenderPeriod(periodKey) {
             (rows, _source) => {
                 if (requestToken !== leaderboardFetchToken) return;
                 hasRenderedRows = true;
-                renderLeaderboardResult(rows, config);
+                renderLeaderboardResult(rows, config, !hasAnimatedThisCycle);
+                hasAnimatedThisCycle = true;
             },
         ),
         fetchWithCache(
@@ -1148,15 +1184,20 @@ async function loadAndRenderPeriod(periodKey) {
  * (جديد - كاش الأوفلاين) رسم نتيجة فترة بطولة معينة - مفصولة عن
  * loadAndRenderPeriod عشان تتنادى مرتين: مرة بالداتا المخزّنة محلياً
  * (فوراً)، ومرة بالداتا الحقيقية الجديدة من الشبكة لما توصل.
+ * (تحديث - إصلاح باج "هبهبة سريعة عند فتح الليدربورد/تبديل البطولات"):
+ * بقت بتاخد shouldAnimate كمان وبتمررها لـrenderLeaderboardPodium
+ * وrenderLeaderboardRemainingList - شوف التعليق فوق كل واحدة منهم
+ * للتفاصيل الكاملة عن سبب الباج والحل.
  * @param {Array<object>} rows
  * @param {{metric: string}} config - إعدادات الفترة النشطة (CHAMPIONSHIP_PERIODS[periodKey])
+ * @param {boolean} [shouldAnimate=true]
  */
-function renderLeaderboardResult(rows, config) {
+function renderLeaderboardResult(rows, config, shouldAnimate = true) {
     leaderboardRows = rows;
 
     clearLeaderboardLoadingState();
-    renderLeaderboardPodium(rows);
-    renderLeaderboardRemainingList(rows);
+    renderLeaderboardPodium(rows, shouldAnimate);
+    renderLeaderboardRemainingList(rows, shouldAnimate);
     renderSelfRankBar(rows, config.metric);
 
     // (تحديث - إصلاح باج أمان + باج "وسام قدوة بيتفتح لحساب صفر

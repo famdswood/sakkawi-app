@@ -143,6 +143,30 @@ const INTERNAL_EMAIL_DOMAIN = 'batal.com';
 /** قاعدة صحة اسم المستخدم: حروف إنجليزية/أرقام/underscore فقط، من 3 لـ20 حرف */
 const USERNAME_REGEX = /^[A-Za-z0-9_]{3,20}$/;
 
+// (إصلاح أمني) قيود رفع صورة البروفايل - نفس القيم المطبّقة على مستوى
+// باكت "avatars" في Supabase Storage (file_size_limit/allowed_mime_types)،
+// موجودة هنا كمان عشان المستخدم ياخد رسالة خطأ عربية واضحة فورًا بدل ما
+// يستنى رفض عام من السيرفر. الحماية الحقيقية اللي مينفعش يتحايل عليها
+// هي قيود الباكت نفسها - دي بس تحسين لتجربة الاستخدام
+const ALLOWED_AVATAR_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+const MAX_AVATAR_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5 ميجابايت
+
+/**
+ * تحقق من نوع وحجم ملف صورة البروفايل قبل أي محاولة رفع لـ Supabase
+ * Storage - بترمي Error برسالة عربية واضحة لو الملف مش صورة مدعومة أو
+ * حجمه أكبر من المسموح، عشان الفورم يقدر يعرضها فورًا (شوف
+ * uploadSignupAvatarFile تحت وuploadEditAvatarFile في profiles.js).
+ * @param {File|Blob} file
+ */
+export function validateAvatarFile(file) {
+    if (!ALLOWED_AVATAR_MIME_TYPES.includes(file.type)) {
+        throw new Error('نوع الصورة غير مدعوم - لازم تكون JPG أو PNG أو WEBP');
+    }
+    if (file.size > MAX_AVATAR_FILE_SIZE_BYTES) {
+        throw new Error('حجم الصورة كبير جدًا - الحد الأقصى 5 ميجابايت');
+    }
+}
+
 /* (تحديث): شيلنا أفاتارات placehold.co المنفصلة حسب النوع (ذكر/أنثى) اللي
    كانت هنا - كانت بترجع صورة بخلفية ملونة لكن بعلامة استفهام "؟" بدل
    الإيموجي (👦/👧) لمشكلة في عرض الإيموجي عند placehold.co، فكانت بتتخزن
@@ -888,6 +912,8 @@ function validateSignupExtraFields({ firstName, lastName, birthDate, gender }) {
  * @returns {Promise<string>}
  */
 async function uploadSignupAvatarFile(userId, file) {
+    validateAvatarFile(file); // (إصلاح أمني) شوف تعريفها فوق
+
     // الصورة ممكن توصلنا كـ File (لها name فيه امتداد) أو كـ Blob ناتج
     // من قص Cropper.js (مفهوش name خالص) - بنغطي الحالتين هنا
     const fileExtension = (file.name && file.name.includes('.'))
