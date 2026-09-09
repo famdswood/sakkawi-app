@@ -598,6 +598,26 @@ function initStepsCounter() {
     document.addEventListener('sensors:steps-resynced', (event) => {
         applySilentStepsResync(event.detail.steps);
     });
+
+    // (إصلاح - باج حقيقي) كان الحدث ده بيتبعت فعليًا من reconcileServerBestSteps
+    // في sensors.js من غير أي حد يستمع له هنا - يعني الرقم القياسي
+    // المعروض (previousBestSteps) كان دايمًا بياخد من تاريخ الجهاز
+    // الحالي بس (getStepsHistory)، ومبيتقارنش أبدًا بـ best_daily_steps
+    // الحقيقي القادم من Supabase (اللي ممكن يكون اتسجل من جهاز/حساب
+    // تاني). النتيجة: توست "رقمك القياسي الجديد!" ممكن يظهر غلط لأنه
+    // بيقارن برقم قديم مش الرقم الحقيقي الأعلى فعليًا
+    document.addEventListener('sensors:best-steps-resynced', (event) => {
+        const serverBest = event.detail?.bestSteps;
+        if (typeof serverBest !== 'number' || serverBest <= appState.previousBestSteps) return;
+
+        appState.previousBestSteps = serverBest;
+        // نعيد حساب العلم بناءً على الرقم الجديد - لو خطوات اليوم
+        // بالفعل أعلى من الرقم القياسي الحقيقي الجديد، العلم يتفعّل
+        // فورًا من غير ما نستنى خطوة جديدة تجيله
+        appState.recordBrokenToday = appState.previousBestSteps > 0
+            && appState.steps > appState.previousBestSteps;
+        updateStepsUI();
+    });
 }
 
 /* ------------------------------------------------------------------

@@ -53,15 +53,34 @@ public class StepCounterForegroundService extends Service implements SensorEvent
     // بالظبط من نفس القيم في sensors.js عشان يفضل سلوك العداد متسق
     // سواء اشتغل بالوضع 1 أو 2 ---
     private static final double GRAVITY = 9.81;
-    private static final double STEP_THRESHOLD_HIGH = 12.8;
-    private static final double STEP_THRESHOLD_LOW = STEP_THRESHOLD_HIGH - 1.5; // 11.3
-    private static final long STEP_COOLDOWN_MS = 350;
+    // (تعديل - تقليل الخطوات الوهمية في وضع الـ Fallback) رفعنا العتبة
+    // من 12.8 لـ 13.2 وزوّدنا الـ Cooldown من 350 لـ 400ms بعد ملاحظة
+    // إن العداد بيحسب أعلى من الواقع بحوالي 20% على أجهزة بتستخدم هذا
+    // الوضع. ⚠️ القيم دي لازم تفضل مطابقة تمامًا لنفس القيم في
+    // sensors.js عشان يفضل سلوك العداد متسق - غيّرهم مع بعض دايمًا
+    private static final double STEP_THRESHOLD_HIGH = 13.2;
+    private static final double STEP_THRESHOLD_LOW = STEP_THRESHOLD_HIGH - 1.5; // 11.7
+    private static final long STEP_COOLDOWN_MS = 400;
     private static final double LOW_PASS_ALPHA = 0.15;
 
     private SensorManager sensorManager;
     private Sensor stepCounterSensor;   // الوضع 1
     private Sensor accelerometerSensor; // الوضع 2 (Fallback)
     private boolean usingFallbackMode = false;
+
+    // (إصلاح - باج حقيقي خطير) startTracking() من الـ Plugin بتتنادى من
+    // JS كل 4 ثواني (البولينج في syncFromNativeStepCounter) طول ما
+    // التطبيق فاتح - وده بيعمل onStartCommand() تاني على الخدمة اللي
+    // شغّالة أصلاً (مش onCreate جديد). كان ده بيسجّل نفس الـ
+    // SensorEventListener تاني لنفس الحساس مرة كل 4 ثواني من غير أي
+    // unregister بينهم - وأندرويد بيوصّل كل قراءة حساس *مكررة* بعدد
+    // مرات التسجيل النشطة كلها. يعني بعد دقيقة بس من فتح التطبيق ممكن
+    // يبقى فيه 15 تسجيل نشط لنفس الحساس، فكل خطوة حقيقية تتحسب 15 مرة!
+    // ده على الأغلب هو السبب الحقيقي وراء إن العداد بيدي رقم أعلى بكتير
+    // من الواقع، مش بس حساسية الخوارزمية. الحل: نسجّل الحساس مرة واحدة
+    // بس لكل دورة حياة للخدمة، ونتجاهل أي نداء onStartCommand تاني
+    // لسه الحساس متسجّل فيه أصلاً
+    private boolean sensorListenerRegistered = false;
 
     // حالة خوارزمية الـ Fallback (نفس متغيرات sensors.js بالظبط)
     private double filteredMagnitude = GRAVITY;
@@ -75,6 +94,12 @@ public class StepCounterForegroundService extends Service implements SensorEvent
         sensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
         stepCounterSensor = sensorManager.getDefaultSensor(Sensor.TYPE_STEP_COUNTER);
 
+        // (تشخيص مؤقت - شيله بعد ما تتأكد من نتيجته) بيوضح في Logcat
+        // (فلتر "Sakkawi") هل الجهاز ده بيدخل الوضع 1 (حساس حقيقي) ولا
+        // الوضع 2 (Fallback على الأكسلرومتر) - ده اللي بيفسّر أي فرق في
+        // العدد مقارنة بعدادات زي Google Fit
+        android.util.Log.d("Sakkawi", "stepCounterSensor = " + stepCounterSensor);
+
         if (stepCounterSensor == null) {
             // [الوضع 2] الجهاز معندوش حساس عدّ خطوات أصلي - نرجع
             // لحساس التسارع الخام بدل ما العداد يقف تمامًا
@@ -87,14 +112,25 @@ public class StepCounterForegroundService extends Service implements SensorEvent
     public int onStartCommand(Intent intent, int flags, int startId) {
         startForeground(NOTIFICATION_ID, buildNotification());
 
+        // (إصلاح - باج حقيقي خطير - شوف تعليق sensorListenerRegistered
+        // فوق): لو الحساس متسجّل بالفعل، مننداش registerListener() تاني
+        // خالص - ده بالظبط اللي كان بيسبب تسجيل نفس القراءة كذا مرة
+        // وزيادة العدد بشكل كبير عن الحقيقة كل ما JS تعيد نداء
+        // startTracking() (كل 4 ثواني تقريبًا طول ما التطبيق فاتح)
+        if (sensorListenerRegistered) {
+            return START_STICKY;
+        }
+
         if (!usingFallbackMode && stepCounterSensor != null) {
             sensorManager.registerListener(
                     this, stepCounterSensor, SensorManager.SENSOR_DELAY_NORMAL);
+            sensorListenerRegistered = true;
         } else if (usingFallbackMode && accelerometerSensor != null) {
             // بنسجّل بمعدل أسرع شوية (GAME) عشان دقة أعلى في اكتشاف
             // القمم، زي ما المتصفح بيعمل تقريبًا مع devicemotion
             sensorManager.registerListener(
                     this, accelerometerSensor, SensorManager.SENSOR_DELAY_GAME);
+            sensorListenerRegistered = true;
 
             // نسترجع أي عدّاد fallback محفوظ من قبل لنفس اليوم (لو
             // الخدمة اتقفلت وأعيد تشغيلها)
@@ -272,6 +308,7 @@ public class StepCounterForegroundService extends Service implements SensorEvent
         if (sensorManager != null) {
             sensorManager.unregisterListener(this);
         }
+        sensorListenerRegistered = false;
     }
 
     @Override

@@ -700,7 +700,26 @@ async function flushPendingStepsBatch() {
         // الجاي بدل ما تتفقد نهائياً
         pendingStepsDelta += stepsToFlush;
         pendingStepsPointsDelta += pointsToFlush;
-        document.dispatchEvent(new CustomEvent('app:toast', { detail: { message: error.message, type: 'error' } }));
+
+        // (إصلاح - باج حقيقي) كنا بنعتمد بس على persistPendingStepsToStorage()
+        // وقت visibilitychange/pagehide عشان نحفظ الرصيد ده احتياطيًا -
+        // فلو التطبيق اتقفل فجأة (Kill من النظام بسبب الرام مثلاً) قبل
+        // ما أي حدث من دول يحصل، الرصيد المتراكم في الذاكرة كان بيضيع
+        // نهائيًا من غير رجعة حتى لو النت رجع بعدين. دلوقتي بنحفظه فورًا
+        // في localStorage بمجرد ما أي Flush يفشل، بغض النظر عن سبب
+        // الفشل أو حالة الصفحة وقتها
+        persistPendingStepsToStorage();
+
+        // (إصلاح) رسالة الخطأ الأصلية (error.message) بتوصل زي ما هي من
+        // Supabase/الشبكة - مفيدة للمطوّر لكن مش مفهومة للمستخدم العادي
+        // (مثلاً "TypeError: Failed to fetch"). لو السبب أوفلاين، نعرض
+        // رسالة مطمئنة بدل النص التقني الخام
+        const isOffline = typeof navigator !== 'undefined' && navigator.onLine === false;
+        const friendlyMessage = isOffline
+            ? 'مفيش نت دلوقتي - هنحفظ تقدّمك ونبعته أول ما النت يرجع'
+            : error.message;
+
+        document.dispatchEvent(new CustomEvent('app:toast', { detail: { message: friendlyMessage, type: 'error' } }));
     }
 }
 
@@ -920,12 +939,24 @@ function bindStepsFlushLifecycleEvents() {
     restorePendingStepsFromStorage();
 
     document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState !== 'hidden') return;
+        if (document.visibilityState === 'hidden') {
+            if (navigator.onLine) {
+                flushPendingStepsBatch();
+            } else {
+                persistPendingStepsToStorage();
+            }
+            return;
+        }
 
+        // (إصلاح - باج حقيقي) لو التطبيق رجع للـ Foreground والنت متاح،
+        // نحاول نبعت أي خطوات لسه متراكمة فورًا - مش نستنى بس حدث
+        // 'online' (اللي ممكن ميطلقش دايمًا وهو صحيح إن الصفحة كانت في
+        // الخلفية وقت رجوع النت فعليًا، خصوصًا جوه WebView على بعض
+        // أجهزة أندرويد). ده أهم سيناريو للمستخدم: مشي أوفلاين، فتح
+        // التطبيق تاني ولقى نت موجود - المفروض يتبعت على طول من غير ما
+        // يستنى خطوة جديدة تتسجل أو الـ Flush الدوري يجيله دوره
         if (navigator.onLine) {
             flushPendingStepsBatch();
-        } else {
-            persistPendingStepsToStorage();
         }
     });
 

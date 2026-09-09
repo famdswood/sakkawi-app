@@ -1,0 +1,1572 @@
+<!DOCTYPE html>
+<!-- ==================================================================
+     سِكّاوي | admin.html
+     ------------------------------------------------------------------
+     المرحلة الثالثة (الجزء 3 والأخير): واجهة تحكم الأدمن.
+
+     صفحة مستقلة تماماً عن index.html (مش موجهة لمستخدمي التطبيق
+     العاديين) - بتحتوي على أداتين إدارة بسيطتين:
+       1) تعديل نصف قطر نطاق نزلة عبيد الجغرافي (geofence_radius_meters
+          في جدول app_settings - شوف 001_geofencing_setup.sql)
+       2) البحث عن مستخدم وتفعيل/إلغاء تفعيل حسابه يدوياً كمغترب
+          (is_verified_override في جدول profiles)
+
+     نفس هوية "Dark Luxury" وإعداد Tailwind الموجودين في index.html
+     بالظبط (نفس ألوان lux/gold/brand، نفس متغيرات CSS من style.css)
+     عشان الصفحتين يفضلوا متسقين بصرياً، لكن من غير أي كود خاص
+     بواجهة المستخدم العادي (الستوريز، السؤال اليومي..إلخ).
+
+     ------------------------------------------------------------------
+     [تحديث الشكل] App Shell "لوحة تحكم" حقيقي بدل شكل تطبيق موبايل:
+       - من md فما فوق: Sidebar تنقل جنبي ثابت على اليمين (طبيعي في
+         RTL - أول عنصر في الـ DOM بيتحط في جهة البداية) + شريط علوي
+         فيه صف "إحصائيات سريعة" ثابت (إجمالي الحسابات / مسجلين
+         اليوم / أونلاين الآن) ظاهر مهما كان التاب المفتوح.
+       - على الموبايل: نفس الشكل القديم (شريط تنقل سفلي) لأنه أصلاً
+         مناسب للموبايل، والـ Sidebar بتتخفي (class="hidden md:flex").
+       - آلية التابات (#tabPanelXxx + .admin-tab-panel + hidden) اتسابت
+         زي ما هي 100% - أزرار الـ Sidebar وأزرار الشريط السفلي كلهم
+         بنفس class="admin-nav-tab" ونفس data-tab-target، فـ
+         initAdminTabNavigation في js/admin.js بيشتغل عليهم مع بعض من
+         غير أي تعديل في منطق التبديل نفسه (عدّلنا بس مزامنة is-active
+         بين النسختين - شوف التعليق فوق الدالة في admin.js).
+     ------------------------------------------------------------------
+
+     ⚠️ ملاحظة أمان مهمة (مقروءة بعناية قبل النشر الفعلي):
+     كما هو موضّح في تعليقات 001_geofencing_setup.sql، الـ RLS الحالي
+     على app_settings بيسمح بـ SELECT فقط لـ authenticated/anon، ومفيش
+     policy لـ UPDATE. يعني بالإعداد الحالي، نداءات updateGeofenceRadius
+     و toggleUserVerifiedOverride في js/admin.js هتفشل (RLS) لو
+     المستخدم مسجّل دخول بحساب عادي (مش service_role). قبل ما الصفحة
+     دي تشتغل فعلياً في بيئة إنتاج، لازم واحد من اتنين:
+       أ) إضافة عمود/claim "role = admin" في الـ JWT + policies تسمح
+          بالتعديل لـ admin بس (زي المثال المُعلَّق آخر السكريبت SQL)، أو
+       ب) تمرير التعديلات عن طريق endpoint خلفي آمن بيستخدم service_role
+          (بدل استدعاء supabaseClient مباشرة من المتصفح)
+     ================================================================== -->
+<html lang="ar" dir="rtl" class="h-full bg-lux-950 dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>لوحة تحكم الأدمن — سِكّاوي</title>
+    <meta name="robots" content="noindex, nofollow">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <!-- [هوية "غرفة التحكم"] ضفنا JetBrains Mono - مستخدم بس للأرقام
+         والبيانات الحية (إحصائيات، نصف قطر النطاق، تواريخ الظهور..)
+         عشان تحس إنها قراءات حقيقية بتتحدث لحظياً، مش نص عادي -->
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&family=Tajawal:wght@400;500;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- نفس إعداد Tailwind CDN الموجود في index.html بالضبط، عشان كلاسات
+         lux-XXX / gold-XXX / brand-XXX تشتغل هنا كمان بنفس القيم -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        cairo: ['Cairo', 'sans-serif'],
+                        tajawal: ['Tajawal', 'sans-serif'],
+                        mono: ['"JetBrains Mono"', 'ui-monospace', 'monospace'],
+                    },
+                    colors: {
+                        lux: {
+                            50:  'var(--lux-50)',
+                            400: 'var(--lux-400)',
+                            500: 'var(--lux-500)',
+                            600: 'var(--lux-600)',
+                            700: 'var(--lux-700)',
+                            800: 'var(--lux-800)',
+                            900: 'var(--lux-900)',
+                            950: 'var(--lux-950)',
+                        },
+                        gold: {
+                            300: '#F2D77E',
+                            400: '#E8C158',
+                            500: '#D4AF37',
+                            600: '#B8942A',
+                        },
+                        brand: {
+                            50: '#f0fdfa',
+                            100: '#ccfbf1',
+                            500: '#14b8a6',
+                            600: '#0d9488',
+                            700: '#0f766e',
+                        }
+                    },
+                    boxShadow: {
+                        'soft-card': '0 10px 30px -10px rgba(0, 0, 0, 0.45), 0 4px 12px -2px rgba(0, 0, 0, 0.25)',
+                        'glow-amber': '0 0 20px rgba(212, 175, 55, 0.35)',
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- css/style.css: بنعيد استخدامه هنا عشان نستفيد من متغيرات
+         الألوان (--lux-XXX، --gold-XXX) وكلاسات المودالات/الأزرار
+         المشتركة، بالإضافة لقسم "9) أدوات تحكم الأدمن" الجديد فيه -->
+    <link rel="stylesheet" href="css/style.css">
+
+    <!-- ==================================================================
+         تنسيقات خاصة بهوية "غرفة التحكم" (Ops Console): حدود شعرية
+         (hairline) بدل الظلال التقيلة، الذهبي بقى لمسة واحدة على أهم
+         رقم بس مش على كل حاجة، وأرقام البيانات الحية بخط Mono. حطيناها
+         هنا Inline بدل css/style.css لأننا معندناش نسخة من الملف ده في
+         السياق ده - لو حابب تنقلها لـ style.css بعدين تحت قسم "أدوات
+         تحكم الأدمن" الموجود، هي بالظبط نفس المحتوى من غير أي تغيير.
+         ================================================================== -->
+    <style>
+        /* زرار تاب واحد (تستخدم في نسختين: الشريط السفلي بالموبايل،
+           والـ Sidebar بالديسكتوب) - حالة افتراضية باهتة، وحالة
+           .is-active بلون ذهبي (من غير توهج/Blur تقيل - خط سفلي رفيع
+           بدل الخلفية الممتلئة، أقرب لإحساس تبويب تقني) يميّز التاب
+           المفتوح حالياً. النسخة الأساسية دي شكل "عمودي" (أيقونة فوق
+           النص) المستخدم في شريط التنقل السفلي بالموبايل */
+        .admin-nav-tab {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.25rem;
+            padding: 0.5rem 0.75rem;
+            border-radius: 0.6rem;
+            color: var(--lux-500, #6b7280);
+            transition: color 0.2s ease, background-color 0.2s ease;
+            flex: 1;
+        }
+        .admin-nav-tab svg { width: 1.25rem; height: 1.25rem; }
+        .admin-nav-tab span { font-size: 0.65rem; font-weight: 700; }
+        .admin-nav-tab.is-active {
+            color: #E8C158;
+            background: rgba(212, 175, 55, 0.06);
+        }
+
+        /* نسخة "أفقية" من نفس الزرار (أيقونة جنب النص، عرض كامل) -
+           مستخدمة بس جوه الـ Sidebar بالديسكتوب. بتضاف كـ class ثانية
+           فوق .admin-nav-tab الأساسية، فبتورث نفس حالة .is-active، وبناخد
+           خط ذهبي رفيع على الحافة (اللي هي يمين العنصر في RTL) بدل
+           الخلفية الكاملة كإشارة "أنت هنا" أوضح وأهدأ */
+        .admin-nav-tab--side {
+            flex-direction: row;
+            justify-content: flex-start;
+            width: 100%;
+            gap: 0.75rem;
+            padding: 0.6rem 0.85rem;
+            border-radius: 0.5rem;
+            border-inline-end: 2px solid transparent;
+        }
+        .admin-nav-tab--side svg { width: 1.05rem; height: 1.05rem; flex-shrink: 0; }
+        .admin-nav-tab--side span { font-size: 0.8rem; font-weight: 600; }
+        .admin-nav-tab--side.is-active {
+            border-inline-end-color: #D4AF37;
+        }
+
+        /* شرائح اختيار ترتيب "كل الحسابات" - Segmented Control بسيط */
+        .admin-sort-chip {
+            font-size: 0.65rem;
+            font-weight: 700;
+            padding: 0.4rem 0.7rem;
+            border-radius: 9999px;
+            border: 1px solid var(--lux-700, #374151);
+            color: var(--lux-400, #9ca3af);
+            background: transparent;
+            white-space: nowrap;
+            transition: all 0.2s ease;
+        }
+        .admin-sort-chip.is-active {
+            color: #0b0e14;
+            background: linear-gradient(135deg, #F2D77E, #D4AF37);
+            border-color: transparent;
+        }
+
+        /* قراءة إحصائية في الشريط العلوي الثابت - بلا خلفية/حدود كارت،
+           أقرب لـ "لوحة قراءات" (readout) منها لكارت SaaS: تسمية صغيرة
+           هادية + رقم كبير بخط Mono، وفاصل شعري بين كل قراءة والتانية
+           بدل ما كل قراءة تبقى جوه صندوق مقفول لوحدها */
+        .console-readout {
+            display: flex;
+            flex-direction: column;
+            gap: 0.15rem;
+            padding-inline-start: 0.9rem;
+            border-inline-start: 1px solid var(--lux-800, #1f2430);
+        }
+        .console-readout:first-child {
+            padding-inline-start: 0;
+            border-inline-start: none;
+        }
+        .console-readout-label {
+            font-size: 0.65rem;
+            font-weight: 600;
+            color: var(--lux-500, #6b7280);
+        }
+        .console-readout-value {
+            font-family: '"JetBrains Mono"', ui-monospace, monospace;
+            font-variant-numeric: tabular-nums;
+            font-size: 1.15rem;
+            font-weight: 700;
+            color: var(--lux-50, #f4f5f7);
+            line-height: 1.15;
+        }
+        .console-readout--live .console-readout-value { color: #34d399; }
+
+        /* نقطة نبض صغيرة جنب قراءة "أونلاين الآن" - إشارة حياة فعلية
+           بدل ما تبقى مجرد رقم ساكن زي باقي القراءات */
+        .console-live-dot {
+            display: inline-block;
+            width: 0.4rem;
+            height: 0.4rem;
+            border-radius: 9999px;
+            background: #34d399;
+            margin-inline-end: 0.35rem;
+            animation: console-pulse 2s ease-in-out infinite;
+        }
+        @keyframes console-pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.35; }
+        }
+
+        /* ==============================================================
+           ويدجت البانر - تحكم الجزء الظاهر من الصورة / ظلام الصورة / لون
+           النص (امتداد للمرحلة 4). حطيناها هنا Inline بنفس منطق باقي
+           الملف (معندناش نسخة من style.css في السياق ده) - .admin-banner-
+           preview / -img / -text / -empty الأساسيين معرّفين في style.css
+           نفسه ومفروض يكون فيهم position:relative على الصندوق، إحنا هنا
+           بس بنضيف اللي ناقص لطبقة التعتيم الجديدة وعناصر التحكم.
+           ============================================================== */
+
+        /* طبقة تعتيم فوق صورة المعاينة - شفافيتها بتتحدث Inline من JS
+           (شوف applyBannerOverlay في js/admin.js) مع أي تغيير في السلايدر،
+           قبل الحفظ حتى */
+        .admin-banner-preview-overlay {
+            position: absolute;
+            inset: 0;
+            z-index: 1;
+            pointer-events: none;
+            border-radius: inherit;
+            /* [تعديل] نفس التدرّج بالظبط اللي على .home-banner-overlay في
+               التطبيق الفعلي (style.css) - كان هنا لون مسطّح بس، فالمعاينة
+               كانت بتبان أغمق/مختلفة عن الشكل الحقيقي فوق الصفحة الرئيسية */
+            background-image: linear-gradient(180deg, rgba(0, 0, 0, 0.05), rgba(0, 0, 0, 0.55));
+            background-color: rgba(0, 0, 0, 0.4);
+            transition: background-color 0.2s ease;
+        }
+        /* لازم نص المعاينة يفضل فوق طبقة التعتيم دايماً */
+        .admin-banner-preview-text {
+            position: relative;
+            z-index: 2;
+        }
+
+        /* [تعديل] طبقة سحب حرة لتحديد الجزء الظاهر من الصورة (Focal Point) -
+           بديل شبكة الـ 3×3 القديمة (admin-focal-grid/admin-focal-point،
+           اتشالوا). الطبقة بتتحط فوق #bannerPreviewImage مباشرة جوه
+           #bannerPreviewBox وبتغطي مساحتها بالظبط، وبتلتقط سحب/دوس/لمس
+           (Pointer Events - بتوحّد الماوس واللمس) عشان تحدد object-position
+           بشكل حر مش خطوات ثابتة - شوف initBannerPositionDrag في js/admin.js */
+        .admin-banner-position-layer {
+            position: absolute;
+            inset: 0;
+            z-index: 3;
+            cursor: grab;
+            touch-action: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .admin-banner-position-layer.hidden {
+            display: none;
+        }
+        .admin-banner-position-layer.is-dragging {
+            cursor: grabbing;
+        }
+        .admin-banner-position-layer:focus-visible {
+            outline: 2px solid #D4AF37;
+            outline-offset: -2px;
+            border-radius: inherit;
+        }
+        /* النقطة نفسها - متمركزة على إحداثيات bannerImagePosition عن طريق
+           left/top % + transform: translate(-50%, -50%) عشان مركز النقطة
+           هو نقطة السحب فعلاً، مش زاويتها العلوية (شوف syncBannerPositionHandleUI) */
+        .admin-banner-position-handle {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 1.15rem;
+            height: 1.15rem;
+            border-radius: 9999px;
+            background: linear-gradient(135deg, #F2D77E, #D4AF37);
+            border: 2px solid #fff;
+            box-shadow: 0 1px 6px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(0, 0, 0, 0.25);
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            transition: box-shadow 0.15s ease;
+        }
+        .admin-banner-position-layer.is-dragging .admin-banner-position-handle {
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.6), 0 0 0 4px rgba(212, 175, 55, 0.25);
+        }
+
+        /* سلايدر ظلام الصورة */
+        .admin-range-slider {
+            width: 100%;
+            height: 0.35rem;
+            border-radius: 9999px;
+            background: var(--lux-800, #1f2430);
+            appearance: none;
+            -webkit-appearance: none;
+            outline: none;
+            cursor: pointer;
+        }
+        .admin-range-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 1rem;
+            height: 1rem;
+            border-radius: 9999px;
+            background: linear-gradient(135deg, #F2D77E, #D4AF37);
+            border: 2px solid #0b0e14;
+            cursor: pointer;
+        }
+        .admin-range-slider::-moz-range-thumb {
+            width: 1rem;
+            height: 1rem;
+            border-radius: 9999px;
+            background: linear-gradient(135deg, #F2D77E, #D4AF37);
+            border: 2px solid #0b0e14;
+            cursor: pointer;
+        }
+
+        /* منتقي لون النص - غلاف بسيط حول input[type=color] الافتراضي */
+        .admin-color-input {
+            width: 2.25rem;
+            height: 1.75rem;
+            padding: 0;
+            border: 1px solid var(--lux-700, #374151);
+            border-radius: 0.4rem;
+            background: transparent;
+            cursor: pointer;
+        }
+        .admin-color-input::-webkit-color-swatch-wrapper { padding: 0.15rem; }
+        .admin-color-input::-webkit-color-swatch { border-radius: 0.25rem; border: none; }
+        .admin-color-input::-moz-color-swatch { border-radius: 0.25rem; border: none; }
+    </style>
+    <!-- Cropper.js - قص دائري لصورة هوية التطبيق (widget "identityWidget"
+         جوه تاب المنشورات) - مكتبة خفيفة عن طريق CDN بدل ما تتبنى من
+         الصفر، شوف initAppIdentityWidget في js/admin.js -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.2/cropper.min.css">
+</head>
+<body class="h-full bg-lux-950 font-cairo text-lux-50 antialiased overflow-hidden">
+
+    <!-- مخفي افتراضياً (visibility:hidden مش display:none عشان الـ layout
+         يتحسب صح) لحد ما verifyAdminAccessOrRedirect في admin.js تتأكد
+         إن اللي فاتح الصفحة أدمن فعلاً - admin.js بيشيل الكلاس ده يدوياً
+         بعد التحقق الناجح، وإلا بيعمل redirect قبل ما يوصل للسطر ده أصلاً.
+
+         هيكل الصفحة بقى "App Shell" ثابت الارتفاع (h-full) على شكل
+         لوحة تحكم حقيقية: من md فما فوق flex-row بين Sidebar (aside)
+         ومنطقة المحتوى، وعلى الموبايل flex-col زي ما كانت (هيدر فوق،
+         محتوى قابل للـ Scroll في النص، تنقل سفلي تحت) -->
+    <div id="adminPageContent" style="visibility:hidden" class="h-full flex flex-col md:flex-row">
+
+        <!-- ========================================================= -->
+        <!-- Sidebar - ديسكتوب/تابلت أفقي بس (من md فما فوق). أول عنصر
+             في الـ DOM يعني بيتحط في جهة "البداية" واللي هي اليمين في
+             RTL - شكل طبيعي للوحة تحكم عربية -->
+        <!-- ========================================================= -->
+        <aside class="hidden md:flex md:flex-col md:w-64 shrink-0 border-l border-lux-800/60 bg-lux-900/50 backdrop-blur-xl">
+
+            <div class="px-5 pt-6 pb-5 border-b border-lux-800/60">
+                <h1 class="text-lg font-black text-lux-50 leading-tight">لوحة تحكم الأدمن</h1>
+                <p class="text-[0.7rem] text-lux-500 font-bold mt-1">سِكّاوي</p>
+            </div>
+
+            <!-- نفس أزرار التنقل بالظبط (class="admin-nav-tab" +
+                 data-tab-target) بس بشكل أفقي (admin-nav-tab--side) -
+                 initAdminTabNavigation في js/admin.js بتلقطها تلقائياً
+                 لأنها بتدور على .admin-nav-tab[data-tab-target] مش على
+                 مكانها في الصفحة -->
+            <nav class="flex-1 px-3 py-4 space-y-1">
+                <button type="button" class="admin-nav-tab admin-nav-tab--side is-active" data-tab-target="tabPanelVisitors">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <rect x="4" y="12" width="4" height="8" rx="1"></rect>
+                        <rect x="10" y="7" width="4" height="13" rx="1"></rect>
+                        <rect x="16" y="3" width="4" height="17" rx="1"></rect>
+                    </svg>
+                    <span>الزوار</span>
+                </button>
+
+                <button type="button" class="admin-nav-tab admin-nav-tab--side" data-tab-target="tabPanelGeofence">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <circle cx="12" cy="9" r="4"></circle>
+                        <path d="M12 21c4-4.5 7-8.5 7-12a7 7 0 1 0-14 0c0 3.5 3 7.5 7 12z"></path>
+                    </svg>
+                    <span>النطاق الجغرافي</span>
+                </button>
+
+                <button type="button" class="admin-nav-tab admin-nav-tab--side" data-tab-target="tabPanelUsers">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <circle cx="9" cy="8" r="3.5"></circle>
+                        <path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"></path>
+                        <circle cx="18" cy="9" r="2.5"></circle>
+                        <path d="M15.5 14.2c2.6.4 4.5 2.7 4.5 5.3"></path>
+                    </svg>
+                    <span>الحسابات</span>
+                </button>
+
+                <button type="button" class="admin-nav-tab admin-nav-tab--side" data-tab-target="tabPanelNotifications">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                        <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+                    </svg>
+                    <span>الإشعارات</span>
+                </button>
+
+                <button type="button" class="admin-nav-tab admin-nav-tab--side" data-tab-target="tabPanelBanner">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <rect x="3" y="5" width="18" height="14" rx="2"></rect>
+                        <circle cx="8.5" cy="10" r="1.5"></circle>
+                        <path d="M3 16l5-4 4 3 3-2.5 6 5"></path>
+                    </svg>
+                    <span>البانر</span>
+                </button>
+
+                <button type="button" class="admin-nav-tab admin-nav-tab--side" data-tab-target="tabPanelPosts">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <rect x="3" y="4" width="18" height="16" rx="2"></rect>
+                        <line x1="7" y1="9" x2="17" y2="9"></line>
+                        <line x1="7" y1="13" x2="14" y2="13"></line>
+                        <path d="M7 17h4"></path>
+                    </svg>
+                    <span>المنشورات</span>
+                </button>
+
+                <button type="button" class="admin-nav-tab admin-nav-tab--side" data-tab-target="tabPanelQuestions">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <circle cx="12" cy="12" r="9"></circle>
+                        <path d="M9.5 9a2.5 2.5 0 0 1 4.7-1.2c.5.9.2 1.7-.6 2.4-.9.8-1.6 1.3-1.6 2.6"></path>
+                        <circle cx="12" cy="17" r="0.75" fill="currentColor" stroke="none"></circle>
+                    </svg>
+                    <span>الأسئلة اليومية</span>
+                </button>
+
+                <!-- المرحلة 7: الأوسمة والشارة المميزة -->
+                <button type="button" class="admin-nav-tab admin-nav-tab--side" data-tab-target="tabPanelBadges">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M12 3l2.2 4.5 5 .7-3.6 3.5.9 5-4.5-2.4-4.5 2.4.9-5-3.6-3.5 5-.7z"></path>
+                    </svg>
+                    <span>الأوسمة</span>
+                </button>
+
+                <!-- المرحلة 8: صندوق رسائل الدعم -->
+                <button type="button" class="admin-nav-tab admin-nav-tab--side" data-tab-target="tabPanelSupport">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <rect x="3" y="5" width="18" height="14" rx="2"></rect>
+                        <path d="m3 7 9 6 9-6"></path>
+                    </svg>
+                    <span>صندوق الرسائل</span>
+                </button>
+            </nav>
+
+            <div class="px-5 py-4 border-t border-lux-800/60">
+                <div class="console-readout" style="border-inline-start:none; padding-inline-start:0;">
+                    <span class="console-readout-label">
+                        <span class="console-live-dot"></span>أونلاين الآن
+                    </span>
+                    <span id="sidebarOnlineReadout" class="console-readout-value text-emerald-400">—</span>
+                </div>
+            </div>
+        </aside>
+
+        <!-- ========================================================= -->
+        <!-- منطقة المحتوى (هيدر + تابات) - بتاخد باقي المساحة جنب
+             الـ Sidebar بالديسكتوب، وكل المساحة على الموبايل -->
+        <!-- ========================================================= -->
+        <div class="flex-1 min-h-0 flex flex-col">
+
+        <!-- ============================================================= -->
+        <!-- هيدر الصفحة (ثابت، مش بيتحرك مع الـ Scroll) - فيه كمان صف
+             "إحصائيات سريعة" ثابت وظاهر مهما كان التاب المفتوح (إجمالي
+             الحسابات / مسجلين اليوم / أونلاين الآن) - شوف updateHeaderStats
+             في js/admin.js، بتتحدث تلقائياً مع نفس بيانات تابي الزوار
+             والحسابات من غير أي طلب إضافي لـ Supabase -->
+        <!-- ============================================================= -->
+        <header class="shrink-0 px-4 md:px-8 pt-6 pb-4 border-b border-lux-800/60 space-y-4">
+            <div>
+                <h1 class="md:hidden text-xl font-black text-lux-50">لوحة تحكم الأدمن</h1>
+                <p class="text-xs md:text-sm text-lux-400 font-medium max-w-md">
+                    سِكّاوي — إدارة نطاق نزلة عبيد الجغرافي وحسابات المغتربين
+                </p>
+            </div>
+
+            <!-- [هوية "غرفة التحكم"] شريط "قراءات" مش كروت: تسمية هادية
+                 فوق رقم كبير بخط Mono، وفاصل شعري بين كل قراءة والتانية
+                 - شوف updateHeaderStats في js/admin.js -->
+            <div class="flex items-start">
+                <div class="console-readout">
+                    <span class="console-readout-label">إجمالي الحسابات</span>
+                    <span id="headerStatTotalUsers" class="console-readout-value">—</span>
+                </div>
+                <div class="console-readout">
+                    <span class="console-readout-label">مسجلين اليوم</span>
+                    <span id="headerStatRegisteredToday" class="console-readout-value">—</span>
+                </div>
+                <div class="console-readout console-readout--live">
+                    <span class="console-readout-label"><span class="console-live-dot"></span>أونلاين الآن</span>
+                    <span id="headerStatOnline" class="console-readout-value">—</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- ============================================================= -->
+        <!-- منطقة المحتوى - تاب واحد بس ظاهر في المرة الواحدة (شوف
+             .admin-tab-panel + hidden في js/admin.js)، وهي دي بس اللي
+             بتعمل Scroll لو محتواها طويل (زي قائمة حسابات كتير) -->
+        <!-- ============================================================= -->
+        <main class="flex-1 min-h-0 overflow-y-auto px-4 md:px-8 py-5 md:py-7">
+        <div class="md:max-w-3xl space-y-4">
+
+            <!-- ------------------------------------------------------- -->
+            <!-- تاب 1: الزوار والمستخدمين النشطين (المرحلة 1)
+                 visitor_sessions + profiles.last_seen_at / is_online -
+                 شوف loadVisitorStats() في js/admin.js -->
+            <!-- ------------------------------------------------------- -->
+            <section id="tabPanelVisitors" class="admin-tab-panel space-y-4">
+
+                <section id="visitorsWidget"
+                         class="admin-card bg-lux-900/40 rounded-2xl p-5 md:p-6 border border-lux-800/70 space-y-5">
+
+                    <div>
+                        <h2 class="text-sm font-extrabold text-lux-50">الزوار</h2>
+                        <p class="text-xs text-lux-400 font-medium mt-0.5">
+                            عدد زوار اليوم (مسجلين وعابرين) وإجمالي كل الوقت
+                        </p>
+                    </div>
+
+                    <!-- كروت إحصائيات اليوم + الإجمالي - حدود شعرية بدل
+                         خلفية مقفولة، والذهبي محجوز لـ"إجمالي كل الوقت"
+                         بس (أهم رقم هنا) عشان يفضل له معنى مميز -->
+                    <div class="grid grid-cols-3 gap-2">
+                        <div class="border border-lux-800/70 rounded-xl p-3 text-center">
+                            <div id="visitorsTodayRegistered" class="text-xl font-mono font-bold tabular-nums text-lux-50">—</div>
+                            <div class="text-[0.65rem] font-bold text-lux-500 mt-1">مسجلين اليوم</div>
+                        </div>
+                        <div class="border border-lux-800/70 rounded-xl p-3 text-center">
+                            <div id="visitorsTodayGuests" class="text-xl font-mono font-bold tabular-nums text-lux-50">—</div>
+                            <div class="text-[0.65rem] font-bold text-lux-500 mt-1">عابرين اليوم</div>
+                        </div>
+                        <div class="border border-gold-500/25 rounded-xl p-3 text-center">
+                            <div id="visitorsAllTimeTotal" class="text-xl font-mono font-bold tabular-nums text-gold-400">—</div>
+                            <div class="text-[0.65rem] font-bold text-lux-500 mt-1">إجمالي كل الوقت</div>
+                        </div>
+                    </div>
+
+                    <!-- رسم بياني حقيقي (خط + مساحة SVG) لآخر 7 أيام بدل
+                         أعمدة الـ divs القديمة - شوف renderVisitorsWeeklyChart
+                         في js/admin.js، بيبني الـ SVG بالكامل ديناميكياً -->
+                    <div>
+                        <p class="text-[0.65rem] font-bold text-lux-500 mb-2">آخر 7 أيام</p>
+                        <div id="visitorsWeeklyChart" class="w-full"></div>
+                    </div>
+
+                    <p id="visitorsStatus" class="admin-status-text" role="status" aria-live="polite"></p>
+
+                </section>
+
+            </section>
+
+            <!-- ------------------------------------------------------- -->
+            <!-- تاب 2: نطاق نزلة عبيد الجغرافي (geofence_radius_meters) -->
+            <!-- ------------------------------------------------------- -->
+            <section id="tabPanelGeofence" class="admin-tab-panel hidden space-y-4">
+
+                <!-- الكارت الوحيد اللي معاه خط ذهبي رفيع علوي (border-t-2
+                     border-t-gold-500/40) - ده العنصر البصري "البطل" في
+                     الصفحة لأنه أكتر حاجة مميزة لسِكّاوي فعلياً (نطاق
+                     جغرافي)، وباقي الكروت هادية حواليه (شوف مبدأ "اصرف
+                     جرأتك في مكان واحد" في ملاحظات التصميم) -->
+                <section id="geofenceRadiusWidget"
+                         class="admin-card bg-lux-900/40 rounded-2xl p-5 md:p-6 border border-lux-800/70 border-t-2 border-t-gold-500/40 space-y-5">
+
+                    <div class="flex items-start justify-between gap-3">
+                        <div>
+                            <h2 class="text-sm font-extrabold text-lux-50">نطاق نزلة عبيد الجغرافي</h2>
+                            <p class="text-xs text-lux-400 font-medium mt-0.5">
+                                نصف قطر النطاق المسموح بيه حوالين مركز القرية (بالمتر)
+                            </p>
+                        </div>
+                        <!-- شارة صغيرة بتعرض مركز النطاق الحالي (قراءة فقط هنا -
+                             تعديل الإحداثيات نفسها خارج نطاق هذا الـ Widget) -->
+                        <span id="geofenceCenterBadge"
+                              class="shrink-0 text-[0.65rem] font-bold text-lux-500 bg-lux-800 border border-lux-700 rounded-full px-2.5 py-1 whitespace-nowrap">
+                            …
+                        </span>
+                    </div>
+
+                    <!-- الدائرة/القرص: تمثيل بصري فعلي لنصف القطر (بيكبر
+                         وبيصغر مع الـ Slider لحظياً) بدل ما يفضل نصف
+                         القطر مجرد رقم مجرد - شوف updateGeofenceRadiusDial
+                         في js/admin.js، متصلة بنفس applyGeofenceRadiusToInputs
+                         المركزية اللي أصلاً بتتنادى من كل مكان (تحميل/
+                         تحريك الـ Slider/كتابة يدوية/حفظ) -->
+                    <div class="flex flex-col md:flex-row md:items-center gap-5 md:gap-8">
+                        <div class="flex justify-center md:justify-start shrink-0">
+                            <svg id="geofenceRadiusDial" viewBox="0 0 200 200" class="w-36 h-36 md:w-40 md:h-40" aria-hidden="true">
+                                <circle cx="100" cy="100" r="90" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="1"></circle>
+                                <circle cx="100" cy="100" r="60" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="1"></circle>
+                                <circle cx="100" cy="100" r="30" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="1"></circle>
+                                <circle id="geofenceRadiusDialCircle" cx="100" cy="100" r="10"
+                                        fill="rgba(212,175,55,0.10)" stroke="#D4AF37" stroke-width="1.5"></circle>
+                                <circle cx="100" cy="100" r="2" fill="#E8C158"></circle>
+                            </svg>
+                        </div>
+
+                        <div class="flex-1 w-full space-y-4">
+                            <!-- عرض القيمة الحالية بالمتر والكيلومتر -->
+                            <div class="flex items-baseline gap-2">
+                                <span id="geofenceRadiusValueMeters" class="text-3xl font-mono font-bold tabular-nums text-gold-400">
+                                    —
+                                </span>
+                                <span class="text-xs font-bold text-lux-500">متر</span>
+                                <span id="geofenceRadiusValueKm" class="text-xs font-mono font-medium text-lux-500">(— كم)</span>
+                            </div>
+
+                            <!-- Slider + Input رقمي متزامنين -->
+                            <div class="space-y-2">
+                                <input type="range" id="geofenceRadiusSlider"
+                                       class="admin-range-slider w-full"
+                                       min="100" max="20000" step="50" value="3500"
+                                       aria-label="نصف قطر النطاق بالمتر">
+
+                                <div class="flex items-center gap-2">
+                                    <input type="number" id="geofenceRadiusInput"
+                                           class="admin-number-input flex-1"
+                                           min="100" max="20000" step="50" value="3500"
+                                           inputmode="numeric" aria-label="نصف قطر النطاق بالمتر (إدخال رقمي)">
+                                    <button type="button" id="geofenceRadiusSaveBtn"
+                                            class="admin-save-btn">
+                                        حفظ
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- رسالة حالة الحفظ (نجاح/خطأ/تحميل) -->
+                    <p id="geofenceRadiusStatus" class="admin-status-text" role="status" aria-live="polite"></p>
+
+                </section>
+
+            </section>
+
+            <!-- ------------------------------------------------------- -->
+            <!-- تاب 3: كل الحسابات (قائمة دايمة ولحظية) + تفعيل المغتربين
+                 القائمة بتتحمّل كاملة عند فتح الصفحة وبتتحدّث لحظياً بـ
+                 Realtime من غير أي Refresh - شوف initUserVerificationWidget
+                 و bindAllUsersRealtimeSubscription في js/admin.js -->
+            <!-- ------------------------------------------------------- -->
+            <section id="tabPanelUsers" class="admin-tab-panel hidden space-y-4">
+
+                <section id="userVerificationWidget"
+                         class="admin-card bg-lux-900/40 rounded-2xl p-5 md:p-6 border border-lux-800/70 space-y-5">
+
+                    <div>
+                        <h2 class="text-sm font-extrabold text-lux-50">كل الحسابات</h2>
+                        <p class="text-xs text-lux-400 font-medium mt-0.5">
+                            بتتحدّث لحظياً - اختار الترتيب اللي يناسبك
+                        </p>
+                    </div>
+
+                    <!-- Segmented Control لاختيار ترتيب القائمة - "الأونلاين
+                         أولاً" هو الافتراضي دايماً عند فتح الصفحة - شوف
+                         userSortMode في js/admin.js -->
+                    <div id="userSortControls" class="flex items-center gap-1.5 overflow-x-auto pb-0.5">
+                        <button type="button" class="admin-sort-chip is-active" data-sort-mode="active">
+                            🟢 الأونلاين أولاً
+                        </button>
+                        <button type="button" class="admin-sort-chip" data-sort-mode="recent">
+                            الأحدث نشاطاً
+                        </button>
+                        <button type="button" class="admin-sort-chip" data-sort-mode="newest">
+                            الحسابات الجديدة
+                        </button>
+                    </div>
+
+                    <!-- حقل فلترة اختياري (محلي، من غير طلب جديد لـ Supabase) -->
+                    <div class="admin-search-box">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="shrink-0">
+                            <circle cx="11" cy="11" r="7"></circle>
+                            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                        </svg>
+                        <input type="text" id="userSearchInput"
+                               placeholder="فلترة بالاسم أو اسم المستخدم (اختياري)…"
+                               autocomplete="off" spellcheck="false">
+                    </div>
+
+                    <!-- حالات: تحميل / لا نتائج / نتائج -->
+                    <p id="userSearchStatus" class="admin-status-text" role="status" aria-live="polite"></p>
+
+                    <ul id="userSearchResultsList" class="space-y-2"></ul>
+
+                </section>
+
+            </section>
+
+            <!-- ------------------------------------------------------- -->
+            <!-- تاب 4: الإشعارات (المرحلة 3) - إرسال رسالة أدمن لمستخدم
+                 محدد أو بث لكل المستخدمين. بيستخدم نفس allUsersList
+                 المحمّلة أصلاً لتاب "الحسابات" لاختيار المستخدم (بحث محلي
+                 فوري) بدل ما يعمل استعلام منفصل - شوف initNotifyWidget
+                 في js/admin.js -->
+            <!-- ------------------------------------------------------- -->
+            <section id="tabPanelNotifications" class="admin-tab-panel hidden space-y-4">
+
+                <section id="notifyWidget"
+                         class="admin-card bg-lux-900/40 rounded-2xl p-5 md:p-6 border border-lux-800/70 space-y-5">
+
+                    <div>
+                        <h2 class="text-sm font-extrabold text-lux-50">إرسال إشعار</h2>
+                        <p class="text-xs text-lux-400 font-medium mt-0.5">
+                            هيوصل فوراً على الجرس - لمستخدم واحد أو للكل
+                        </p>
+                    </div>
+
+                    <!-- Segmented Control - نفس شكل ترتيب "كل الحسابات" بالظبط -->
+                    <div id="notifyModeControls" class="flex items-center gap-1.5">
+                        <button type="button" class="admin-sort-chip is-active" data-notify-mode="single">
+                            لمستخدم محدد
+                        </button>
+                        <button type="button" class="admin-sort-chip" data-notify-mode="broadcast">
+                            بث لكل المستخدمين
+                        </button>
+                    </div>
+
+                    <!-- اختيار المستخدم - ظاهر بس في وضع "لمستخدم محدد" -->
+                    <div id="notifyRecipientPicker" class="space-y-2">
+                        <div class="admin-search-box">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                 stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="shrink-0">
+                                <circle cx="11" cy="11" r="7"></circle>
+                                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                            </svg>
+                            <input type="text" id="notifyRecipientSearchInput"
+                                   placeholder="دوّر بالاسم أو اسم المستخدم…"
+                                   autocomplete="off" spellcheck="false">
+                        </div>
+                        <ul id="notifyRecipientResultsList" class="admin-notify-picker-results space-y-1.5"></ul>
+
+                        <!-- المستخدم المختار - شارة واحدة قابلة للإزالة -->
+                        <div id="notifyRecipientSelectedChip" class="admin-notify-selected-chip hidden">
+                            <img id="notifyRecipientSelectedAvatar" class="admin-user-avatar" src="" alt="" loading="lazy">
+                            <span id="notifyRecipientSelectedName" class="flex-1 min-w-0"></span>
+                            <button type="button" id="notifyRecipientClearBtn" class="admin-notify-clear-btn" aria-label="إلغاء اختيار المستخدم">✕</button>
+                        </div>
+                    </div>
+
+                    <!-- نص الإشعار -->
+                    <div class="space-y-1.5">
+                        <textarea id="notifyMessageInput" rows="4" maxlength="1000"
+                                  class="admin-notify-textarea w-full"
+                                  placeholder="اكتب رسالتك هنا…"></textarea>
+                    </div>
+
+                    <button type="button" id="notifySendBtn" class="admin-save-btn w-full">
+                        إرسال
+                    </button>
+
+                    <p id="notifyStatus" class="admin-status-text" role="status" aria-live="polite"></p>
+
+                </section>
+
+            </section>
+
+            <!-- ------------------------------------------------------- -->
+            <!-- تاب 5: البانر العلوي في الصفحة الرئيسية (المرحلة 4) -
+                 home_banner (صف واحد id=1) + Storage bucket "banners" -
+                 شوف sql/phase-4-banner.sql وinitHomeBannerWidget في
+                 js/admin.js -->
+            <!-- ------------------------------------------------------- -->
+            <section id="tabPanelBanner" class="admin-tab-panel hidden space-y-4">
+
+                <section id="bannerWidget"
+                         class="admin-card bg-lux-900/40 rounded-2xl p-5 md:p-6 border border-lux-800/70 space-y-5">
+
+                    <div>
+                        <h2 class="text-sm font-extrabold text-lux-50">البانر العلوي</h2>
+                        <p class="text-xs text-lux-400 font-medium mt-0.5">
+                            بيظهر فوق الصفحة الرئيسية لكل المستخدمين لحظياً
+                        </p>
+                    </div>
+
+                    <!-- معاينة حية - بتتحدث فورياً مع أي تغيير قبل الحفظ
+                         حتى (شوف updateBannerPreview في js/admin.js) -->
+                    <div id="bannerPreviewBox" class="admin-banner-preview">
+                        <img id="bannerPreviewImage" class="admin-banner-preview-img hidden" src="" alt="">
+                        <div id="bannerPreviewOverlay" class="admin-banner-preview-overlay"></div>
+                        <!-- [تعديل] طبقة سحب تحديد الجزء الظاهر من الصورة (Focal Point) -
+                             شغالة بس لما فيه صورة فعلاً (بتتخفي بكلاس hidden، شوف
+                             syncBannerPositionHandleUI في js/admin.js). اسحب/دوس/الأسهم
+                             لتحديد الجزء اللي يفضل ظاهر - بديل شبكة الـ 3×3 القديمة -->
+                        <div id="bannerPositionLayer" class="admin-banner-position-layer hidden" role="slider"
+                             tabindex="0" aria-label="اسحب لتحديد الجزء الظاهر من الصورة"
+                             aria-valuemin="0" aria-valuemax="100">
+                            <span id="bannerPositionHandle" class="admin-banner-position-handle"></span>
+                        </div>
+                        <p id="bannerPreviewText" class="admin-banner-preview-text"></p>
+                        <span id="bannerPreviewEmpty" class="admin-banner-preview-empty">مفيش بانر منشور دلوقتي</span>
+                    </div>
+
+                    <!-- رفع صورة - بترفع مباشرة على Storage bucket "banners"
+                         لما تتختار (مش وقت الحفظ)، والـ image_url بس هو اللي
+                         بيتحفظ وقت الضغط على "حفظ ونشر" -->
+                    <div class="space-y-1.5">
+                        <label class="text-[0.7rem] font-bold text-lux-400">صورة البانر (اختياري)</label>
+                        <div class="flex items-center gap-2.5 flex-wrap">
+                            <button type="button" id="bannerUploadBtn" class="admin-upload-btn">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                    <path d="M12 16V4"></path>
+                                    <path d="M6 10l6-6 6 6"></path>
+                                    <path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"></path>
+                                </svg>
+                                <span id="bannerUploadBtnLabel">ارفع صورة</span>
+                            </button>
+                            <button type="button" id="bannerRemoveImageBtn" class="admin-notify-clear-btn admin-notify-clear-btn--wide hidden">
+                                ✕ إزالة الصورة
+                            </button>
+                            <input type="file" id="bannerImageInput" accept="image/*" class="hidden">
+                        </div>
+                    </div>
+
+                    <!-- [تعديل] تحديد الجزء الظاهر من الصورة (Focal Point) - بقى تعديل
+                         يدوي حر بالسحب فوق المعاينة نفسها (#bannerPositionLayer جوه
+                         #bannerPreviewBox فوق) بدل شبكة الـ 3×3 القديمة (admin-focal-grid).
+                         الحقل ده بقى مجرد تعليمات + قراءة حية للموضع الحالي، مفيش عناصر
+                         تحكم هنا نفسها (شوف initBannerPositionDrag في js/admin.js) -->
+                    <div class="space-y-1.5" id="bannerPositionField">
+                        <div class="flex items-center justify-between gap-2">
+                            <label class="text-[0.7rem] font-bold text-lux-400">الجزء الظاهر من الصورة</label>
+                            <span id="bannerPositionValue" class="text-[0.7rem] font-mono font-bold text-lux-300">50%، 50%</span>
+                        </div>
+                        <p class="text-[0.65rem] text-lux-500 font-medium">
+                            اسحب النقطة اللي فوق المعاينة (أو استخدم الأسهم بعد الضغط عليها) لتحديد أي جزء من الصورة يفضل ظاهر جوه مساحة البانر - متاح بس لما تكون فيه صورة مرفوعة
+                        </p>
+                    </div>
+
+                    <!-- ظلام الصورة (Overlay) - سلايدر 0-100%، بيتحكم في شفافية
+                         طبقة تعتيم فوق الصورة عشان النص يبان أوضح - شوف
+                         applyBannerOverlay في js/admin.js -->
+                    <div class="space-y-1.5" id="bannerOverlayField">
+                        <div class="flex items-center justify-between">
+                            <label class="text-[0.7rem] font-bold text-lux-400" for="bannerOverlayInput">ظلام الصورة</label>
+                            <span id="bannerOverlayValue" class="text-[0.7rem] font-mono font-bold text-lux-300">40%</span>
+                        </div>
+                        <input type="range" id="bannerOverlayInput" class="admin-range-slider" min="0" max="100" step="5" value="40">
+                    </div>
+
+                    <!-- نص البانر + لون النص -->
+                    <div class="space-y-1.5">
+                        <div class="flex items-center justify-between gap-2">
+                            <label class="text-[0.7rem] font-bold text-lux-400" for="bannerTextInput">نص البانر (اختياري)</label>
+                            <div class="flex items-center gap-1.5">
+                                <label class="text-[0.65rem] font-bold text-lux-500" for="bannerTextColorInput">لون النص</label>
+                                <input type="color" id="bannerTextColorInput" class="admin-color-input" value="#ffffff">
+                            </div>
+                        </div>
+                        <textarea id="bannerTextInput" rows="3" maxlength="300"
+                                  class="admin-notify-textarea w-full"
+                                  placeholder="اكتب نص البانر هنا…"></textarea>
+                    </div>
+
+                    <!-- تفعيل/إخفاء -->
+                    <div class="flex items-center justify-between gap-3 pt-1 border-t border-lux-800/60">
+                        <div>
+                            <p class="text-xs font-bold text-lux-200">إظهار البانر</p>
+                            <p class="text-[0.65rem] text-lux-500 font-medium mt-0.5">لو متفعّل، هيظهر فوراً لكل المستخدمين</p>
+                        </div>
+                        <label class="admin-toggle-switch" for="bannerActiveToggle" title="إظهار/إخفاء البانر">
+                            <input type="checkbox" id="bannerActiveToggle">
+                            <span class="admin-toggle-switch-track"></span>
+                            <span class="admin-toggle-switch-thumb"></span>
+                        </label>
+                    </div>
+
+                    <button type="button" id="bannerSaveBtn" class="admin-save-btn w-full">
+                        حفظ ونشر
+                    </button>
+
+                    <p id="bannerStatus" class="admin-status-text" role="status" aria-live="polite"></p>
+
+                </section>
+
+            </section>
+
+            <!-- ------------------------------------------------------- -->
+            <!-- تاب 6: المنشورات (المرحلة 5، خطوة 25) - نشر منشور باسم
+                 التطبيق (نص و/أو صورة) عن طريق admin_create_post RPC
+                 فقط (مفيش .insert() مباشر على posts - شوف
+                 sql/phase-5-posts-admin.sql)، بالإضافة لقائمة "آخر
+                 المنشورات" مع إمكانية الحذف عن طريق admin_delete_post.
+                 المعاينة الحية بتستخدم بالظبط نفس كلاسات كارت المنشور
+                 المستخدمة في الصفحة الرئيسية (.post-card وما تحتها من
+                 style.css، شوف buildPostCardElement في js/posts.js)
+                 عشان تبان مطابقة تماماً لشكلها عند المستخدمين -
+                 شوف initPostsWidget في js/admin.js -->
+            <!-- ------------------------------------------------------- -->
+            <section id="tabPanelPosts" class="admin-tab-panel hidden space-y-4">
+
+                <!-- ----------------------------------------------------- -->
+                <!-- هوية "سِكّاوي" القابلة للتحكم - اسم + صورة قابلين
+                     للتعديل بدل النص/الحرف الثابتين في هيدر كل كارت
+                     منشور. الحفظ عن طريق admin_update_app_identity RPC
+                     بس (صف واحد Singleton في app_identity، id=true -
+                     شوف sql/phase-6-app-identity.sql). posts.js بيقرا
+                     نفس الجدول مرة واحدة في initPostsUI() ويخزّنه محلياً
+                     - شوف initAppIdentityWidget في js/admin.js -->
+                <!-- ----------------------------------------------------- -->
+                <section id="identityWidget"
+                         class="admin-card bg-lux-900/40 rounded-2xl p-5 md:p-6 border border-lux-800/70 space-y-5">
+
+                    <div>
+                        <h2 class="text-sm font-extrabold text-lux-50">هوية التطبيق في المنشورات</h2>
+                        <p class="text-xs text-lux-400 font-medium mt-0.5">
+                            الاسم والصورة الظاهرين في هيدر كل كارت منشور بدل "سِكّاوي" الثابت
+                        </p>
+                    </div>
+
+                    <div class="flex items-center gap-3">
+                        <!-- معاينة الأفاتار الحالي - <img> بيظهر لو فيه
+                             avatar_url محفوظ، وإلا الحرف الافتراضي "س" -
+                             شوف syncIdentityAvatarPreview في js/admin.js -->
+                        <img id="identityAvatarPreview" class="post-card-app-avatar identity-avatar-preview hidden" src="" alt="">
+                        <span id="identityAvatarFallback" class="post-card-app-avatar" aria-hidden="true">س</span>
+
+                        <div class="flex items-center gap-2.5 flex-wrap">
+                            <button type="button" id="identityUploadBtn" class="admin-upload-btn">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                    <path d="M12 16V4"></path>
+                                    <path d="M6 10l6-6 6 6"></path>
+                                    <path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"></path>
+                                </svg>
+                                <span>ارفع صورة</span>
+                            </button>
+                            <button type="button" id="identityRemoveAvatarBtn" class="admin-notify-clear-btn admin-notify-clear-btn--wide hidden">
+                                ✕ إزالة الصورة
+                            </button>
+                            <input type="file" id="identityImageInput" accept="image/*" class="hidden">
+                        </div>
+                    </div>
+
+                    <!-- منطقة القص الدائري - بتظهر بس لحظة اختيار صورة
+                         جديدة (قبل الحفظ)، وبتتخفي تاني بعد "اعتماد
+                         القص" أو "إلغاء" - Cropper.js بيتهيّأ عليها
+                         (aspectRatio: 1) في initAppIdentityWidget -->
+                    <div id="identityCropArea" class="identity-crop-area hidden">
+                        <div class="identity-crop-box">
+                            <img id="identityCropImage" src="" alt="">
+                        </div>
+                        <p class="text-[0.65rem] text-lux-500 font-medium mt-2 text-center">
+                            اسحب/كبّر/صغّر الصورة داخل الإطار لتحديد الجزء اللي هيتقص دائريًا
+                        </p>
+                        <div class="flex items-center gap-2 pt-2">
+                            <button type="button" id="identityCropConfirmBtn" class="admin-save-btn flex-1">اعتماد القص</button>
+                            <button type="button" id="identityCropCancelBtn" class="admin-notify-clear-btn admin-notify-clear-btn--wide">إلغاء</button>
+                        </div>
+                    </div>
+
+                    <div class="space-y-1.5">
+                        <label class="text-[0.7rem] font-bold text-lux-400" for="identityNameInput">اسم التطبيق الظاهر</label>
+                        <input type="text" id="identityNameInput" maxlength="60"
+                               class="admin-text-input w-full" placeholder="سِكّاوي">
+                    </div>
+
+                    <button type="button" id="identitySaveBtn" class="admin-save-btn w-full">
+                        حفظ الهوية
+                    </button>
+
+                    <p id="identityStatus" class="admin-status-text" role="status" aria-live="polite"></p>
+
+                </section>
+
+                <section id="postCreateWidget"
+                         class="admin-card bg-lux-900/40 rounded-2xl p-5 md:p-6 border border-lux-800/70 space-y-5">
+
+                    <div>
+                        <h2 class="text-sm font-extrabold text-lux-50">نشر منشور جديد</h2>
+                        <p class="text-xs text-lux-400 font-medium mt-0.5">
+                            هيظهر باسم "سِكّاوي" لكل المستخدمين بعد كارتي السؤال اليومي مباشرة
+                        </p>
+                    </div>
+
+                    <!-- معاينة حية بنفس شكل الكارت الحقيقي بالظبط (post-card)
+                         قبل النشر حتى - شوف updatePostCreatePreview في js/admin.js -->
+                    <div id="postCreatePreviewBox" class="post-card">
+                        <div class="post-card-header">
+                            <img id="postCreatePreviewAvatarImg" class="post-card-app-avatar identity-avatar-preview hidden" src="" alt="">
+                            <span id="postCreatePreviewAvatarFallback" class="post-card-app-avatar" aria-hidden="true">س</span>
+                            <div class="post-card-header-text">
+                                <span id="postCreatePreviewAppName" class="post-card-app-name">سِكّاوي</span>
+                                <span class="post-card-time">الآن</span>
+                            </div>
+                        </div>
+                        <p id="postCreatePreviewContent" class="post-card-content hidden"></p>
+                        <img id="postCreatePreviewImage" class="post-card-image hidden" src="" alt="">
+                        <p id="postCreatePreviewEmpty" class="admin-status-text" data-state="empty">
+                            اكتب نص أو ارفع صورة عشان تشوف شكل المنشور هنا
+                        </p>
+                    </div>
+
+                    <!-- رفع صورة - بترفع مباشرة على Storage bucket "post-images"
+                         لما تتختار (مش وقت النشر)، بنفس فلسفة رفع صورة البانر -->
+                    <div class="space-y-1.5">
+                        <label class="text-[0.7rem] font-bold text-lux-400">صورة المنشور (اختياري)</label>
+                        <div class="flex items-center gap-2.5 flex-wrap">
+                            <button type="button" id="postImageUploadBtn" class="admin-upload-btn">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                    <path d="M12 16V4"></path>
+                                    <path d="M6 10l6-6 6 6"></path>
+                                    <path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"></path>
+                                </svg>
+                                <span id="postImageUploadBtnLabel">ارفع صورة</span>
+                            </button>
+                            <button type="button" id="postRemoveImageBtn" class="admin-notify-clear-btn admin-notify-clear-btn--wide hidden">
+                                ✕ إزالة الصورة
+                            </button>
+                            <input type="file" id="postImageInput" accept="image/*" class="hidden">
+                        </div>
+                    </div>
+
+                    <!-- نص المنشور -->
+                    <div class="space-y-1.5">
+                        <label class="text-[0.7rem] font-bold text-lux-400" for="postContentInput">نص المنشور (اختياري لو فيه صورة)</label>
+                        <textarea id="postContentInput" rows="4" maxlength="2000"
+                                  class="admin-notify-textarea w-full"
+                                  placeholder="اكتب نص المنشور هنا…"></textarea>
+                    </div>
+
+                    <button type="button" id="postPublishBtn" class="admin-save-btn w-full">
+                        نشر المنشور
+                    </button>
+
+                    <p id="postCreateStatus" class="admin-status-text" role="status" aria-live="polite"></p>
+
+                </section>
+
+                <!-- قائمة "آخر المنشورات" - عرض للتأكد من النشر + حذف أي
+                     منشور غلط أو قديم عن طريق admin_delete_post RPC (بس -
+                     مفيش تعديل/Edit للمنشورات دلوقتي، حذف وإعادة نشر لو
+                     احتجت تصحيح حاجة) -->
+                <section id="postsManageWidget"
+                         class="admin-card bg-lux-900/40 rounded-2xl p-5 md:p-6 border border-lux-800/70 space-y-4">
+
+                    <div>
+                        <h2 class="text-sm font-extrabold text-lux-50">آخر المنشورات</h2>
+                        <p class="text-xs text-lux-400 font-medium mt-0.5">آخر 20 منشور، الأحدث أولاً</p>
+                    </div>
+
+                    <p id="postsManageStatus" class="admin-status-text" role="status" aria-live="polite"></p>
+
+                    <ul id="postsManageList" class="space-y-2"></ul>
+
+                </section>
+
+            </section>
+
+            <!-- ------------------------------------------------------- -->
+            <!-- تاب: إدارة الأسئلة اليومية (المرحلة 6)
+                 فورم إضافة/تعديل سؤال (نص + 4 اختيارات + تحديد الإجابة
+                 الصح) فوق، وتحته قائمة كل الأسئلة الموجودة في البنك مع
+                 زرار تعديل/حذف لكل واحد. الحفظ كله عن طريق
+                 admin_create_daily_question / admin_update_daily_question /
+                 admin_delete_daily_question RPC بس - شوف
+                 sql/phase-6-daily-questions.sql. سؤالي اليوم الحاليين
+                 بيتحددوا تلقائياً كل يوم عن طريق pg_cron (pick_daily_questions) -
+                 مفيش هنا أي زرار "اختار سؤالي اليوم يدوي" لأنها بتحصل
+                 لوحدها. -->
+            <!-- ------------------------------------------------------- -->
+            <section id="tabPanelQuestions" class="admin-tab-panel hidden space-y-4">
+
+                <section id="questionFormWidget"
+                         class="admin-card bg-lux-900/40 rounded-2xl p-5 md:p-6 border border-lux-800/70 space-y-5">
+
+                    <div>
+                        <h2 id="questionFormTitle" class="text-sm font-extrabold text-lux-50">سؤال جديد</h2>
+                        <p class="text-xs text-lux-400 font-medium mt-0.5">
+                            السيستم بيختار سؤالين مختلفين كل يوم تلقائياً من كل الأسئلة المفعّلة هنا، ومش بيكرر سؤال قريب لحد ما بقية البنك يدور
+                        </p>
+                    </div>
+
+                    <div class="space-y-1.5">
+                        <div class="flex items-center justify-between">
+                            <label class="text-[0.7rem] font-bold text-lux-400" for="questionTextInput">نص السؤال</label>
+                            <span id="questionTextCounter" class="text-[0.65rem] font-bold text-lux-500">0/300</span>
+                        </div>
+                        <textarea id="questionTextInput" rows="2" maxlength="300"
+                                  class="admin-notify-textarea w-full"
+                                  placeholder="اكتب نص السؤال هنا…"></textarea>
+                    </div>
+
+                    <!-- (مجموعة 1) الفئة + الصعوبة جنب بعض - الفئة نص
+                         حر (datalist بيقترح الفئات المستخدمة قبل كده
+                         عشان تفضل موحّدة ومتكررة، مش قايمة مقفولة) -->
+                    <div class="grid grid-cols-2 gap-3">
+                        <div class="space-y-1.5">
+                            <label class="text-[0.7rem] font-bold text-lux-400" for="questionCategoryInput">الفئة (اختياري)</label>
+                            <input type="text" id="questionCategoryInput" maxlength="40" list="questionCategoryOptions"
+                                   class="admin-text-input w-full" placeholder="تاريخ، جغرافيا...">
+                            <datalist id="questionCategoryOptions"></datalist>
+                        </div>
+                        <div class="space-y-1.5">
+                            <label class="text-[0.7rem] font-bold text-lux-400" for="questionDifficultyInput">الصعوبة</label>
+                            <select id="questionDifficultyInput" class="admin-text-input w-full">
+                                <option value="easy">سهل</option>
+                                <option value="medium" selected>متوسط</option>
+                                <option value="hard">صعب</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- 4 اختيارات - كل واحد فيه حقل نص + راديو لتحديد
+                         إنه هو الإجابة الصح (اسم الراديو مشترك عشان
+                         واحد بس يتحدد في المرة الواحدة) -->
+                    <div class="space-y-2">
+                        <label class="text-[0.7rem] font-bold text-lux-400">الاختيارات (حدد الدائرة جنب الإجابة الصح)</label>
+                        <div id="questionOptionsList" class="space-y-2"></div>
+                    </div>
+
+                    <!-- (مجموعة 1) معاينة حية - نفس تصميم كارت السؤال
+                         الحقيقي بالظبط (dq-card/dq-options-grid) عشان
+                         تشوف شكله للمستخدم قبل الحفظ - شوف
+                         updateQuestionLivePreview في js/admin.js -->
+                    <div class="space-y-1.5">
+                        <label class="text-[0.7rem] font-bold text-lux-400">معاينة</label>
+                        <div id="questionPreviewCard" class="dq-card bg-lux-800/60 rounded-2xl p-4 border border-lux-700/70">
+                            <p id="questionPreviewText" class="text-sm font-bold text-lux-50 mb-3">اكتب نص السؤال والاختيارات عشان تشوف شكله هنا</p>
+                            <div id="questionPreviewOptionsGrid" class="dq-options-grid"></div>
+                        </div>
+                    </div>
+
+                    <div class="flex items-center gap-2.5">
+                        <button type="button" id="questionSaveBtn" class="admin-save-btn flex-1">حفظ السؤال</button>
+                        <button type="button" id="questionCancelEditBtn" class="admin-notify-clear-btn admin-notify-clear-btn--wide hidden">إلغاء التعديل</button>
+                    </div>
+
+                    <p id="questionFormStatus" class="admin-status-text" role="status" aria-live="polite"></p>
+
+                </section>
+
+                <!-- ------------------------------------------------------- -->
+                <!-- (مجموعة 3) أدوات جماعية: استيراد أسئلة كتير من ملف
+                     (JSON أو CSV) + تصدير نسخة احتياطية من بنك الأسئلة
+                     بالكامل بصيغة JSON. الاستيراد بيمر على نفس RPC
+                     الإنشاء العادي (admin_create_daily_question) سؤال
+                     سؤال - مفيش أي RPC/جدول جديد في الـ SQL محتاج
+                     يتشغّل عشان الميزة دي تشتغل، شوف js/admin.js:
+                     initQuestionsBulkToolsWidget -->
+                <!-- ------------------------------------------------------- -->
+                <section id="questionsBulkToolsWidget"
+                         class="admin-card bg-lux-900/40 rounded-2xl p-5 md:p-6 border border-lux-800/70 space-y-4">
+
+                    <div>
+                        <h2 class="text-sm font-extrabold text-lux-50">أدوات جماعية</h2>
+                        <p class="text-xs text-lux-400 font-medium mt-0.5">استيراد أسئلة كتير مرة واحدة من ملف، أو تصدير نسخة احتياطية من كل البنك</p>
+                    </div>
+
+                    <!-- تصدير - بيبني الملف من الأسئلة المحمّلة أصلاً في
+                         المتصفح (allLoadedQuestions)، مفيش طلب شبكة إضافي -->
+                    <div class="flex items-center gap-2.5 flex-wrap">
+                        <button type="button" id="questionsExportBtn" class="admin-upload-btn">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <path d="M12 4v12"></path>
+                                <path d="M6 10l6 6 6-6"></path>
+                                <path d="M4 20h16"></path>
+                            </svg>
+                            <span>تصدير نسخة احتياطية (JSON)</span>
+                        </button>
+                        <button type="button" id="questionsDownloadTemplateBtn" class="admin-notify-clear-btn admin-notify-clear-btn--wide">
+                            تنزيل نموذج CSV فاضي
+                        </button>
+                    </div>
+
+                    <div class="border-t border-lux-800/70 pt-4 space-y-3">
+                        <div class="space-y-1">
+                            <label class="text-[0.7rem] font-bold text-lux-400">استيراد من ملف (JSON أو CSV)</label>
+                            <p class="text-[0.7rem] text-lux-500">JSON: نفس شكل ملف التصدير بالظبط. CSV: أعمدة question_text, option_1, option_2, option_3, option_4, correct_option (رقم من 1 لـ4), category, difficulty</p>
+                        </div>
+
+                        <div class="flex items-center gap-2.5 flex-wrap">
+                            <button type="button" id="questionsImportPickBtn" class="admin-upload-btn">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                    <path d="M12 16V4"></path>
+                                    <path d="M6 10l6-6 6 6"></path>
+                                    <path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"></path>
+                                </svg>
+                                <span>اختر ملف</span>
+                            </button>
+                            <span id="questionsImportFileName" class="text-xs text-lux-400 font-medium"></span>
+                            <input type="file" id="questionsImportFileInput" accept=".json,.csv" class="hidden">
+                        </div>
+
+                        <!-- معاينة قبل التأكيد - مخفية لحد ما ملف يتقرا
+                             وينتحلل بنجاح، شوف renderImportPreview -->
+                        <div id="questionsImportPreviewBox" class="hidden space-y-2 bg-lux-800/60 rounded-2xl p-4 border border-lux-700/70">
+                            <p id="questionsImportPreviewSummary" class="text-xs font-bold text-lux-50"></p>
+                            <ul id="questionsImportPreviewErrors" class="text-[0.7rem] text-lux-400 space-y-1 max-h-32 overflow-y-auto"></ul>
+                            <div class="flex items-center gap-2.5 pt-1">
+                                <button type="button" id="questionsImportConfirmBtn" class="admin-save-btn flex-1">تأكيد الاستيراد</button>
+                                <button type="button" id="questionsImportCancelBtn" class="admin-notify-clear-btn admin-notify-clear-btn--wide">إلغاء</button>
+                            </div>
+                        </div>
+
+                        <p id="questionsImportStatus" class="admin-status-text" role="status" aria-live="polite"></p>
+                    </div>
+
+                </section>
+
+                <section id="questionsListWidget"
+                         class="admin-card bg-lux-900/40 rounded-2xl p-5 md:p-6 border border-lux-800/70 space-y-4">
+
+                    <div>
+                        <h2 class="text-sm font-extrabold text-lux-50">بنك الأسئلة</h2>
+                        <p class="text-xs text-lux-400 font-medium mt-0.5">كل الأسئلة المضافة - الأسئلة المعروضة النهاردة عليها وسم "ظاهر اليوم"</p>
+                    </div>
+
+                    <!-- (مجموعة 2) تحذير لو عدد الأسئلة المفعّلة قلّ عن
+                         MIN_ACTIVE_QUESTIONS_THRESHOLD في js/admin.js -
+                         مبني بالكامل على allLoadedQuestions المحمّلة
+                         أصلاً (مفيش طلب شبكة إضافي)، شوف
+                         renderQuestionsActiveWarning. مخفي افتراضيًا
+                         (class="hidden") لحد ما يتأكد إنه لازم يبان -->
+                    <div id="questionsActiveWarning" class="admin-inline-warning hidden" role="status" aria-live="polite">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M12 9v4"></path>
+                            <path d="M12 17h.01"></path>
+                            <path d="M10.3 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.7 3.86a2 2 0 0 0-3.4 0z"></path>
+                        </svg>
+                        <span class="admin-inline-warning-text"></span>
+                    </div>
+
+                    <!-- (مجموعة 1) شريط بحث + فلترة - كله بيشتغل على
+                         القائمة المحمّلة بالفعل في المتصفح (مفيش طلب
+                         شبكة إضافي لكل حرف يتكتب)، شوف
+                         applyQuestionsListFilters في js/admin.js -->
+                    <div class="space-y-2">
+                        <input type="text" id="questionsSearchInput" class="admin-text-input w-full"
+                               placeholder="ابحث في نص السؤال…">
+                        <div class="grid grid-cols-3 gap-2">
+                            <select id="questionsFilterCategory" class="admin-text-input w-full">
+                                <option value="">كل الفئات</option>
+                            </select>
+                            <select id="questionsFilterDifficulty" class="admin-text-input w-full">
+                                <option value="">كل الصعوبات</option>
+                                <option value="easy">سهل</option>
+                                <option value="medium">متوسط</option>
+                                <option value="hard">صعب</option>
+                            </select>
+                            <select id="questionsFilterStatus" class="admin-text-input w-full">
+                                <option value="">الكل</option>
+                                <option value="active">مفعّل بس</option>
+                                <option value="inactive">غير مفعّل بس</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <p id="questionsListStatus" class="admin-status-text" role="status" aria-live="polite"></p>
+
+                    <ul id="questionsListEl" class="space-y-2"></ul>
+
+                </section>
+
+                <!-- (مجموعة 4) تحكم يدوي - تحديد سؤال معين ليوم/Slot
+                     معين بدل الاختيار العشوائي، بدون ما يبوّظ الكرون
+                     (pick_daily_questions بقت idempotent لكل Slot لوحده -
+                     شوف sql/phase-8-manual-daily-question-override.sql).
+                     الفورم بيحدد، والجدول تحته بيعرض أقرب 14 يوم جايين
+                     (يدوي + تلقائي) مع زرار "إرجاع للعشوائي" على أي
+                     يوم يدوي جاي (مش النهاردة ولا اللي فات) -->
+                <section id="questionManualScheduleWidget"
+                         class="admin-card bg-lux-900/40 rounded-2xl p-5 md:p-6 border border-lux-800/70 space-y-4">
+
+                    <div>
+                        <h2 class="text-sm font-extrabold text-lux-50">تحكم يدوي في سؤال يوم معين</h2>
+                        <p class="text-xs text-lux-400 font-medium mt-0.5">حدد سؤال بعينه ليوم/Slot معين بدل ما السيستم يختاره عشوائي - مفيد لمناسبة أو يوم معين تحب تحدد سؤاله بنفسك</p>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-3">
+                        <div class="space-y-1.5">
+                            <label class="text-[0.7rem] font-bold text-lux-400" for="manualScheduleDateInput">التاريخ</label>
+                            <input type="date" id="manualScheduleDateInput" class="admin-text-input w-full">
+                        </div>
+                        <div class="space-y-1.5">
+                            <label class="text-[0.7rem] font-bold text-lux-400" for="manualScheduleSlotInput">الـ Slot</label>
+                            <select id="manualScheduleSlotInput" class="admin-text-input w-full">
+                                <option value="1">سؤال 1</option>
+                                <option value="2">سؤال 2</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="space-y-1.5">
+                        <label class="text-[0.7rem] font-bold text-lux-400" for="manualScheduleQuestionInput">السؤال</label>
+                        <select id="manualScheduleQuestionInput" class="admin-text-input w-full">
+                            <option value="">اختر سؤال من البنك…</option>
+                        </select>
+                    </div>
+
+                    <button type="button" id="manualScheduleSaveBtn" class="admin-save-btn w-full">
+                        حفظ الاختيار اليدوي
+                    </button>
+
+                    <p id="manualScheduleStatus" class="admin-status-text" role="status" aria-live="polite"></p>
+
+                    <div class="border-t border-lux-800/70 pt-4 space-y-2">
+                        <h3 class="text-xs font-extrabold text-lux-50">أقرب 14 يوم جايين</h3>
+                        <p id="manualScheduleListStatus" class="admin-status-text" role="status" aria-live="polite"></p>
+                        <ul id="manualScheduleListEl" class="space-y-2"></ul>
+                    </div>
+
+                </section>
+
+                <!-- (مجموعة 2) سجل بسيط لمين عدّل/حذف/فعّل/عطّل سؤال -
+                     للقراءة بس (مفيش أي زرار تفاعل هنا)، عن طريق
+                     admin_log_question_action / admin_list_recent_question_actions
+                     RPC - شوف sql/phase-7-questions-stats-and-log.sql
+                     و logQuestionAction / loadQuestionAuditLog في js/admin.js -->
+                <section id="questionAuditLogWidget"
+                         class="admin-card bg-lux-900/40 rounded-2xl p-5 md:p-6 border border-lux-800/70 space-y-3">
+
+                    <div>
+                        <h2 class="text-sm font-extrabold text-lux-50">سجل تعديلات الأسئلة</h2>
+                        <p class="text-xs text-lux-400 font-medium mt-0.5">آخر 20 عملية تعديل/حذف/تفعيل - الأحدث فوق</p>
+                    </div>
+
+                    <p id="questionAuditLogStatus" class="admin-status-text" role="status" aria-live="polite"></p>
+
+                    <ul id="questionAuditLogList" class="admin-audit-log-list"></ul>
+
+                </section>
+
+            </section>
+
+            <!-- ------------------------------------------------------- -->
+            <!-- تاب 8: الأوسمة والشارة المميزة (المرحلة 7 - شوف
+                 sql/phase-7-badges.sql) - جدولي badges/user_badges جاهزين
+                 بالفعل من المرحلة 4 (شوف js/profiles.js)، والويدجت هنا
+                 بتضيف واجهة تحكم فوقهم بس: بحث عن مستخدم (نفس نمط
+                 اختيار المستخدم في تاب الإشعارات)، وبعد الاختيار، قائمة
+                 كل الأوسمة الموجودة بالكتالوج مع Toggle لكل وسام
+                 (فتح/إلغاء يدوي عن طريق admin_set_user_badge RPC)،
+                 وتحديد "الشارة المميزة" (قائمة منسدلة بس من الأوسمة
+                 المفتوحة فعلاً عند المستخدم ده، عن طريق
+                 admin_set_featured_badge RPC) - شوف initBadgesWidget
+                 في js/admin.js -->
+            <!-- ------------------------------------------------------- -->
+            <section id="tabPanelBadges" class="admin-tab-panel hidden space-y-4">
+
+                <section id="badgesWidget"
+                         class="admin-card bg-lux-900/40 rounded-2xl p-5 md:p-6 border border-lux-800/70 space-y-5">
+
+                    <div>
+                        <h2 class="text-sm font-extrabold text-lux-50">الأوسمة والشارة المميزة</h2>
+                        <p class="text-xs text-lux-400 font-medium mt-0.5">
+                            دوّر على مستخدم عشان تفتح/تلغي أوسمته يدوياً، وتحدد شارته المميزة
+                        </p>
+                    </div>
+
+                    <!-- اختيار المستخدم - نفس نمط تاب الإشعارات بالظبط -->
+                    <div id="badgesUserPicker" class="space-y-2">
+                        <div class="admin-search-box">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                 stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="shrink-0">
+                                <circle cx="11" cy="11" r="7"></circle>
+                                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                            </svg>
+                            <input type="text" id="badgesUserSearchInput"
+                                   placeholder="دوّر بالاسم أو اسم المستخدم…"
+                                   autocomplete="off" spellcheck="false">
+                        </div>
+                        <ul id="badgesUserResultsList" class="admin-notify-picker-results space-y-1.5"></ul>
+
+                        <!-- المستخدم المختار - شارة واحدة قابلة للإزالة -->
+                        <div id="badgesUserSelectedChip" class="admin-notify-selected-chip hidden">
+                            <img id="badgesUserSelectedAvatar" class="admin-user-avatar" src="" alt="" loading="lazy">
+                            <span id="badgesUserSelectedName" class="flex-1 min-w-0"></span>
+                            <button type="button" id="badgesUserClearBtn" class="admin-notify-clear-btn" aria-label="إلغاء اختيار المستخدم">✕</button>
+                        </div>
+                    </div>
+
+                    <!-- محتوى إدارة الأوسمة - ظاهر بس بعد ما تختار مستخدم -->
+                    <div id="badgesManageSection" class="hidden space-y-5 pt-1 border-t border-lux-800/60">
+
+                        <div class="space-y-2 pt-4">
+                            <h3 class="text-xs font-extrabold text-lux-50">الأوسمة</h3>
+                            <p class="text-[0.65rem] text-lux-500 font-medium">فعّل/ألغي أي وسام يدوياً لصاحب الحساب المختار</p>
+                            <ul id="badgesToggleList" class="space-y-1.5"></ul>
+                        </div>
+
+                        <div class="space-y-1.5">
+                            <label class="text-[0.7rem] font-bold text-lux-400" for="badgesFeaturedSelect">الشارة المميزة (بتظهر جنب الاسم)</label>
+                            <select id="badgesFeaturedSelect" class="admin-text-input w-full">
+                                <option value="">بدون شارة مميزة</option>
+                            </select>
+                            <p class="text-[0.65rem] text-lux-500 font-medium">القائمة بتقتصر على الأوسمة المفتوحة فعلاً عند المستخدم ده</p>
+                        </div>
+
+                        <p id="badgesManageStatus" class="admin-status-text" role="status" aria-live="polite"></p>
+
+                    </div>
+
+                </section>
+
+            </section>
+
+            <!-- ------------------------------------------------------- -->
+            <!-- تاب 9: صندوق رسائل الدعم (المرحلة 8 - شوف
+                 sql/phase-8-support-messages.sql). قائمة كل المحادثات
+                 (admin_list_support_conversations RPC)، وبالضغط على
+                 محادثة بيتحول العرض لثريد الرسايل بتاعتها (قراءة مباشرة
+                 من support_messages - RLS بتسمح للأدمن بيها من غير RPC)
+                 + مربع رد (INSERT مباشر بـ is_from_admin=true، وTrigger
+                 في القاعدة بيبعت إشعار admin_message للمستخدم تلقائياً).
+                 شوف initSupportInboxWidget في js/admin.js -->
+            <!-- ------------------------------------------------------- -->
+            <section id="tabPanelSupport" class="admin-tab-panel hidden space-y-4">
+
+                <section id="supportInboxWidget"
+                         class="admin-card bg-lux-900/40 rounded-2xl p-5 md:p-6 border border-lux-800/70 space-y-4">
+
+                    <!-- Header: عنوان + زرار رجوع (يظهر بس جوه محادثة مفتوحة) -->
+                    <div class="flex items-center gap-2">
+                        <button type="button" id="supportInboxBackBtn"
+                                class="hidden shrink-0 w-7 h-7 flex items-center justify-center rounded-full text-lux-300 hover:text-gold-400 hover:bg-lux-800/70 transition-all duration-150"
+                                aria-label="رجوع لقائمة المحادثات">→</button>
+                        <div>
+                            <h2 id="supportInboxTitle" class="text-sm font-extrabold text-lux-50">صندوق رسائل الدعم</h2>
+                            <p class="text-xs text-lux-400 font-medium mt-0.5">كل الرسايل اللي بعتها المستخدمين لحسابك، ورد عليها من هنا</p>
+                        </div>
+                    </div>
+
+                    <!-- قائمة المحادثات -->
+                    <ul id="supportInboxConversationsList" class="space-y-1.5"></ul>
+
+                    <!-- ثريد محادثة واحدة - مخفي لحد ما تختار محادثة من القائمة -->
+                    <div id="supportInboxThreadView" class="hidden space-y-3">
+                        <div id="supportInboxMessagesList" class="space-y-2.5 max-h-96 overflow-y-auto pe-1"></div>
+                        <div class="flex items-end gap-2 pt-2 border-t border-lux-800/60">
+                            <textarea id="supportInboxReplyInput" rows="2" maxlength="1000"
+                                      placeholder="اكتب ردك…"
+                                      class="admin-text-input flex-1 resize-none"></textarea>
+                            <button type="button" id="supportInboxReplySendBtn"
+                                    class="admin-save-btn shrink-0 px-4">إرسال</button>
+                        </div>
+                    </div>
+
+                    <p id="supportInboxStatus" class="admin-status-text" role="status" aria-live="polite"></p>
+
+                </section>
+
+            </section>
+
+        </div>
+        </main>
+
+        <!-- ============================================================= -->
+        <!-- شريط التنقل السفلي الثابت - موبايل بس (md:hidden) - على
+             الديسكتوب التنقل بقى من الـ Sidebar على اليمين بدل منه -
+             شوف initAdminTabNavigation في js/admin.js -->
+        <!-- ============================================================= -->
+        <nav class="md:hidden shrink-0 border-t border-lux-800/60 bg-lux-900/80 backdrop-blur-xl px-2 py-2 flex items-center justify-around">
+
+            <button type="button" class="admin-nav-tab is-active" data-tab-target="tabPanelVisitors">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <rect x="4" y="12" width="4" height="8" rx="1"></rect>
+                    <rect x="10" y="7" width="4" height="13" rx="1"></rect>
+                    <rect x="16" y="3" width="4" height="17" rx="1"></rect>
+                </svg>
+                <span>الزوار</span>
+            </button>
+
+            <button type="button" class="admin-nav-tab" data-tab-target="tabPanelGeofence">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <circle cx="12" cy="9" r="4"></circle>
+                    <path d="M12 21c4-4.5 7-8.5 7-12a7 7 0 1 0-14 0c0 3.5 3 7.5 7 12z"></path>
+                </svg>
+                <span>النطاق</span>
+            </button>
+
+            <button type="button" class="admin-nav-tab" data-tab-target="tabPanelUsers">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <circle cx="9" cy="8" r="3.5"></circle>
+                    <path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"></path>
+                    <circle cx="18" cy="9" r="2.5"></circle>
+                    <path d="M15.5 14.2c2.6.4 4.5 2.7 4.5 5.3"></path>
+                </svg>
+                <span>المستخدمين</span>
+            </button>
+
+            <button type="button" class="admin-nav-tab" data-tab-target="tabPanelNotifications">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                    <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+                </svg>
+                <span>الإشعارات</span>
+            </button>
+
+            <button type="button" class="admin-nav-tab" data-tab-target="tabPanelBanner">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <rect x="3" y="5" width="18" height="14" rx="2"></rect>
+                    <circle cx="8.5" cy="10" r="1.5"></circle>
+                    <path d="M3 16l5-4 4 3 3-2.5 6 5"></path>
+                </svg>
+                <span>البانر</span>
+            </button>
+
+            <button type="button" class="admin-nav-tab" data-tab-target="tabPanelPosts">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <rect x="3" y="4" width="18" height="16" rx="2"></rect>
+                    <line x1="7" y1="9" x2="17" y2="9"></line>
+                    <line x1="7" y1="13" x2="14" y2="13"></line>
+                    <path d="M7 17h4"></path>
+                </svg>
+                <span>المنشورات</span>
+            </button>
+
+            <button type="button" class="admin-nav-tab" data-tab-target="tabPanelQuestions">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <circle cx="12" cy="12" r="9"></circle>
+                    <path d="M9.5 9a2.5 2.5 0 0 1 4.7-1.2c.5.9.2 1.7-.6 2.4-.9.8-1.6 1.3-1.6 2.6"></path>
+                    <circle cx="12" cy="17" r="0.75" fill="currentColor" stroke="none"></circle>
+                </svg>
+                <span>الأسئلة</span>
+            </button>
+
+            <button type="button" class="admin-nav-tab" data-tab-target="tabPanelBadges">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M12 3l2.2 4.5 5 .7-3.6 3.5.9 5-4.5-2.4-4.5 2.4.9-5-3.6-3.5 5-.7z"></path>
+                </svg>
+                <span>الأوسمة</span>
+            </button>
+
+            <button type="button" class="admin-nav-tab" data-tab-target="tabPanelSupport">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <rect x="3" y="5" width="18" height="14" rx="2"></rect>
+                    <path d="m3 7 9 6 9-6"></path>
+                </svg>
+                <span>الرسائل</span>
+            </button>
+
+        </nav>
+
+        </div>
+
+    </div>
+
+    <!-- مكتبة Supabase نفسها من الـ CDN - لازم تتحط قبل js/supabase-config.js
+         عشان window.supabase يتعرّف قبل ما الملف ده يحاول يستخدمه (نفس
+         السطر الموجود في index.html بالظبط - كان ناقص من admin.html
+         الأصلي، وده سبب ظهور الصفحة فاضية مع خطأ "window.supabase is
+         undefined" في الكونسول) -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.2/cropper.min.js"></script>
+    <!-- js/supabase-config.js: نفس ملف تهيئة عميل Supabase المستخدم في
+         باقي التطبيق (auth.js / geofence.js) - نفس الـ URL والـ anon key -->
+    <script type="module" src="js/supabase-config.js"></script>
+    <script type="module" src="js/admin.js"></script>
+</body>
+</html>
