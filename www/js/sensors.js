@@ -561,6 +561,20 @@ function autoInit() {
     loadPersistedDailyState();
 
     const kickoff = () => {
+        // ⚠️ إصلاح - باج حقيقي: لو التطبيق شغّال جوه Capacitor (APK
+        // حقيقي)، الحساس الأصلي (StepCounterForegroundService) هو
+        // اللي المفروض يعدّ الخطوات - مش الـ JS devicemotion هنا.
+        // كان الاتنين بيشتغلوا في نفس الوقت، وخوارزمية الـ JS (اللي
+        // بتقرا من WebView مش من SensorManager مباشرة) كانت بتنتج
+        // خطوات وهمية كتير (اهتزاز بسيط/لمسة شاشة بيعدّي العتبة
+        // بسهولة) وترقم أعلى من الحساس الحقيقي - فـ syncFromNativeStepCounter()
+        // (اللي بتاخد الأكبر بس) كانت أبدًا ماتنزلش الرقم الملوّث ده،
+        // فالعداد يفضل مش مطابق لـ Google Fit/Origin Health.
+        // دلوقتي: على Native بنسيب الحساس الأصلي بس هو اللي شغّال،
+        // ونكتفي بمزامنة syncFromNativeStepCounter() (شوف تحت). على
+        // المتصفح/PWA العادي (مفيش Capacitor) الخوارزمية دي لسه هي
+        // المصدر الوحيد المتاح، فبتشتغل زي ما هي.
+        if (window.Capacitor?.isNativePlatform?.()) return;
         startStepTracking();
     };
 
@@ -587,6 +601,24 @@ function autoInit() {
  */
 async function syncFromNativeStepCounter() {
     if (!window.Capacitor?.isNativePlatform?.()) return;
+
+    // (إصلاح - باج Race Condition حقيقي، اكتشاف لاحق - شوف تعليق
+    // window.isGuestModeResolved في js/guest-banner.js للتفاصيل الكاملة):
+    // النسخة القديمة من الحاجز ده كانت بتفحص isGuestMode بس - ومشكلتها
+    // إن isGuestMode بتتبدأ بـfalse "متفائلة" لحد ما applyGuestModeRestrictions()
+    // تحسم القيمة الحقيقية Async من geofence.js. الاستدعاء الأول لهذه
+    // الدالة (من DOMContentLoaded تحت في آخر الملف) بيحصل *قبل* ما الحسم
+    // ده يخلّص غالبًا - يعني زائر حقيقي كان بيعدّي الحاجز القديم لبضع
+    // ثواني ويشغّل StepCounter.startTracking() فعليًا، لحد ما
+    // applyGuestModeRestrictions(false) توصل متأخرة وتقفلها.
+    //
+    // الحل: منستناش isGuestMode بس - لازم isGuestModeResolved تبقى true
+    // الأول (يعني الحسم الحقيقي حصل فعلاً)، وبعدين نفحص isGuestMode.
+    // لو الحسم لسه ماوصلش، بنرفض ونسيب الحدث/البولينج يعيد المحاولة
+    // تلقائيًا لاحقًا (شوف مستمع 'geofence:guest-mode-change' تحت اللي
+    // بيعيد النداء فورًا أول ما الحسم يخلّص، من غير ما ننتظر البولينج
+    // العادي كل 4 ثواني).
+    if (!window.isGuestModeResolved || window.isGuestMode) return;
 
     try {
         const { StepCounter } = Capacitor.Plugins;
@@ -756,12 +788,63 @@ export async function requestAutostartPermission() {
 // مزامنة فورية أول ما التطبيق يفتح
 document.addEventListener('DOMContentLoaded', syncFromNativeStepCounter);
 
+// (إصلاح - باج Race Condition، مكمّل للحاجز الجديد فوق في
+// syncFromNativeStepCounter): بما إن أول نداء من DOMContentLoaded فوق
+// ممكن يترفض دلوقتي لو isGuestModeResolved لسه false (الحسم الحقيقي
+// لسه ماوصلش)، محتاجين مصدر تاني يعيد المحاولة *فورًا* لحظة ما الحسم
+// يخلّص فعليًا - بدل ما نستنى البولينج العادي (NATIVE_SYNC_INTERVAL_MS
+// = 4 ثواني) اللي كان هيغطي الموضوع بره لكن بتأخير محسوس لعضو حقيقي
+// بيفتح التطبيق. geofence.js بيطلق 'geofence:guest-mode-change' مباشرة
+// جوه applyGuestModeRestrictions - يعني نفس اللحظة اللي isGuestModeResolved
+// بتتحول فيها لـtrue بالظبط. لو النتيجة "مش زائر" (عضو حقيقي)، نعيد
+// نداء المزامنة فورًا فتشتغل الخدمة الأصلية من غير أي تأخير محسوس.
+document.addEventListener('geofence:guest-mode-change', (event) => {
+    if (!event.detail?.isGuestMode) {
+        syncFromNativeStepCounter();
+    }
+});
+
 // ومزامنة تانية كل ما التطبيق يرجع للمقدمة (المستخدم فتح التطبيق تاني
 // بعد ما كان في الخلفية أو مقفول) - عشان يلحق أي خطوات اتسجلت وهو غايب
 document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') {
         syncFromNativeStepCounter();
+        startNativeSyncPolling();
+    } else {
+        stopNativeSyncPolling();
     }
 });
+
+/**
+ * [جديد] بولينج دوري (كل NATIVE_SYNC_INTERVAL_MS) لمزامنة عدد الخطوات
+ * من الحساس الأصلي طول ما الصفحة "ظاهرة" (visible) والتطبيق شغّال
+ * جوه Capacitor - عشان الرقم المعروض في الواجهة يتحدّث لايف أثناء
+ * المشي والتطبيق مفتوح، مش بس عند فتح/رجوع التطبيق. بيوقف نفسه
+ * أوتوماتيك لما الصفحة تروح للخلفية (شوف visibilitychange فوق) عشان
+ * مايعملش نداءات فاضية للـ Plugin وهو مش لازم.
+ * ما بتعملش حاجة على المتصفح/PWA العادي (مفيش Capacitor) لأن
+ * syncFromNativeStepCounter() نفسها بترجع فورًا في الحالة دي أصلاً.
+ */
+const NATIVE_SYNC_INTERVAL_MS = 4000;
+let nativeSyncIntervalId = null;
+
+function startNativeSyncPolling() {
+    if (nativeSyncIntervalId !== null) return; // شغّال أصلاً
+    if (!window.Capacitor?.isNativePlatform?.()) return;
+
+    nativeSyncIntervalId = setInterval(syncFromNativeStepCounter, NATIVE_SYNC_INTERVAL_MS);
+}
+
+function stopNativeSyncPolling() {
+    if (nativeSyncIntervalId === null) return;
+    clearInterval(nativeSyncIntervalId);
+    nativeSyncIntervalId = null;
+}
+
+// نشغّل البولينج فورًا لو الصفحة أصلاً ظاهرة وقت التحميل (مش لازم
+// ننتظر أول visibilitychange)
+if (document.visibilityState === 'visible') {
+    startNativeSyncPolling();
+}
 
 autoInit();

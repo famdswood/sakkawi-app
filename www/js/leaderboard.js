@@ -54,6 +54,15 @@
         نص "..." الجامد (منعاً لأي Layout Shift)، وكشف شريط "مركزك
         الحالي" فعلياً أول مرة (كان فيه كلاس "hidden" متسيب عليه من
         غير أي كود بيشيله - شوف renderLeaderboardLoadingState تحت).
+     6) (المرحلة 6 - جديد: تحديث مباشر Realtime) الاشتراك في تغييرات
+        جدول profiles لحظياً عن طريق Supabase Realtime (Postgres
+        Changes) - أي مستخدم تاني يزيد نقاطه/خطواته على أي جهاز، كل
+        الأجهزة المفتوحة على الليدربورد بتحدّث نفسها لوحدها (بعد تجميع
+        Debounce قصير) من غير أي فعل يدوي من المستخدم أو تبديل تبويب -
+        شوف startLeaderboardRealtimeSync/scheduleRealtimeLeaderboardRefresh
+        تحت. محتاج جدول profiles يكون مفعّل عليه Realtime فعلياً من
+        لوحة تحكم Supabase (Database > Replication) وإلا مفيش أي Event
+        هيوصل خالص.
    ================================================================== */
 
 import { supabaseClient } from './supabase-config.js';
@@ -128,6 +137,37 @@ let lastKnownRemainingSeconds = null;
 
 /** علم لمنع ربط أحداث أزرار التبويبات أكتر من مرة (Memory Leak Guard) - نفس فلسفة leaderboardEventsBound في profiles.js */
 let tabEventsBound = false;
+
+/* ------------------------------------------------------------------
+   (جديد - تحديث مباشر Realtime) بدل ما الليدربورد يتحدّث بس لما
+   المستخدم يبدّل تبويب أو يعمل فعل شخصي (Flush خطوات/سؤال يومي)، دلوقتي
+   بيعمل subscribe على تغييرات جدول profiles نفسه في Supabase (Realtime
+   Postgres Changes) - أي مستخدم تاني يزيد نقاطه/خطواته في أي مكان، كل
+   الأجهزة المفتوحة على صفحة الليدربورد بتحدّث نفسها لوحدها من غير
+   Refresh يدوي.
+
+   ملحوظة سيرفر مهمة (لازم تتعمل مرة واحدة من لوحة تحكم Supabase، مش من
+   الكود ده): جدول profiles لازم يكون Realtime مفعّل عليه فعلياً
+   (Database > Replication > حط علامة صح جنب profiles)، غير كده مفيش
+   أي Event هيوصل للكود ده خالص حتى لو مفيش أي خطأ ظاهر في الـ Console.
+   ------------------------------------------------------------------ */
+
+/** الـ Channel الحالي المشترك فيه لتحديثات جدول profiles - null لو التحديث المباشر لسه مابدأش أو اتوقف */
+let leaderboardRealtimeChannel = null;
+
+/** معرّف الـ setTimeout المستخدم لتجميع (Debounce) عدة تحديثات قريبة من بعض في تحديث واحد بس */
+let leaderboardRealtimeDebounceId = null;
+
+/** علم لمنع بدء التحديث المباشر أكتر من مرة (Memory Leak Guard) - لو initChampionshipTabs اتنادت أكتر من مرة */
+let realtimeSyncStarted = false;
+
+/**
+ * أقل مدة (بالمللي ثانية) بين تحديث وتحديث بسبب Realtime - مفيش داعي
+ * نعيد الجلب والرسم فوراً مع كل Event لوحده (ممكن ييجوا عشرات الأحداث
+ * خلال ثانية واحدة لو فيه زحمة مستخدمين بيسجّلوا خطوات في نفس اللحظة)،
+ * فبنستنى شوية بعد آخر تغيير وصلنا قبل ما نجلب ونرسم مرة واحدة بس.
+ */
+const LEADERBOARD_REALTIME_DEBOUNCE_MS = 2500;
 
 
 /* ==================================================================
@@ -416,6 +456,79 @@ function bindChampionshipTabs() {
     });
 }
 
+/**
+ * جدولة تحديث مُجمَّع (Debounced) للفترة النشطة حالياً بسبب Event
+ * Realtime وصل من Supabase - بيلغي أي مؤقّت سابق لسه مستني وبيبدأ
+ * العدّ من الصفر تاني، عشان لو وصلنا شلال Events قريبة من بعض في وقت
+ * قصير (مثلاً زحمة مستخدمين بيسجّلوا خطوات في نفس اللحظة) نعمل جلب
+ * ورسم واحد بس بعد ما الزحمة تهدى، مش مرة لكل Event لوحده.
+ */
+function scheduleRealtimeLeaderboardRefresh() {
+    if (leaderboardRealtimeDebounceId) clearTimeout(leaderboardRealtimeDebounceId);
+
+    leaderboardRealtimeDebounceId = setTimeout(() => {
+        leaderboardRealtimeDebounceId = null;
+        refreshActiveLeaderboard();
+    }, LEADERBOARD_REALTIME_DEBOUNCE_MS);
+}
+
+/**
+ * بدء الاشتراك (Subscribe) في تحديثات جدول profiles اللحظية عن طريق
+ * Supabase Realtime (Postgres Changes) - أي INSERT/UPDATE على الجدول
+ * (يعني أي زيادة نقاط/خطوات لأي مستخدم، أو انضمام مستخدم جديد) بيجدول
+ * تحديث مُجمَّع للفترة النشطة حالياً (شوف scheduleRealtimeLeaderboardRefresh).
+ * ملحوظ عمداً بدون أي "event: 'DELETE'" - حذف بروفايل حالة نادرة جداً
+ * ومش لازم Realtime مخصص لها.
+ *
+ * بتتنادى مرة واحدة بس (نفس فلسفة bindChampionshipTabs/tabEventsBound)
+ * لأن initChampionshipTabs ممكن تتنادى تاني بعد أحداث "auth:login"
+ * زي ما موضّح فوق - مانعايزينش نراكم أكتر من Channel مشترك في نفس
+ * التغييرات فوق بعضه.
+ */
+function startLeaderboardRealtimeSync() {
+    if (realtimeSyncStarted) return;
+    realtimeSyncStarted = true;
+
+    leaderboardRealtimeChannel = supabaseClient
+        .channel('leaderboard-live-updates')
+        .on(
+            'postgres_changes',
+            { event: 'UPDATE', schema: 'public', table: 'profiles' },
+            () => scheduleRealtimeLeaderboardRefresh(),
+        )
+        .on(
+            'postgres_changes',
+            { event: 'INSERT', schema: 'public', table: 'profiles' },
+            () => scheduleRealtimeLeaderboardRefresh(),
+        )
+        .subscribe((status, err) => {
+            if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+                // فشل الاشتراك المباشر (مثلاً Realtime مش مفعّل على جدول
+                // profiles من لوحة تحكم Supabase، أو مشكلة شبكة/WebSocket)
+                // - الليدربورد بيفضل شغال عادي بردو (بيتحدّث لما المستخدم
+                // يبدّل تبويب أو يعمل فعل شخصي)، بس من غير تحديث لحظي
+                // لأفعال المستخدمين التانيين لحد ما الاشتراك يعيد الاتصال
+                // تلقائياً أو الصفحة تتعمل لها Refresh
+                console.warn('[leaderboard.js] تعذّر الاشتراك في التحديث المباشر (Realtime) لليدربورد:', status, err?.message || '');
+            }
+        });
+}
+
+/** إيقاف الاشتراك في التحديث المباشر وإلغاء أي تحديث مُجمَّع لسه مستني - بتتنادى من destroyChampionshipTimers */
+function stopLeaderboardRealtimeSync() {
+    if (leaderboardRealtimeDebounceId) {
+        clearTimeout(leaderboardRealtimeDebounceId);
+        leaderboardRealtimeDebounceId = null;
+    }
+
+    if (leaderboardRealtimeChannel) {
+        supabaseClient.removeChannel(leaderboardRealtimeChannel);
+        leaderboardRealtimeChannel = null;
+    }
+
+    realtimeSyncStarted = false;
+}
+
 
 /* ==================================================================
    4) المرحلة 4: جلب البيانات والتزامن (Supabase Integration)
@@ -451,9 +564,9 @@ const CHAMP_MAX_STAGGER_INDEX = 10;
 
 /** إعدادات كل مركز في منصّة التتويج (Top 3) - نفس عناصر index.html بالظبط */
 const PODIUM_SLOTS = [
-    { rank: 1, nameEl: 'p1-name', pointsEl: 'p1-points', stepsEl: 'p1-steps', avatarEl: 'p1-avatar', presenceEl: 'p1-avatar-presence', fallback: 'https://placehold.co/100x100/f59e0b/ffffff?text=1' },
-    { rank: 2, nameEl: 'p2-name', pointsEl: 'p2-points', stepsEl: 'p2-steps', avatarEl: 'p2-avatar', presenceEl: 'p2-avatar-presence', fallback: 'https://placehold.co/100x100/cbd5e1/334155?text=2' },
-    { rank: 3, nameEl: 'p3-name', pointsEl: 'p3-points', stepsEl: 'p3-steps', avatarEl: 'p3-avatar', presenceEl: 'p3-avatar-presence', fallback: 'https://placehold.co/100x100/b45309/ffffff?text=3' },
+    { rank: 1, nameEl: 'p1-name', userTitleEl: 'p1-user-title', pointsEl: 'p1-points', stepsEl: 'p1-steps', avatarEl: 'p1-avatar', presenceEl: 'p1-avatar-presence', fallback: 'https://placehold.co/100x100/f59e0b/ffffff?text=1' },
+    { rank: 2, nameEl: 'p2-name', userTitleEl: 'p2-user-title', pointsEl: 'p2-points', stepsEl: 'p2-steps', avatarEl: 'p2-avatar', presenceEl: 'p2-avatar-presence', fallback: 'https://placehold.co/100x100/cbd5e1/334155?text=2' },
+    { rank: 3, nameEl: 'p3-name', userTitleEl: 'p3-user-title', pointsEl: 'p3-points', stepsEl: 'p3-steps', avatarEl: 'p3-avatar', presenceEl: 'p3-avatar-presence', fallback: 'https://placehold.co/100x100/b45309/ffffff?text=3' },
 ];
 
 /** رقم كل Request جلب بيانات (بيزيد مع كل نداء جديد) - بنستخدمه كـ Race Condition Guard: أي نتيجة راجعة بعد ما رقمها بقى قديم بننكرها (شوف loadAndRenderPeriod) */
@@ -535,6 +648,17 @@ function renderFeaturedBadgeInline(nameEl, featuredBadgeId) {
  * هنا بالظبط على التعريف الفعلي المؤكد من قاعدة البيانات:
  *   RETURNS TABLE(id uuid, full_name text, avatar_url text,
  *                 steps bigint, points bigint, rank_position bigint)
+ * (جديد - لقب الشرف): زي بالظبط featured_badge_id (المرحلة 7) - عمود
+ * title لازم يترجع هو كمان من get_leaderboard() نفسها في Supabase قبل
+ * ما اللقب يظهر فعلياً في الواجهة (normalizeLeaderboardRow تحت جاهزة
+ * ومستنية العمود ده). لازم تشغّل في SQL Editor بتاع Supabase:
+ *   CREATE OR REPLACE FUNCTION get_leaderboard(period_type text, limit_count int)
+ *   RETURNS TABLE(id uuid, full_name text, avatar_url text, title text,
+ *                 steps bigint, points bigint, rank_position bigint,
+ *                 featured_badge_id uuid) AS $$ ... $$;
+ * (انسخ تعريف الدالة الحالي زي ما هو وضيف بس p.title جوه الـ SELECT
+ * وجوه RETURNS TABLE في المكان المناسب - نفس ما اتعمل بالظبط مع
+ * featured_badge_id قبل كده)
  * ملحوظتين مهمتين عن سلوكها الفعلي:
  *   1) الأعمدة اسمها "steps" و"rank_position" (مش total_steps/rank) -
  *      شوف normalizeLeaderboardRow() تحت اللي بتوحّدهم لأسماء موحّدة
@@ -665,7 +789,7 @@ async function fetchTotalRegisteredUsersCount() {
  * احتياطاً بس، لأن أعمدة bigint في Postgres ممكن يرجعها بعض عملاء
  * PostgREST كـ string لتجنب فقدان الدقة مع أرقام كبيرة جداً، وده مش
  * متوقع يحصل هنا لأرقام نقاط/خطوات عادية لكن بنتحسب له.
- * @param {{id:string, full_name:string, avatar_url:string|null, steps:number|string, points:number|string, rank_position:number|string}} row
+ * @param {{id:string, full_name:string, avatar_url:string|null, steps:number|string, points:number|string, rank_position:number|string, title?:string|null}} row
  */
 function normalizeLeaderboardRow(row) {
     return {
@@ -680,6 +804,13 @@ function normalizeLeaderboardRow(row) {
         // لحد ما يحصل ده، القيمة هتبقى undefined دايماً وأيقونة الشارة
         // المميزة ببساطة مش هتظهر في الليدربورد (من غير أي خطأ)
         featured_badge_id: row.featured_badge_id ?? null,
+        // (جديد - لقب الشرف في الليدربورد) نفس منطق profile.title بالظبط
+        // (renderProfileHeader في profiles.js) - null يعني المستخدم لسه
+        // مختارش لقب، فمش هيتعرض خالص (مش placeholder). زي featured_badge_id
+        // فوق، العمود ده لازم يترجع فعلياً من get_leaderboard() في
+        // Supabase الأول (شوف تعليق SQL المطلوب) وإلا هيفضل undefined
+        // دايماً واللقب ببساطة مش هيظهر لحد ما يتحدث
+        title: row.title || null,
     };
 }
 
@@ -748,8 +879,9 @@ function renderRemainingParticipantsCount(totalUsersCount) {
     el.classList.remove('hidden');
 }
 
-/** تنسيق رقم كبير بصيغة مختصرة ("12.4K" بدل "12400") - نفس منطق formatCompactNumber المستخدم في باقي الملفات */
+/** تنسيق رقم كبير بصيغة مختصرة ("12.4K"/"1.2M" بدل "12400"/"1200000") - نفس منطق formatCompactNumber المستخدم في باقي الملفات */
 function formatCompactNumber(num) {
+    if (num >= 1_000_000) return `${(num / 1_000_000).toFixed(1)}M`;
     if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
     return String(num);
 }
@@ -841,6 +973,7 @@ function renderLeaderboardPodium(rows, shouldAnimate = true) {
     PODIUM_SLOTS.forEach((slot, index) => {
         const row = rows[slot.rank - 1] || null;
         const nameEl = document.getElementById(slot.nameEl);
+        const userTitleEl = document.getElementById(slot.userTitleEl);
         const pointsEl = document.getElementById(slot.pointsEl);
         const stepsEl = document.getElementById(slot.stepsEl);
         const avatarEl = document.getElementById(slot.avatarEl);
@@ -860,7 +993,19 @@ function renderLeaderboardPodium(rows, shouldAnimate = true) {
         [nameEl, pointsEl, stepsEl].forEach((el) => el?.classList.remove('champ-skel'));
 
         if (nameEl) nameEl.textContent = row ? `${row.full_name}${isCurrentUser ? ' (أنت)' : ''}` : '—';
-        if (pointsEl) pointsEl.textContent = row ? row.points.toLocaleString() : '—';
+        // (جديد - لقب الشرف): نفس فلسفة renderProfileHeader/renderPublicProfile
+        // بالظبط - بيتعرض بس لو صاحب المركز فعلاً مختار لقب (row.title)،
+        // وبيتخفي تماماً (مش نص بديل) لو لأ - مفيش أي "زحمة" لمين معندوش لقب
+        if (userTitleEl) {
+            if (row?.title) {
+                userTitleEl.textContent = row.title;
+                userTitleEl.classList.remove('hidden');
+            } else {
+                userTitleEl.textContent = '';
+                userTitleEl.classList.add('hidden');
+            }
+        }
+        if (pointsEl) pointsEl.textContent = row ? formatCompactNumber(row.points) : '—';
         if (stepsEl) stepsEl.textContent = row ? formatCompactNumber(row.total_steps) : '—';
         if (avatarEl) avatarEl.src = row?.avatar_url || slot.fallback;
 
@@ -960,6 +1105,7 @@ function renderLeaderboardRemainingList(rows, shouldAnimate = true) {
                 </span>
                 <div class="rank-card-info">
                     <h5 class="rank-card-name">${escapeHtml(row.full_name)}${isCurrentUser ? ' (أنت)' : ''}${featuredBadgeIconHtml(row.featured_badge_id)}</h5>
+                    ${row.title ? `<span class="rank-card-title">${escapeHtml(row.title)}</span>` : ''}
                     <div class="dual-stat-badge dual-stat-badge-compact">
                         <span class="dual-stat-item" title="عدد الخطوات">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l2-6 4 12 2-6h6"/></svg>
@@ -1265,6 +1411,11 @@ export function getActiveMetric() {
 export function initChampionshipTabs(initialPeriod = 'today') {
     const alreadyInitialized = tabEventsBound;
     bindChampionshipTabs();
+    // (جديد - تحديث مباشر) بدء الاشتراك في تحديثات Realtime لجدول
+    // profiles - محمي بعلم realtimeSyncStarted جواه، فمفيش خطورة نناديها
+    // هنا حتى لو initChampionshipTabs اتنادت أكتر من مرة (نفس فلسفة
+    // bindChampionshipTabs فوق)
+    startLeaderboardRealtimeSync();
 
     const periodToActivate = alreadyInitialized
         ? activePeriod
@@ -1280,4 +1431,5 @@ export function initChampionshipTabs(initialPeriod = 'today') {
  */
 export function destroyChampionshipTimers() {
     stopCountdown();
+    stopLeaderboardRealtimeSync();
 }

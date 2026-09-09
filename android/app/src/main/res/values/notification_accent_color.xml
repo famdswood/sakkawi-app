@@ -1,0 +1,12 @@
+<!--
+  [جديد - Push Notifications: المرحلة 3.4]
+  ضيف السطر ده جوه <resources> في android/app/src/main/res/values/colors.xml
+  الموجود عندك بالفعل (لو مش موجود عندك الملف ده أصلاً، أنشئه بنفس المسار
+  بمحتوى زي ده كامل).
+
+  اللون: الذهبي #D4AF37 - نفس لون هوية سِكّاوي الأساسي (التحديات/الإنجازات)
+  زي ما هو متعرّف في index.html (gold-500).
+-->
+<resources>
+    <color name="notification_accent">#D4AF37</color>
+</resources>

@@ -30,6 +30,10 @@ import { initStoriesUI } from './stories.js';
 import { initProfileUI } from './profiles.js';
 import { initTheme } from './theme.js';
 import { initNotificationsUI } from './notifications.js';
+// (المرحلة 5 - خطة الإشعارات الخارجية): تسجيل الجهاز لاستقبال Push
+// Notifications حقيقية (FCM) - initPushNotifications() بتتنادى بنفس
+// فلسفة باقي initXxxUI، وبتستمع لـ auth:login/auth:signed-out بنفسها
+import { initPushNotifications } from './push.js';
 // (المرحلة 8) رسائل الدعم لأكونتك الشخصي - مودال منفصل تماماً، بنفس
 // فلسفة initNotificationsUI (تهيئة مودال مستقل عن محتوى الصفحة الرئيسية)
 import { initSupportChat } from './support-chat.js';
@@ -1097,6 +1101,11 @@ function initApp() {
         initPostsUI();
 
         initNotificationsUI();
+
+        // (المرحلة 5 - خطة الإشعارات الخارجية) بعد initNotificationsUI()
+        // مباشرة - نفس فلسفة "موديول مستقل بيتهيأ مرة واحدة، بيستمع
+        // لأحداث auth بنفسه" المستخدمة فعلاً هنا وفي initSupportChat تحت
+        initPushNotifications();
 
         // (المرحلة 8) بعد initNotificationsUI() مباشرة - نفس منطق
         // "مودال مستقل، بيتهيأ مرة واحدة، بيستمع لأحداث auth بنفسه"

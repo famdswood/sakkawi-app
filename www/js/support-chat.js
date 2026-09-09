@@ -174,6 +174,24 @@ export async function openSupportChatWithAdmin() {
     await loadAndRenderConversationCached(currentUser.id);
     await markAdminMessagesAsReadForMe();
     subscribeToActiveConversation(currentUser.id);
+
+    // (تعديل) نفس فلسفة الحذف المركزي المستخدمة في acceptFriendRequest/
+    // rejectFriendRequest بتوع profiles.js - فتح المحادثة دي معناه إن
+    // المستخدم شاف رد الأدمن فعلاً، بغض النظر هو جه من إشعار ولا من
+    // زرار "إرسال رسالة" في بروفايل الأدمن مباشرة، فمفيش داعي إشعار
+    // "admin_reply" يفضل عالق في لوحة الإشعارات بعد كده. محادثة واحدة
+    // بس بين أي مستخدم عادي والأدمن، فمش محتاجين نفلتر غير بالنوع
+    // والمستلم. Fire and forget زي باقي عمليات الحذف المشابهة.
+    supabaseClient
+        .from('notifications')
+        .delete()
+        .eq('user_id', currentUser.id)
+        .eq('type', 'admin_reply')
+        .then(({ error: deleteError }) => {
+            if (deleteError) {
+                console.error('خطأ في حذف إشعارات رد الأدمن بعد فتح المحادثة:', deleteError.message);
+            }
+        });
 }
 
 /**
@@ -201,6 +219,25 @@ export async function openSupportChatAsAdminWithUser(targetUserId) {
     await supabaseClient.rpc('admin_mark_conversation_delivered_and_read', { p_user_id: targetUserId });
     refreshAdminUnreadBadge();
     subscribeToActiveConversation(targetUserId);
+
+    // (تعديل) نفس فكرة الحذف فوق في openSupportChatWithAdmin - الأدمن
+    // ممكن يفتح محادثة مستخدم معيّن من غير ما يمر بكارت الإشعار خالص
+    // (من زرار "إرسال رسالة" على بروفايله، أو من قائمة المحادثات في
+    // صندوق الرسائل). هنا لازم نفلتر بـ sender_id (targetUserId) كمان
+    // عشان الأدمن ممكن يكون عنده أكتر من محادثة/إشعار "support_message"
+    // من مستخدمين مختلفين في نفس الوقت - بنمسح بس إشعارات المحادثة
+    // اللي فتحها دلوقتي، مش كل الإشعارات من كل المستخدمين
+    supabaseClient
+        .from('notifications')
+        .delete()
+        .eq('user_id', ADMIN_USER_ID)
+        .eq('type', 'support_message')
+        .eq('data->>sender_id', targetUserId)
+        .then(({ error: deleteError }) => {
+            if (deleteError) {
+                console.error('خطأ في حذف إشعارات رسالة المستخدم بعد فتح المحادثة:', deleteError.message);
+            }
+        });
 }
 
 /** يستخرج معرّف الأدمن الحالي - مستخدمة من profiles.js عشان تقرر تعرض زرار "إرسال رسالة" ولا لأ */

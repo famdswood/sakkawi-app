@@ -1308,7 +1308,7 @@
                              بالبيانات الحقيقية من Supabase (profile.full_name
                              و profile.title)، أو بـ"زائر" من غير لقب لو مفيش حساب -->
                         <h1 id="headerUserName" class="text-base font-extrabold text-lux-50 tracking-tight leading-none truncate">Fam Dawood</h1>
-                        <p id="headerUserTitle" class="text-xs text-gold-400 font-bold mt-1 leading-none truncate flex items-center gap-1"><svg class="w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="currentColor"><path d="M3 8l4 3 5-6 5 6 4-3-2 10H5L3 8z"/></svg> ...</p>
+                        <p id="headerUserTitle" class="text-xs text-gold-400 font-bold mt-1 leading-none truncate flex items-center gap-1 hidden"><svg class="w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="currentColor"><path d="M3 8l4 3 5-6 5 6 4-3-2 10H5L3 8z"/></svg><span id="headerUserTitleText"></span></p>
                     </div>
                 </button>
 
@@ -1831,15 +1831,15 @@
                                 <span class="presence-dot" id="p2-avatar-presence" aria-hidden="true"></span>
                             </div>
                             <h4 id="p2-name" class="podium-name">—</h4>
-                            <div class="dual-stat-badge">
-                                <span class="dual-stat-item" title="عدد الخطوات">
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l2-6 4 12 2-6h6"/></svg>
-                                    <span id="p2-steps">—</span>
-                                </span>
-                                <span class="dual-stat-divider" aria-hidden="true"></span>
-                                <span class="dual-stat-item" title="النقاط">
+                            <p class="podium-user-title hidden" id="p2-user-title"></p>
+                            <div class="podium-stat-card">
+                                <span class="podium-stat-row podium-stat-row-top" title="النقاط">
                                     <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2l2.9 6.6 7.1.6-5.4 4.7 1.6 7-6.2-3.9-6.2 3.9 1.6-7L2 9.2l7.1-.6z"/></svg>
                                     <span id="p2-points">—</span>
+                                </span>
+                                <span class="podium-stat-row podium-stat-row-bottom" title="عدد الخطوات">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l2-6 4 12 2-6h6"/></svg>
+                                    <span id="p2-steps">—</span>
                                 </span>
                             </div>
                             <div class="podium-stand podium-stand-silver">2</div>
@@ -1869,16 +1869,16 @@
                                 <span class="presence-dot presence-dot-lg" id="p1-avatar-presence" aria-hidden="true"></span>
                             </div>
                             <h4 id="p1-name" class="podium-name podium-name-gold">—</h4>
+                            <p class="podium-user-title hidden" id="p1-user-title"></p>
                             <p class="podium-title" id="p1-title">بطل البطولة</p>
-                            <div class="dual-stat-badge dual-stat-badge-gold">
-                                <span class="dual-stat-item" title="عدد الخطوات">
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l2-6 4 12 2-6h6"/></svg>
-                                    <span id="p1-steps">—</span>
-                                </span>
-                                <span class="dual-stat-divider" aria-hidden="true"></span>
-                                <span class="dual-stat-item" title="النقاط">
+                            <div class="podium-stat-card podium-stat-card-gold">
+                                <span class="podium-stat-row podium-stat-row-top" title="النقاط">
                                     <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2l2.9 6.6 7.1.6-5.4 4.7 1.6 7-6.2-3.9-6.2 3.9 1.6-7L2 9.2l7.1-.6z"/></svg>
                                     <span id="p1-points">—</span>
+                                </span>
+                                <span class="podium-stat-row podium-stat-row-bottom" title="عدد الخطوات">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l2-6 4 12 2-6h6"/></svg>
+                                    <span id="p1-steps">—</span>
                                 </span>
                             </div>
                             <div class="podium-stand podium-stand-gold">1</div>
@@ -1902,15 +1902,15 @@
                                 <span class="presence-dot" id="p3-avatar-presence" aria-hidden="true"></span>
                             </div>
                             <h4 id="p3-name" class="podium-name">—</h4>
-                            <div class="dual-stat-badge">
-                                <span class="dual-stat-item" title="عدد الخطوات">
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l2-6 4 12 2-6h6"/></svg>
-                                    <span id="p3-steps">—</span>
-                                </span>
-                                <span class="dual-stat-divider" aria-hidden="true"></span>
-                                <span class="dual-stat-item" title="النقاط">
+                            <p class="podium-user-title hidden" id="p3-user-title"></p>
+                            <div class="podium-stat-card">
+                                <span class="podium-stat-row podium-stat-row-top" title="النقاط">
                                     <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2l2.9 6.6 7.1.6-5.4 4.7 1.6 7-6.2-3.9-6.2 3.9 1.6-7L2 9.2l7.1-.6z"/></svg>
                                     <span id="p3-points">—</span>
+                                </span>
+                                <span class="podium-stat-row podium-stat-row-bottom" title="عدد الخطوات">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l2-6 4 12 2-6h6"/></svg>
+                                    <span id="p3-steps">—</span>
                                 </span>
                             </div>
                             <div class="podium-stand podium-stand-bronze">3</div>
@@ -2008,7 +2008,7 @@
                     </div>
                 </div>
 
-                <div id="profileAccountView" class="space-y-5">
+                <div id="profileAccountView" class="hidden space-y-5">
 
                 <!-- Profile Hero Card -->
                 <div class="bg-lux-900 rounded-3xl p-5 shadow-soft-card border border-gold-500/10 text-center relative overflow-hidden">
@@ -2272,6 +2272,14 @@
 
                         <h2 id="publicProfileName" class="text-lg font-black text-lux-50 mt-2">—</h2>
 
+                        <!-- (تعديل بناءً على طلب المستخدم): لقب الشرف بتاع صاحب
+                             البروفايل ده - نفس فكرة/تنسيق #profileTitle بتاع
+                             بروفايلي بالظبط. مخفي (hidden) افتراضيًا في الـ HTML
+                             نفسه عشان ميبانش فاضي للحظة قبل ما renderPublicProfileContent
+                             يشتغل - لو مفيش لقب أصلاً بيفضل مخفي تمامًا (مفيش أي
+                             نص بديل)، ولو فيه بيتشال hidden ويتحط النص -->
+                        <p id="publicProfileTitle" class="text-xs text-gold-400 font-bold mt-0.5 hidden"></p>
+
                         <div class="flex items-center justify-center gap-3 mt-1">
                             <span id="publicProfilePoints" class="text-xs font-black text-gold-400">— نقطة</span>
                             <span class="text-lux-700">•</span>
@@ -2380,7 +2388,16 @@
                     <span>رجوع</span>
                 </button>
 
-                <div class="bg-lux-900 rounded-3xl p-6 shadow-soft-card border border-gold-500/10 space-y-5">
+                <!-- (إصلاح باج حقيقي - ملاحظة مستخدم بالصور): الكارت ده كان بياخد
+                     عرض appShell الكامل (زي أي تاب تاني) - يعني على شاشة أعرض
+                     (تابلت/ديسكتوب) كان هيبقى حقول فورم بعرض ~900-1000px (اسم،
+                     باسورد..إلخ) شكلها غريب جداً وصعب القراءة كخط واحد ممطوط.
+                     الفرق عن باقي التابات (الرئيسية/البروفايل/الترتيب): دول
+                     محتواهم كروت/شبكة بتستفيد من العرض الإضافي، لكن الشاشة دي
+                     "فورم" عمود واحد بحت (زي شاشات الأونبوردنج بالظبط) فمحتاجة
+                     نفس منطق عرض القراءة المقصود (560px تابلت → 640px شاشات
+                     أكبر) بدل ما تتمدد لعرض appShell كامل -->
+                <div class="bg-lux-900 rounded-3xl p-6 shadow-soft-card border border-gold-500/10 space-y-5 md:max-w-[560px] lg:max-w-[640px] md:mx-auto">
 
                     <div class="text-center space-y-1.5">
                         <h2 class="text-lg font-extrabold text-lux-50 tracking-tight">إعدادات الحساب</h2>

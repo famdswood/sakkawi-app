@@ -5,6 +5,8 @@ import android.content.Context;
 import android.content.Intent;
 import android.os.Build;
 
+import android.content.SharedPreferences;
+
 import androidx.core.content.ContextCompat;
 
 /**
@@ -35,6 +37,17 @@ public class BootStepCounterReceiver extends BroadcastReceiver {
                         || "com.htc.intent.action.QUICKBOOT_POWERON".equals(action);
 
         if (!isBootEvent) return;
+
+        // (إصلاح - جذر ثغرة الـ Reboot): قبل الإصلاح، الخدمة كانت بتشتغل
+        // تلقائيًا مع أي إقلاع للجهاز من غير ما حد يسأل "هو ده زائر ولا
+        // عضو؟" - لأن الـ Receiver ده بيشتغل من أندرويد نفسه من غير ما
+        // يفتح حتى صفحة الويب. دلوقتي بنقرا نفس العلم اللي StepCounterPlugin
+        // بيحفظه وقت startTracking/stopTracking (شوف هناك)، ولو مفيش إذن
+        // محفوظ (أول تشغيل للتطبيق مثلاً) بنمتنع افتراضيًا كإجراء أمان.
+        SharedPreferences prefs = context.getSharedPreferences(
+                "sakkawi_native_step_prefs", Context.MODE_PRIVATE);
+        boolean trackingAllowed = prefs.getBoolean("tracking_allowed", false);
+        if (!trackingAllowed) return;
 
         Intent serviceIntent = new Intent(context, StepCounterForegroundService.class);
 

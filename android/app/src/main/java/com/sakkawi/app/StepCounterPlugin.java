@@ -85,6 +85,14 @@ public class StepCounterPlugin extends Plugin {
     @PluginMethod
     public void startTracking(PluginCall call) {
         Context context = getContext();
+
+        // (إصلاح - ثغرة الـ Reboot): بنحفظ "الإذن بالتتبع" في SharedPreferences
+        // عشان BootStepCounterReceiver يقدر يرجع يسأل نفس القيمة دي وقت
+        // إقلاع الجهاز - لأن BroadcastReceiver مالوش أي وصول لحالة الزائر
+        // في الواجهة (window.isGuestMode) أصلاً.
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                .edit().putBoolean("tracking_allowed", true).apply();
+
         Intent serviceIntent = new Intent(context, StepCounterForegroundService.class);
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -99,6 +107,13 @@ public class StepCounterPlugin extends Plugin {
     @PluginMethod
     public void stopTracking(PluginCall call) {
         Context context = getContext();
+
+        // (إصلاح - ثغرة الـ Reboot): نفس الفكرة بالعكس - لما الزائر
+        // يتوقف تتبعه، بنسجّل كده صراحة عشان لو قفل موبايله وشغّله تاني،
+        // BootStepCounterReceiver ميشغّلش الخدمة تلقائيًا من غيره.
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                .edit().putBoolean("tracking_allowed", false).apply();
+
         context.stopService(new Intent(context, StepCounterForegroundService.class));
         call.resolve();
     }

@@ -9,6 +9,19 @@
         android:supportsRtl="true"
         android:theme="@style/AppTheme">
 
+        <!-- [جديد - Push Notifications: المرحلة 3.4] أيقونة ولون الإشعار
+             الافتراضيين اللي أندرويد بيستخدمهم لأي إشعار FCM بييجي والتطبيق
+             مقفول/بالخلفية (لما مفيش notification builder مخصص). الأيقونة
+             لازم تبقى silhouette أبيض شفاف بس (ic_stat_notify.xml) -
+             أندرويد بيرفض يعرض أيقونة ملوّنة في status bar. اللون من هوية
+             سِكّاوي الذهبية (#D4AF37) -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@drawable/ic_stat_notify" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_color"
+            android:resource="@color/notification_accent" />
+
         <activity
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation|density"
             android:name=".MainActivity"

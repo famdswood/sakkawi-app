@@ -20,6 +20,26 @@ import { showAuthGate } from './onboarding.js';
 // supabaseClient.rpc('check_and_update_user_location', ...)
 window.isGuestMode = window.isGuestMode || false;
 
+// (إصلاح - باج Race Condition حقيقي، اكتشاف لاحق): isGuestMode فوق
+// قيمتها الابتدائية "متفائلة" (false = عضو كامل الصلاحيات) لحد ما
+// applyGuestModeRestrictions() في geofence.js تحسم القيمة الحقيقية
+// بعد تأكيد Async من auth.js (auth:login / auth:confirmed-signed-out).
+// المشكلة: من وجهة نظر أي كود بره الملف ده، مفيش فرق بين "زائر لسه
+// مالوش تأكيد" و"عضو حقيقي متأكد منه" - الاتنين بيشوفوا isGuestMode
+// = false بالظبط. ده كان بيسيب نافذة صغيرة (لحد ما الحسم الحقيقي
+// يوصل) بيعدّي فيها أي فحص بسيط زي "if (window.isGuestMode) return;"
+// حتى لزائر حقيقي.
+//
+// الحل: علم مستقل تمامًا بيجاوب على سؤال مختلف: "هل applyGuestModeRestrictions
+// اتنفذت فعليًا مرة واحدة على الأقل ولا لسه؟" - مش تغيير القيمة
+// الافتراضية لـisGuestMode نفسها (ده كان هيرجّع مشكلة فلاش الشريط
+// للعضو الحقيقي). أي كود حساس (زي حاجز syncFromNativeStepCounter في
+// js/sensors.js) لازم يتأكد من العلم ده = true الأول قبل ما يعتمد على
+// قيمة isGuestMode خالص. بيتحول لـtrue مرة واحدة بس، جوه
+// applyGuestModeRestrictions نفسها (شوف geofence.js)، ومبيرجعش false
+// تاني أبداً بعد كده طول عمر الصفحة.
+window.isGuestModeResolved = window.isGuestModeResolved || false;
+
 // رابط احتياطي (Fallback) لو لأي سبب js/support-modal.js مش متحمّل
 // (مثلاً خطأ في الشبكة) - في الحالة الطبيعية، الزرار بيفتح المودال
 // مباشرة وميستخدمش الرابط ده أصلاً

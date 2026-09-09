@@ -977,19 +977,22 @@ function bindActivityEvents() {
 }
 
 /**
- * حساب عدد الشهور منذ تاريخ معين (تُستخدم مع created_at بتاع البروفايل)
+ * (تعديل بناءً على طلب المستخدم) بترجع تاريخ الانضمام الفعلي منسّق
+ * بالعربي (زي "٩ سبتمبر ٢٠٢٦") بدل "من X شهور" التقريبية - نفس أسلوب
+ * toLocaleDateString('ar-EG') المستخدم في js/support-chat.js بالظبط
  * @param {string} isoDateString
- * @returns {number}
+ * @returns {string|null} null لو التاريخ مش موجود/غير صالح
  */
-function monthsSince(isoDateString) {
-    if (!isoDateString) return 0;
+function formatJoinedDateArabic(isoDateString) {
+    if (!isoDateString) return null;
     const createdDate = new Date(isoDateString);
-    if (Number.isNaN(createdDate.getTime())) return 0;
+    if (Number.isNaN(createdDate.getTime())) return null;
 
-    const now = new Date();
-    const months = (now.getFullYear() - createdDate.getFullYear()) * 12
-        + (now.getMonth() - createdDate.getMonth());
-    return Math.max(0, months);
+    return createdDate.toLocaleDateString('ar-EG', {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+    });
 }
 
 /**
@@ -1055,7 +1058,10 @@ export function renderProfileHeader(profile, user) {
     const isGuestHeader = !user?.id;
     toggleAvatarPair(headerAvatarEl, headerAvatarGuestIconEl, isGuestHeader ? null : profile?.avatar_url);
     toggleAvatarPair(avatarEl, avatarGuestIconEl, isGuestHeader ? null : profile?.avatar_url);
-    if (headerTitleEl) headerTitleEl.classList.toggle('hidden', isGuestHeader);
+    // (تعديل بناءً على طلب المستخدم): الإخفاء بتاع اللقب هنا بقى قرار
+    // مركّب (زائر + لقب فاضي مع بعض)، فاتنقل لمكان واحد بعد ما displayTitle
+    // بيتحسب تحت - عشان مانكررش نفس classList.toggle('hidden', ...) مرتين
+    // بقيم مختلفة على نفس العنصر (الآخر بس هو اللي بيفوز أصلاً)
 
     // نقطة "أونلاين الآن" فوق صورتي أنا (هيدر علوي + كارت البروفايل) -
     // مفيش داعي نخبيها للزائر عشان أصلاً مفيش صورة حقيقية ظاهرة أصلاً؛
@@ -1087,18 +1093,43 @@ export function renderProfileHeader(profile, user) {
     // نرجع لها كـ Fallback (كانت "ابن البلد") - لو المستخدم لسه ملوش
     // لقب محدد (title لسه null لأنه لسه معملش اختيار، أو حتى معندوش أي
     // وسام مفتوح أصلاً)، بنعرض نص واضح بدل ما نختلق لقب وهمي
+    // (إصلاح باج حقيقي - طلب مستخدم): كان الكود بيعمل fallback للكاش
+    // المحلي (localStorage) لو profile.title/full_name طلعوا "فولسي"
+    // (null/فاضي) - المفروض ده بس لو مفيش profile خالص لسه (أول تحميل
+    // للصفحة قبل ما رد Supabase يوصل، شوف renderProfileHeader(null, user)
+    // في الاستدعاءات التانية). لكن لما profile نفسه موجود فعلاً (حتى
+    // لو title جواه null - يعني ده "مفيش لقب" حقيقي ومؤكد، زي بعد ما
+    // المستخدم يحفظ "بدون لقب" من الإعدادات)، كان بيرجع يعرض القيمة
+    // القديمة المخزّنة في الكاش بدل ما يصدّق profile الحقيقي - وده
+    // بالظبط سبب باج "التعديل مش بيتطبق إلا بعد تسجيل خروج/دخول"
+    // (الكاش مبيتمسحش إلا وقت logout). الحل: لو profile موجود (كائن
+    // حقيقي وصلنا بيه)، بنصدّقه هو نفسه دايماً (حتى لو title/full_name
+    // جواه null) - الكاش بقى مستخدم بس في حالة profile === null فعلاً
     const cachedName = readCachedHeaderField(CACHED_DISPLAY_NAME_KEY);
     const cachedTitle = readCachedHeaderField(CACHED_DISPLAY_TITLE_KEY);
 
-    const displayName = profile?.full_name || cachedName;
-    const displayTitle = profile?.title || cachedTitle || null;
-    const joinedMonthsAgo = monthsSince(profile?.created_at);
+    const displayName = profile ? (profile.full_name || null) : cachedName;
+    const displayTitle = profile ? (profile.title || null) : (cachedTitle || null);
+    const joinedDateText = formatJoinedDateArabic(profile?.created_at);
 
-    // بمجرد ما نوصل لاسم/لقب حقيقي فعلاً (مش كاش) من صف profiles،
+    // بمجرد ما نوصل لبيانات حقيقية فعلاً (مش كاش) من صف profiles،
     // بنحدّث الكاش المحلي عشان يبقى جاهز لأول رسمة في زيارة/Refresh
-    // جاية على نفس الجهاز
+    // جاية على نفس الجهاز - بما في ذلك مسح الكاش لو القيمة بقت فاضية
+    // فعلاً (منعًا لنفس باج "القيمة القديمة عالقة" فوق يحصل تاني حتى
+    // لو مؤقتًا لحد ما رد الشبكة الجاي يوصل)
     if (profile?.full_name) writeCachedHeaderField(CACHED_DISPLAY_NAME_KEY, profile.full_name);
-    if (profile?.title) writeCachedHeaderField(CACHED_DISPLAY_TITLE_KEY, profile.title);
+    if (profile?.title) {
+        writeCachedHeaderField(CACHED_DISPLAY_TITLE_KEY, profile.title);
+    } else if (profile) {
+        // profile موجود فعلاً ومؤكد إنه من غير لقب (مش لسه بيتحمّل) -
+        // امسح أي قيمة قديمة عالقة في الكاش عشان الرسمة الأولى الجاية
+        // (قبل ما رد الشبكة يوصل) ما تعرضش لقب قديم راح فعلاً
+        try {
+            window.localStorage.removeItem(CACHED_DISPLAY_TITLE_KEY);
+        } catch (err) {
+            // تجاهل بهدوء
+        }
+    }
 
     // لو مفيش لسه أي اسم (لا حقيقي ولا كاش - أول مرة على الجهاز ده)،
     // بنعرض هيكل تحميل هادي (Skeleton) بدل أي نص وهمي، وبنسيب باقي
@@ -1113,13 +1144,24 @@ export function renderProfileHeader(profile, user) {
         }
     }
     if (titleEl) {
-        titleEl.textContent = displayTitle
-            ? `لقب الشرف: ${displayTitle}`
-            : 'لسه معندكش لقب شرف - افتح وسام واختاره من إعدادات الحساب';
+        // (تعديل بناءً على طلب المستخدم): كان فيه جملة بديلة طويلة "لسه
+        // معندكش لقب شرف - افتح وسام واختاره من إعدادات الحساب" بتظهر
+        // مكان اللقب لحد ما يختار واحد - اتشالت خالص. دلوقتي: لو مفيش
+        // لقب، السطر ده بيتخفي تمامًا (مش نص فاضي بيسيب فراغ)، وأول ما
+        // يختار لقب بيظهر السطر تلقائي مكانه - بدل استبدال نص بنص تاني
+        if (displayTitle) {
+            titleEl.textContent = displayTitle;
+            titleEl.classList.remove('hidden');
+        } else {
+            titleEl.textContent = '';
+            titleEl.classList.add('hidden');
+        }
     }
     if (joinedEl) {
-        joinedEl.textContent = joinedMonthsAgo > 0
-            ? `انضم لـ "سِكّاوي" من ${joinedMonthsAgo} شهور`
+        // (تعديل بناءً على طلب المستخدم): كان بيحسب "من X شهور" تقريبية
+        // (monthsSince) - بقى يعرض تاريخ الانضمام الحقيقي زي ما هو
+        joinedEl.textContent = joinedDateText
+            ? `انضم لـ "سِكّاوي" في ${joinedDateText}`
             : 'انضم لـ "سِكّاوي" حديثاً';
     }
 
@@ -1132,7 +1174,21 @@ export function renderProfileHeader(profile, user) {
             headerNameEl.textContent = '';
         }
     }
-    if (headerTitleEl) headerTitleEl.textContent = displayTitle || 'لسه من غير لقب';
+    if (headerTitleEl) {
+        // (تعديل بناءً على طلب المستخدم): كان بيعرض "لسه من غير لقب" كنص
+        // بديل دايمًا - بقى بيتخفي بالكامل زي بالظبط #profileTitle لو
+        // مفيش لقب فعلاً (أو زائر أصلاً). بنحدّث السپان الداخلي بس
+        // (headerUserTitleText) مش كل الـ <p>، عشان أيقونة التاج (svg)
+        // اللي جنبه متتمسحش من الـ DOM في كل رسمة
+        const headerTitleTextEl = document.getElementById('headerUserTitleText');
+        if (!isGuestHeader && displayTitle) {
+            if (headerTitleTextEl) headerTitleTextEl.textContent = displayTitle;
+            headerTitleEl.classList.remove('hidden');
+        } else {
+            if (headerTitleTextEl) headerTitleTextEl.textContent = '';
+            headerTitleEl.classList.add('hidden');
+        }
+    }
 
     // (المرحلة 7) أيقونة الشارة المميزة جنب الاسم - في كارت "بروفايلي"
     // وفي الهيدر العلوي مع بعض. بنستنى الكتالوج لو لسه مش محمّل (Fire
@@ -1200,8 +1256,31 @@ function formatCompactNumber(num) {
        user_id     uuid not null references public.profiles(id) on delete cascade,
        badge_id    text not null references public.badges(id) on delete cascade,
        unlocked_at timestamptz not null default now(),
+       expires_at  timestamptz null,          -- (جديد) الأوسمة المؤقتة بس
+                                               -- (بطل اليوم/الأسبوع/الشهر) بتحط
+                                               -- قيمة هنا؛ باقي الأوسمة العادية
+                                               -- بتفضل null يعني "دائم للأبد"
        unique (user_id, badge_id)
    );
+
+   (جديد - أوسمة البطولات المؤقتة): 3 صفوف كتالوج إضافية في badges
+   (champion_daily / champion_weekly / champion_monthly، بنفس نصوص
+   winnerTitle الموجودة أصلاً في CHAMPIONSHIP_PERIODS بـ js/leaderboard.js:
+   "بطل اليوم"/"بطل الأسبوع"/"بطل الشهر") - بيتفتحوا/يتجدّدوا من جوه
+   نفس الـ Cron/Function اللي بيحسب الفايز في نهاية كل دورة بطولة
+   (مش من هنا في الفرونت إند خالص)، وبيتحطلهم expires_at = نهاية
+   الدورة الجديدة اللي هما سارية فيها (يوم/أسبوع/شهر واحد كامل بتوقيت
+   القاهرة، بنفس منطق getChampionshipEndDate في js/leaderboard.js
+   بالظبط). لو نفس المستخدم فاز تاني في الدورة اللي بعدها، expires_at
+   بيتحدّث (يتجدّد) لنهاية الدورة الجديدة بدل ما يتراكم صف جديد. لو
+   الوسام انتهى (expires_at فات) والمستخدم مجدّدهوش، أي مكان في الفرونت
+   إند (هنا وفي leaderboard.js) بيعتبره "مقفول" تلقائيًا من غير أي كود
+   إضافي - شوف isBadgeCurrentlyUnlocked تحت. الجزء الوحيد اللي محتاج
+   لمسة سيرفر إضافية (برّه الفرونت إند بالكامل) هو تصفير profiles.title
+   وprofiles.featured_badge_id لأي مستخدم لقبه/شارته المميزة بقت بتاعة
+   وسام بطولة انتهى ومجددوش - نفس الـ Cron لازم يعمل الخطوة دي كمان
+   بعد ما يحسب الفايزين الجداد، وإلا اللقب/الأيقونة هيفضلوا ظاهرين نص
+   خام في العمود من غير أي معنى حقيقي وراهم.
 
    RLS المقترحة: badges قراءة عامة (select للجميع)، user_badges قراءة
    لصاحب الصف بس (auth.uid() = user_id)، والإدراج (unlock) إما من
@@ -1241,15 +1320,16 @@ async function fetchBadgesCatalog() {
 
 /**
  * جلب أوسمة المستخدم الحالي المفتوحة فعلاً + وقت فتح كل واحدة منها
- * (unlocked_at) - محتاجين الوقت عشان نرتّب الوسام الأحدث فتحًا في
- * بداية تصنيفه (شوف sortBadgesForDisplay تحت)
+ * (unlocked_at) + وقت انتهاءها لو وسام مؤقت (expires_at) - محتاجين
+ * الوقت عشان نرتّب الوسام الأحدث فتحًا في بداية تصنيفه (شوف
+ * sortBadgesForDisplay تحت)
  * @param {string} userId
- * @returns {Promise<Map<string, string>>} badge_id -> unlocked_at (ISO string)
+ * @returns {Promise<Map<string, {unlockedAt: string, expiresAt: string|null}>>} badge_id -> بيانات الفتح
  */
 async function fetchUnlockedBadgesMap(userId) {
     const { data, error } = await supabaseClient
         .from('user_badges')
-        .select('badge_id, unlocked_at')
+        .select('badge_id, unlocked_at, expires_at')
         .eq('user_id', userId);
 
     if (error) {
@@ -1257,7 +1337,45 @@ async function fetchUnlockedBadgesMap(userId) {
         return new Map();
     }
 
-    return new Map((data || []).map((row) => [row.badge_id, row.unlocked_at]));
+    return new Map((data || []).map((row) => [row.badge_id, { unlockedAt: row.unlocked_at, expiresAt: row.expires_at }]));
+}
+
+/**
+ * (جديد - أوسمة البطولات المؤقتة) هل صف "فتح وسام" لسه ساري فعلاً
+ * دلوقتي؟ الوسام العادي (expiresAt = null) دايمًا ساري بمجرد ما
+ * يتفتح. وسام مؤقت (بطل اليوم/الأسبوع/الشهر) بيبقى ساري لحد لحظة
+ * expiresAt بالظبط - بعدها بيتحسب "مقفول" تلقائيًا هنا في الفرونت
+ * إند من غير أي حذف فعلي للصف من قاعدة البيانات (الحذف/التصفير
+ * الفعلي مسؤولية الـ Cron سيرفر-سايد وقت الدورة الجديدة).
+ * @param {{unlockedAt: string, expiresAt: string|null}|undefined} entry
+ * @returns {boolean}
+ */
+function isBadgeCurrentlyUnlocked(entry) {
+    if (!entry) return false;
+    if (!entry.expiresAt) return true;
+    return new Date(entry.expiresAt).getTime() > Date.now();
+}
+
+/**
+ * (جديد - أوسمة البطولات المؤقتة) نص عربي قصير لباقي الوقت على وسام
+ * مؤقت لحد ما ينتهي (زي "بيفضل ساعتين" أو "بيفضل ٣ أيام") - بيتعرض
+ * جوه كارت الوسام (badgeCardHtml) بس لو الوسام ساري وله expiresAt.
+ * تقريبي عمدًا (مفيش عداد ثانية بثانية زي عداد البطولات في
+ * js/leaderboard.js - مش لازم هنا، الكارت مش المكان اللي المستخدم
+ * بيراقب فيه الوقت لحظة بلحظة)
+ * @param {string} expiresAtIso
+ * @returns {string}
+ */
+function formatBadgeTimeRemaining(expiresAtIso) {
+    const remainingMs = new Date(expiresAtIso).getTime() - Date.now();
+    if (remainingMs <= 0) return 'بينتهي دلوقتي';
+
+    const hours = Math.round(remainingMs / 3_600_000);
+    if (hours < 1) return 'بيفضل أقل من ساعة';
+    if (hours < 24) return `بيفضل ${hours} ${hours === 1 ? 'ساعة' : 'ساعات'}`;
+
+    const days = Math.round(hours / 24);
+    return `بيفضل ${days} ${days === 1 ? 'يوم' : 'أيام'}`;
 }
 
 /**
@@ -1296,16 +1414,24 @@ async function loadAndRenderBadges(userId) {
         fetchUnlockedBadgesMap(userId),
     ]);
 
-    const rawBadges = catalog.map((badge) => ({
-        id: badge.id,
-        icon: badge.icon,
-        title: badge.title,
-        desc: badge.description,
-        tier: badge.tier,
-        sortOrder: badge.sort_order,
-        unlocked: unlockedMap.has(badge.id),
-        unlockedAt: unlockedMap.get(badge.id) || null,
-    }));
+    const rawBadges = catalog.map((badge) => {
+        const entry = unlockedMap.get(badge.id);
+        return {
+            id: badge.id,
+            icon: badge.icon,
+            title: badge.title,
+            desc: badge.description,
+            tier: badge.tier,
+            sortOrder: badge.sort_order,
+            // (إصلاح - أوسمة البطولات المؤقتة) "مفتوح" لازم يمر على
+            // isBadgeCurrentlyUnlocked مش مجرد وجود الصف - وإلا وسام بطولة
+            // انتهى expires_at بتاعه (والمستخدم مجدّدهوش بفوز جديد) هيفضل
+            // ظاهر "مفتوح" هنا للأبد وهيفضل خيار متاح في قايمة اللقب
+            unlocked: isBadgeCurrentlyUnlocked(entry),
+            unlockedAt: entry?.unlockedAt ?? null,
+            expiresAt: entry?.expiresAt ?? null,
+        };
+    });
 
     badgesData = sortBadgesForDisplay(rawBadges);
 
@@ -1384,10 +1510,18 @@ function renderFeaturedBadgeInline(nameEl, featuredBadgeId) {
  * الـ HTML بتاع كارت وسام واحد (مفتوح أو مقفول) - مُستخرجة لدالة واحدة
  * عشان تتستخدم في المعاينة المصغّرة (renderBadges) والصفحة الكاملة
  * (renderBadgesPage) من غير ما نكرر نفس الـ Markup في المكانين
- * @param {{icon:string, title:string, desc:string, unlocked:boolean}} badge
+ * @param {{icon:string, title:string, desc:string, unlocked:boolean, expiresAt?:string|null}} badge
  * @returns {string}
  */
 function badgeCardHtml(badge) {
+    // (جديد - أوسمة البطولات المؤقتة) لو الوسام ساري دلوقتي وله expiresAt
+    // (يعني بطل يومي/أسبوعي/شهري حالي)، بنعرض تحت وصفه "بيفضل X" بدل
+    // الوصف التاني - عشان المستخدم يعرف إن اللقب ده مؤقت ومحتاج يفوز
+    // تاني عشان يفضل شايله (شوف formatBadgeTimeRemaining فوق)
+    const subtitle = (badge.unlocked && badge.expiresAt)
+        ? formatBadgeTimeRemaining(badge.expiresAt)
+        : badge.desc;
+
     return `
         <div class="${badge.unlocked
             ? 'bg-gold-500/10 border border-gold-500/30 badge-glow'
@@ -1396,7 +1530,7 @@ function badgeCardHtml(badge) {
             ${!badge.unlocked ? '<span class="absolute top-1 right-1 text-lux-400"><svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>' : ''}
             <span class="text-2xl">${badge.icon}</span>
             <span class="font-extrabold text-lux-100 text-xs">${badge.title}</span>
-            <span class="text-[9px] ${badge.unlocked ? 'text-gold-400' : 'text-lux-400'} font-bold">${badge.desc}</span>
+            <span class="text-[9px] ${badge.unlocked ? 'text-gold-400' : 'text-lux-400'} font-bold">${subtitle}</span>
         </div>
     `;
 }
@@ -2954,7 +3088,7 @@ async function fetchPublicProfileRow(targetUserId) {
     // (جديد) public_profiles بدل profiles - نفس السبب المذكور في fetchLeaderboardTop
     const { data, error } = await supabaseClient
         .from('public_profiles')
-        .select('id, full_name, avatar_url, points, streak_count, best_streak_days, total_steps, correct_answers, daily_championship_wins, weekly_championship_wins, monthly_championship_wins, featured_badge_id')
+        .select('id, full_name, title, avatar_url, points, streak_count, best_streak_days, total_steps, correct_answers, daily_championship_wins, weekly_championship_wins, monthly_championship_wins, featured_badge_id')
         .eq('id', targetUserId)
         .maybeSingle();
 
@@ -2969,6 +3103,7 @@ async function fetchPublicProfileRow(targetUserId) {
 /** إرجاع صفحة البروفايل العام لحالة "بيتحمّل" مؤقتة (قيم افتراضية) لحد ما البيانات الحقيقية توصل */
 function setPublicProfileLoadingState() {
     const nameEl = document.getElementById('publicProfileName');
+    const titleEl = document.getElementById('publicProfileTitle');
     const avatarEl = document.getElementById('publicProfileAvatar');
     const pointsEl = document.getElementById('publicProfilePoints');
     const streakEl = document.getElementById('publicProfileStreakCount');
@@ -2983,6 +3118,10 @@ function setPublicProfileLoadingState() {
     const badgesCount = document.getElementById('publicProfileBadgesCount');
 
     if (nameEl) nameEl.textContent = 'بنجيب البيانات...';
+    if (titleEl) {
+        titleEl.textContent = '';
+        titleEl.classList.add('hidden');
+    }
     if (avatarEl) avatarEl.src = DEFAULT_AVATAR_URI;
     if (pointsEl) pointsEl.textContent = '— نقطة';
     if (streakEl) streakEl.textContent = '— يوم ستريك حالي';
@@ -3015,6 +3154,7 @@ function setPublicProfileLoadingState() {
  */
 function renderPublicProfileContent(profileRow) {
     const nameEl = document.getElementById('publicProfileName');
+    const titleEl = document.getElementById('publicProfileTitle');
     const avatarEl = document.getElementById('publicProfileAvatar');
     const pointsEl = document.getElementById('publicProfilePoints');
     const streakEl = document.getElementById('publicProfileStreakCount');
@@ -3028,6 +3168,18 @@ function renderPublicProfileContent(profileRow) {
     const avatarUrl = profileRow.avatar_url || DEFAULT_AVATAR_URI;
 
     if (nameEl) nameEl.textContent = profileRow.full_name || 'بطل';
+    // (تعديل بناءً على طلب المستخدم): زي بالظبط منطق renderProfileHeader
+    // (بروفايلي) - لو صاحب البروفايل ده مختار لقب، اعرضه؛ لو لأ، السطر
+    // بيتخفي تمامًا (مفيش نص بديل زي "لسه معندكش لقب")
+    if (titleEl) {
+        if (profileRow.title) {
+            titleEl.textContent = profileRow.title;
+            titleEl.classList.remove('hidden');
+        } else {
+            titleEl.textContent = '';
+            titleEl.classList.add('hidden');
+        }
+    }
     if (avatarEl) {
         avatarEl.src = avatarUrl;
         avatarEl.dataset.fullUrl = avatarUrl; // نفس رابط الصورة، لازم لـ lightbox التكبير
@@ -3089,16 +3241,22 @@ async function loadAndRenderPublicProfileBadges(targetUserId) {
         return;
     }
 
-    const rawBadges = catalog.map((badge) => ({
-        id: badge.id,
-        icon: badge.icon,
-        title: badge.title,
-        desc: badge.description,
-        tier: badge.tier,
-        sortOrder: badge.sort_order,
-        unlocked: unlockedMap.has(badge.id),
-        unlockedAt: unlockedMap.get(badge.id) || null,
-    }));
+    const rawBadges = catalog.map((badge) => {
+        const entry = unlockedMap.get(badge.id);
+        return {
+            id: badge.id,
+            icon: badge.icon,
+            title: badge.title,
+            desc: badge.description,
+            tier: badge.tier,
+            sortOrder: badge.sort_order,
+            // (إصلاح - أوسمة البطولات المؤقتة) نفس إصلاح loadAndRenderBadges
+            // بالظبط - شوفه فوق لتفاصيل السبب
+            unlocked: isBadgeCurrentlyUnlocked(entry),
+            unlockedAt: entry?.unlockedAt ?? null,
+            expiresAt: entry?.expiresAt ?? null,
+        };
+    });
 
     publicProfileBadgesData = sortBadgesForDisplay(rawBadges);
 
@@ -3723,7 +3881,13 @@ function populateEditTitleSelectOptions() {
     // يشيل اللقب الحالي من غير ما يضطر يختار وسام تاني بدلاً منه
     const noneOptionHtml = `<option value="">من غير لقب</option>`;
     const badgeOptionsHtml = unlockedBadges
-        .map((badge) => `<option value="${escapeHtml(badge.title)}">${escapeHtml(badge.title)}</option>`)
+        .map((badge) => {
+            // (جديد - أوسمة البطولات المؤقتة) لو اللقب ده مؤقت (بطل
+            // اليوم/الأسبوع/الشهر)، بنوضّح جنبه هيفضل متاح قد ايه - عشان
+            // المستخدم مايتفاجئش إن لقبه اتصفّر لوحده بعد شوية
+            const suffix = badge.expiresAt ? ` (${formatBadgeTimeRemaining(badge.expiresAt)})` : '';
+            return `<option value="${escapeHtml(badge.title)}">${escapeHtml(badge.title)}${escapeHtml(suffix)}</option>`;
+        })
         .join('');
 
     titleSelect.innerHTML = noneOptionHtml + badgeOptionsHtml;

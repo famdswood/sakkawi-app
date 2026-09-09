@@ -786,6 +786,75 @@ function updateUnreadBadges() {
 
 
 /* ------------------------------------------------------------------
+   7.5) منطق "فين نروح" الموحّد (Deep Linking) - Phase 6 من الخطة
+   ------------------------------------------------------------------
+   نفس منطق الـ switch اللي كان قبل كده جوه handleNotificationsListClick
+   بالظبط، لكن بياخد type/data بدل ما ياخدهم من dataset كارت في الـ DOM
+   مباشرة، وبيرجع { action: fn } أو null بدل ما ينفّذ التنقّل مباشرة -
+   عشان كل مستدعي (كليك في المودال هنا في handleNotificationsListClick،
+   أو تاب على Push Notification في push.js وقت التطبيق مقفول/بالخلفية)
+   يقرر بنفسه هل يقفل مودال / يشيل كارت من الـ DOM... إلخ قبل ما ينادي
+   action() فعليًا - بالشكل ده أي نوع إشعار جديد يتضاف مستقبلًا، التعديل
+   بيحصل مكان واحد بس.
+   ------------------------------------------------------------------ */
+
+/**
+ * @param {string} type - نوع الإشعار (notification.type / notifType)
+ * @param {object} data - نفس بيانات عمود `data` (jsonb) بتاعة صف
+ *   الإشعار: زي { sender_id, story_id, post_id, comment_id, ... }
+ * @returns {{ action: () => void } | null} - null لو النوع مش معروف
+ *   أو البيانات اللازمة للتنقّل ناقصة (المستدعي في الحالة دي المفروض
+ *   يكتفي بعمل markNotificationAsRead بس)
+ */
+export function resolveNotificationNavigation(type, data) {
+    data = data || {};
+
+    switch (type) {
+        case 'friend_accept':
+            // حد قبل طلب صداقتك - بنفتح بروفايله العام مباشرة (نفس
+            // فلسفة فتح البروفايل من أي مكان تاني في المشروع)
+            if (!data.sender_id) return null;
+            return { action: () => openPublicProfile(data.sender_id, { replaceHistory: true }) };
+
+        case 'story_reaction':
+            // حد تفاعل مع ستوري بتاعتك - بنفتح نفس الستوري دي بالظبط
+            // لو لسه متاحة (لو مش متاحة، openStoryById بتعرض توست بنفسها)
+            if (!data.story_id) return null;
+            return { action: () => openStoryById(data.story_id) };
+
+        case 'achievement_unlocked':
+            // فتحت وسام جديد - بنودّيك لتبويب بروفايلي عشان تشوفه في
+            // دولاب الأوسمة
+            return { action: () => navigateToAchievementsSection() };
+
+        case 'leaderboard_pass':
+            // حد تخطاك في الترتيب - بنودّيك لتبويب "الترتيب" مباشرة
+            return { action: () => navigateToLeaderboardSection() };
+
+        case 'comment_reply':
+        case 'comment_like':
+            // حد رد على كومنت بتاعك أو عمل لايك عليه - بنودّيك لتبويب
+            // المنشورات ونفتح قسم الكومنتات بتاعة نفس المنشور على
+            // الكومنت بالظبط (لو لسه موجود)
+            if (!data.post_id) return null;
+            return { action: () => openPostReplyById(data.post_id, data.comment_id) };
+
+        case 'admin_reply':
+            // الأدمن رد عليك في شات الدعم - بنفتحلك نفس شاتك معاه على طول
+            return { action: () => openSupportChatWithAdmin() };
+
+        case 'support_message':
+            // مستخدم بعت رسالة جديدة في شات الدعم - النوع ده بيوصل
+            // للأدمن بس، وبيفتحله شاته هو بالظبط مع المستخدم ده
+            if (!data.sender_id) return null;
+            return { action: () => openSupportChatAsAdminWithUser(data.sender_id) };
+
+        default:
+            return null;
+    }
+}
+
+/* ------------------------------------------------------------------
    8) تفويض النقر داخل القائمة (كارت فردي / أزرار قبول-رفض)
    ------------------------------------------------------------------ */
 
@@ -841,74 +910,33 @@ function handleNotificationsListClick(event) {
     }
 
     // باقي الأنواع: مفيش زرارين قبول/رفض هنا، فالضغط في أي مكان في
-    // الكارت (مش منطقة محصورة زي friend_request) بيعتبر "فتح" الإشعار -
-    // بنعلّمه مقروء وبعدين ننفّذ فعل التنقل الخاص بنوعه
-    if (card.dataset.notifId) markNotificationAsRead(card.dataset.notifId);
+    // الكارت (مش منطقة محصورة زي friend_request) بيعتبر "فتح" الإشعار.
+    // لو الضغطة أدّت فعلياً لتنقّل لمكان الإشعار (فتح بروفايل/ستوري/
+    // بوست/شات..إلخ)، بنحذف الكارت نهائياً بدل ما نكتفي بتعليمه مقروء -
+    // عشان الإشعار ما يفضلش عالق في اللوحة من غير داعي بعد ما المستخدم
+    // شافه فعلاً وراح لمكانه (نفس منطق الحذف المستخدم أصلاً في قبول/رفض
+    // طلبات الصداقة). لو مفيش تنقّل حصل فعلاً (مثلاً البيانات ناقصة)
+    // بنكتفي بتعليمه مقروء زي الأول.
+    // (تعديل - Phase 6) بدل الـ switch اللي كان هنا بالظبط، بنستخدم
+    // دلوقتي resolveNotificationNavigation الموحّدة (شوف قسم 7.5 فوق) -
+    // نفس بيانات dataset الكارت بنبنيها كـ object زي شكل عمود `data`
+    // بتاع صف الإشعار، ونمررها هي والنوع للدالة. لو رجّعت action فعلي
+    // (يعني فيه تنقّل ممكن يحصل)، بنعمل نفس اللي كان بيحصل قبل كده:
+    // نقفل المودال، ننفّذ التنقّل، ونحذف الكارت. لو رجّعت null (نوع مش
+    // معروف أو بيانات ناقصة)، نكتفي بتعليم الإشعار مقروء زي الأول
+    const navigation = resolveNotificationNavigation(card.dataset.notifType, {
+        sender_id: card.dataset.senderId,
+        story_id: card.dataset.storyId,
+        post_id: card.dataset.postId,
+        comment_id: card.dataset.commentId,
+    });
 
-    switch (card.dataset.notifType) {
-        case 'friend_accept':
-            // حد قبل طلب صداقتك - بنفتح بروفايله العام مباشرة (نفس
-            // فلسفة فتح البروفايل من أي مكان تاني في المشروع)
-            if (card.dataset.senderId) {
-                closeNotificationsModal();
-                openPublicProfile(card.dataset.senderId, { replaceHistory: true });
-            }
-            break;
-
-        case 'story_reaction':
-            // حد تفاعل مع ستوري بتاعتك - بنفتح نفس الستوري دي بالظبط
-            // لو لسه متاحة
-            if (card.dataset.storyId) {
-                closeNotificationsModal();
-                openStoryById(card.dataset.storyId);
-            }
-            break;
-
-        case 'achievement_unlocked':
-            // فتحت وسام جديد - بنودّيك لتبويب بروفايلي عشان تشوفه في
-            // دولاب الأوسمة (مفيش تاب فرعي منفصل للأوسمة حالياً، هي
-            // قسم جوه نفس تبويب البروفايل، فبنمرّر لقسمها مباشرة)
-            closeNotificationsModal();
-            navigateToAchievementsSection();
-            break;
-
-        case 'leaderboard_pass':
-            // حد تخطاك في الترتيب - بنودّيك لتبويب "الترتيب" مباشرة عشان
-            // تشوف موقفك الحالي وتقرر تلحق نفسك تاني
-            closeNotificationsModal();
-            navigateToLeaderboardSection();
-            break;
-
-        case 'comment_reply':
-        case 'comment_like':
-            // حد رد على كومنت بتاعك أو عمل لايك عليه - بنودّيك لتبويب
-            // المنشورات ونفتح قسم الكومنتات بتاعة نفس المنشور على
-            // الكومنت بالظبط (لو لسه موجود)
-            if (card.dataset.postId) {
-                closeNotificationsModal();
-                openPostReplyById(card.dataset.postId, card.dataset.commentId);
-            }
-            break;
-
-        // (تعديل - المرحلة 8) الأدمن رد عليك في شات الدعم - بنفتحلك
-        // نفس شاتك معاه على طول (النوع ده بيوصل للمستخدم العادي بس)
-        case 'admin_reply':
-            closeNotificationsModal();
-            openSupportChatWithAdmin();
-            break;
-
-        // (تعديل - المرحلة 8) مستخدم بعت رسالة جديدة في شات الدعم -
-        // النوع ده بيوصل للأدمن بس، وبيفتحله شاته هو بالظبط مع المستخدم
-        // ده (بغض النظر هو فاتح التطبيق العادي أو لوحة التحكم)
-        case 'support_message':
-            if (card.dataset.senderId) {
-                closeNotificationsModal();
-                openSupportChatAsAdminWithUser(card.dataset.senderId);
-            }
-            break;
-
-        default:
-            break;
+    if (navigation && navigation.action) {
+        closeNotificationsModal();
+        navigation.action();
+        removeNotificationCard(card);
+    } else if (card.dataset.notifId) {
+        markNotificationAsRead(card.dataset.notifId);
     }
 }
 

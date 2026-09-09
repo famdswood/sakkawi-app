@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "561446682574",
+    "project_id": "sekkawi-ad5e4",
+    "storage_bucket": "sekkawi-ad5e4.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:561446682574:android:0135246a7b2d6426f4359f",
+        "android_client_info": {
+          "package_name": "com.sakkawi.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBK634HgQ5rIbZ_Ix28vq4NbpMDMwI4i3Y"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

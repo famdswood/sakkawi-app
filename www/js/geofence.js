@@ -956,6 +956,16 @@ export function applyGuestModeRestrictions(isAllowed) {
     // الاشتراك في بطولة، الإجابة على السؤال اليومي).
     window.isGuestMode = isGuestMode;
 
+    // (إصلاح - باج Race Condition، مكمّل لتعليق js/guest-banner.js):
+    // applyGuestModeRestrictions() هي نقطة الحسم الحقيقية والوحيدة لحالة
+    // الزائر في التطبيق كله (بتتنادى من app.js بس بعد تأكيد حقيقي من
+    // auth:login/auth:confirmed-signed-out، مش من قراءة متفائلة). وصولنا
+    // للسطر ده معناه إن الحسم فعلاً حصل - فبنرفع isGuestModeResolved لـ
+    // true (مرة واحدة تكفي، وأي نداء تاني للدالة مش هيأثر لأنها أصلاً true).
+    // من دلوقتي، أي كود حساس بيستنى على العلم ده (زي الحاجز في
+    // js/sensors.js) يقدر يكمل بأمان.
+    window.isGuestModeResolved = true;
+
     // (2) كلاس عام على body لأي تنسيق CSS شامل مرتبط بوضع الزائر
     document.body.classList.toggle('guest-mode-active', isGuestMode);
 
@@ -969,11 +979,28 @@ export function applyGuestModeRestrictions(isAllowed) {
 
         // تعتيم بصري لعداد الخطوات كإشارة إضافية إن الاحتساب متوقف
         setStepsCounterMutedVisual(true);
+
+        // (إصلاح - جذر المشكلة): إيقاف الخدمة الأصلية (Native Foreground
+        // Service) فعليًا، مش بس تعتيم بصري في الواجهة. من غير السطر ده،
+        // كانت الخدمة بتفضل شغّالة وبتحسب خطوات حقيقية في الخلفية حتى لو
+        // الزائر شايف العداد معتم على الشاشة - لأن sensors.js/StepCounterPlugin
+        // معندهومش أي فكرة عن isGuestMode أصلاً.
+        if (window.Capacitor?.isNativePlatform?.()) {
+            Capacitor.Plugins.StepCounter?.stopTracking().catch(() => {});
+        }
     } else {
         // --- إتاحة كامل الميزات ---
 
         unlockGuestRestrictedElements();
         setStepsCounterMutedVisual(false);
+
+        // (إصلاح): نشغّل الخدمة الأصلية بس لما نتأكد فعليًا إن المستخدم
+        // عضو حقيقي (isAllowed === true) - النداء آمن حتى لو الخدمة
+        // شغّالة أصلاً (StepCounterPlugin.startTracking بترجع فورًا من
+        // غير أي تأثير إضافي في الحالة دي).
+        if (window.Capacitor?.isNativePlatform?.()) {
+            Capacitor.Plugins.StepCounter?.startTracking().catch(() => {});
+        }
     }
 
     // (3) إعلام باقي التطبيق بالتغيير عبر حدث عام على document، عشان
