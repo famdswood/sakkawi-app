@@ -604,8 +604,24 @@ function autoInit() {
  * الرقم ده مع الحالة المحلية (stepCount) لو الرقم الجديد أكبر (الحساس
  * الأصلي هو المصدر الأدق دايمًا وقت التشغيل جوه APK حقيقي).
  */
+// (إصلاح - باج Race Condition حقيقي خطير) الدالة دي بتتنادى من 4 أماكن
+// مختلفة (DOMContentLoaded، geofence:guest-mode-change، visibilitychange،
+// والبولينج الدوري كل 4 ثواني) - ومحتواها فيه كذا await (requestPermissions،
+// startTracking، getStepsToday). لو نداءين اتصادفوا قريبين من بعض (وارد
+// جدًا وقت فتح التطبيق لأول مرة، خصوصًا لحساب جديد لسه بيتسجل)، النداء
+// التاني كان بيبدأ *قبل* ما الأول يخلص ويحدّث stepCount - فالاتنين
+// بيشوفوا نفس القيمة القديمة، وبيحسبوا نفس الـ delta، وبيبعتوا حدث
+// 'sensors:steps-update' مرتين بنفس الرقم = مضاعفة حقيقية للخطوات (زي
+// ما لاحظنا بالظبط: 49 خطوة حقيقية بقت 98 من غير أي حركة إضافية).
+// الحل: قفل بسيط - لو فيه نداء شغّال بالفعل، أي نداء جديد يرفض فورًا
+// (مش هيضيع حاجة، البولينج الدوري أو أي حدث تاني هيعيد المحاولة بعد
+// شوية على أي حال)
+let isSyncingFromNative = false;
+
 async function syncFromNativeStepCounter() {
     if (!window.Capacitor?.isNativePlatform?.()) return;
+    if (isSyncingFromNative) return; // فيه مزامنة شغّالة بالفعل - نرفض عشان نمنع التضاعف
+    isSyncingFromNative = true;
 
     // (إصلاح - باج Race Condition حقيقي، اكتشاف لاحق - شوف تعليق
     // window.isGuestModeResolved في js/guest-banner.js للتفاصيل الكاملة):
@@ -623,7 +639,10 @@ async function syncFromNativeStepCounter() {
     // تلقائيًا لاحقًا (شوف مستمع 'geofence:guest-mode-change' تحت اللي
     // بيعيد النداء فورًا أول ما الحسم يخلّص، من غير ما ننتظر البولينج
     // العادي كل 4 ثواني).
-    if (!window.isGuestModeResolved || window.isGuestMode) return;
+    if (!window.isGuestModeResolved || window.isGuestMode) {
+        isSyncingFromNative = false; // مهم: نفك القفل هنا كمان، مش بس في try/finally تحت
+        return;
+    }
 
     try {
         const { StepCounter } = Capacitor.Plugins;
@@ -673,6 +692,12 @@ async function syncFromNativeStepCounter() {
         }
     } catch (err) {
         console.warn('[sensors.js] تعذر المزامنة مع StepCounter الأصلي:', err);
+    } finally {
+        // (إصلاح - باج Race Condition) لازم نفك القفل دايمًا هنا - سواء
+        // نجحت المزامنة، فشلت، أو اترفضت مبكرًا (return جوه الـ try زي
+        // حالة رفض الإذن) - عشان أي نداء جديد بعد كده (من البولينج أو
+        // أي حدث تاني) يقدر يشتغل عادي
+        isSyncingFromNative = false;
     }
 }
 
