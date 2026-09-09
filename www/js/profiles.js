@@ -1413,7 +1413,11 @@ export function renderBadges() {
     if (!grid) return;
 
     if (badgesData.length === 0) {
-        grid.innerHTML = `<p class="col-span-3 text-xs text-lux-500 font-medium text-center py-3">لسه مفيش أوسمة متاحة</p>`;
+        // (تعديل - المرحلة 3): كانت col-span-3 لما الشبكة كانت grid-cols-3
+        // ثابتة - دلوقتي الشبكة auto-fit (عدد أعمدة متغيّر حسب العرض)،
+        // فـ col-span-full هي اللي بتضمن إن رسالة "لسه مفيش أوسمة" تاخد
+        // عرض الشبكة كامل مهما كان عدد الأعمدة الفعلي
+        grid.innerHTML = `<p class="col-span-full text-xs text-lux-500 font-medium text-center py-3">لسه مفيش أوسمة متاحة</p>`;
         if (countLabel) countLabel.textContent = '0 / 0 مفتوح';
         return;
     }
@@ -1451,7 +1455,10 @@ function renderBadgesPage() {
         return `
             <div class="space-y-3">
                 <h4 class="text-xs font-extrabold text-lux-300">${BADGE_TIER_LABELS[tierKey]}</h4>
-                <div class="grid grid-cols-3 gap-3">
+                <!-- (تعديل - المرحلة 3): نفس تعديل #badgesGrid في index.html
+                     بالظبط - auto-fit بدل عمود ثابت، عشان كل تصنيف يستفيد
+                     من عرض appShell الأوسع على تابلت -->
+                <div class="grid grid-cols-[repeat(auto-fit,minmax(4.5rem,1fr))] gap-3">
                     ${tierBadges.map(badgeCardHtml).join('')}
                 </div>
             </div>
@@ -3076,7 +3083,8 @@ async function loadAndRenderPublicProfileBadges(targetUserId) {
 
     if (catalog.length === 0) {
         publicProfileBadgesData = [];
-        if (grid) grid.innerHTML = `<p class="col-span-3 text-xs text-lux-500 font-medium text-center py-3">لسه مفيش أوسمة متاحة</p>`;
+        // (تعديل - المرحلة 3): نفس سبب تعديل col-span في renderBadges فوق بالظبط
+        if (grid) grid.innerHTML = `<p class="col-span-full text-xs text-lux-500 font-medium text-center py-3">لسه مفيش أوسمة متاحة</p>`;
         if (countLabel) countLabel.textContent = '0 / 0 مفتوح';
         return;
     }
@@ -3135,7 +3143,10 @@ function renderPublicBadgesPage() {
         return `
             <div class="space-y-3">
                 <h4 class="text-xs font-extrabold text-lux-300">${BADGE_TIER_LABELS[tierKey]}</h4>
-                <div class="grid grid-cols-3 gap-3">
+                <!-- (تعديل - المرحلة 3): نفس تعديل #badgesGrid في index.html
+                     بالظبط - auto-fit بدل عمود ثابت، عشان كل تصنيف يستفيد
+                     من عرض appShell الأوسع على تابلت -->
+                <div class="grid grid-cols-[repeat(auto-fit,minmax(4.5rem,1fr))] gap-3">
                     ${tierBadges.map(badgeCardHtml).join('')}
                 </div>
             </div>

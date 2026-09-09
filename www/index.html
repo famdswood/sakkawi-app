@@ -275,7 +275,15 @@
         <div id="onbGlow2" class="onb-glow-2 bottom-16 -left-16"></div>
 
         <!-- هيدر: بس زرار تخطي في النص (شعار سِكّاوي والوصف اتشالوا بطلب المستخدم) -->
-        <header class="relative w-full max-w-md flex justify-center items-center z-20 px-2">
+        <!-- (تعديل - استكمال المرحلة 2 من خطة الريسبونسف): كان عرضه max-w-md
+             ثابت (448px) على كل الشاشات، بينما .onb-page (المحتوى اللي
+             الهيدر ده واقف "فوقه" بصريًا) بقى متدرّج 420→560→640px من
+             المرحلة 2. النتيجة كانت إن زرار "تخطي" بيفضل واقف في عرض أضيق
+             من عرض السلايد نفسه على شاشة تابلت (768px+)، فمحاذاته بتبان
+             مش متطابقة مع باقي المحتوى. اتحدّث العرض هنا ليطابق تدرّج
+             .onb-page بالظبط (نفس القيم المستخدمة في #onbAuthFormDock
+             و#onbLocationRejectedDock تحت) -->
+        <header class="relative w-full max-w-md md:max-w-[560px] lg:max-w-[640px] flex justify-center items-center z-20 px-2">
             <button id="onbSkipBtn" type="button"
                     class="text-xs font-bold text-lux-400 hover:text-white px-3.5 py-1.5 rounded-full onb-glass-btn flex items-center gap-1.5">
                 <span>تخطي</span>
@@ -1083,7 +1091,11 @@
         </main>
 
         <!-- تذييل: نقاط الترقيم + زرار التالي -->
-        <footer class="relative w-full max-w-md flex items-center justify-between z-10 px-2 mt-2">
+        <!-- (تعديل - استكمال المرحلة 2): نفس سبب تعديل الهيدر فوق بالظبط -
+             كان max-w-md ثابت (448px) بدل ما يتدرّج مع .onb-page، فنقاط
+             الترقيم وزرار "التالي" كانوا بيفضلوا في عرض أضيق من عرض
+             السلايد نفسه على تابلت. اتحدّث ليطابق نفس تدرّج .onb-page -->
+        <footer class="relative w-full max-w-md md:max-w-[560px] lg:max-w-[640px] flex items-center justify-between z-10 px-2 mt-2">
             <div class="flex items-center gap-2" id="onbPagination">
                 <div class="onb-bullet onb-bullet-active" data-index="0"></div>
                 <div class="onb-bullet" data-index="1"></div>
@@ -1122,7 +1134,7 @@
         <div id="onbAuthFormDock"
              class="hidden onb-auth-page absolute inset-0 z-20 flex flex-col px-4 py-6 font-cairo">
 
-            <header class="w-full max-w-md mx-auto flex items-center z-10 px-2 shrink-0">
+            <header class="w-full max-w-md md:max-w-[560px] lg:max-w-[640px] mx-auto flex items-center z-10 px-2 shrink-0">
                 <button type="button" id="onbAuthBackBtn"
                         class="flex items-center gap-1.5 text-[11px] font-bold text-lux-300 hover:text-white transition-colors onb-glass-btn px-3.5 py-1.5 rounded-full">
                     <span aria-hidden="true">↪</span>
@@ -1131,7 +1143,7 @@
             </header>
 
             <h2 id="onbAuthPageTitle"
-                class="w-full max-w-md mx-auto text-xl font-black onb-grad-7 text-center z-10 px-2 mt-4 mb-3 shrink-0">
+                class="w-full max-w-md md:max-w-[560px] lg:max-w-[640px] mx-auto text-xl font-black onb-grad-7 text-center z-10 px-2 mt-4 mb-3 shrink-0">
                 إنشاء حساب جديد
             </h2>
 
@@ -1143,7 +1155,7 @@
                  يكسر التمركز -->
             <div class="flex-1 min-h-0 flex items-center justify-center z-10">
                 <div id="onbAuthFormSlot"
-                     class="onb-auth-form-slot onb-glass-card w-full max-w-md mx-auto max-h-full overflow-y-auto p-5 rounded-[28px]"></div>
+                     class="onb-auth-form-slot onb-glass-card w-full max-w-md md:max-w-[560px] lg:max-w-[640px] mx-auto max-h-full overflow-y-auto p-5 rounded-[28px]"></div>
             </div>
         </div>
 
@@ -1160,7 +1172,7 @@
         <div id="onbLocationRejectedDock"
              class="hidden onb-auth-page absolute inset-0 z-20 flex flex-col px-4 py-6 font-cairo">
 
-            <header class="w-full max-w-md mx-auto flex items-center z-10 px-2 shrink-0">
+            <header class="w-full max-w-md md:max-w-[560px] lg:max-w-[640px] mx-auto flex items-center z-10 px-2 shrink-0">
                 <button type="button" id="onbLocationRejectedBackBtn"
                         class="flex items-center gap-1.5 text-[11px] font-bold text-lux-300 hover:text-white transition-colors onb-glass-btn px-3.5 py-1.5 rounded-full">
                     <span aria-hidden="true">↪</span>
@@ -1169,7 +1181,7 @@
             </header>
 
             <div class="flex-1 min-h-0 flex items-center justify-center z-10">
-                <div class="onb-glass-card w-full max-w-md mx-auto p-6 rounded-[28px] text-center space-y-4">
+                <div class="onb-glass-card w-full max-w-md md:max-w-[560px] lg:max-w-[640px] mx-auto p-6 rounded-[28px] text-center space-y-4">
                     <div class="w-14 h-14 mx-auto rounded-full bg-red-500/10 flex items-center justify-center">
                         <svg class="w-7 h-7 text-red-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
                             <circle cx="12" cy="12" r="9"/>
@@ -1199,7 +1211,23 @@
     </div>
 
     <!-- Mobile Wrapper Frame -->
-    <div class="w-full max-w-md min-h-screen bg-lux-950 flex flex-col relative shadow-2xl overflow-x-hidden border-x border-gold-500/10 pb-[calc(6rem+env(safe-area-inset-bottom,0px))]">
+    <!-- (تعديل - إزالة إحساس "الكارت العايم"): كان فيه shadow-2xl +
+         border-x border-gold-500/10 بيخلوا الإطار يبان زي كارت منفصل
+         طافي فوق خلفية التطبيق (body) اللي وراه، وده بالذات اللي كان
+         بيبان واضح على شاشات أعرض من max-w-md (متصفح ديسكتوب، تابلت،
+         فولدبل مفتوح..إلخ) وكأن فيه "صفحة تانية" وراه. اتشالوا خالص:
+         لون الخلفية (bg-lux-950) هنا مطابق تماماً للون خلفية <body>،
+         فمن غير أي ظل أو حد فاصل بينهم بيندمجوا تماماً ومفيش أي حاجة
+         تبان "زيادة" وراه على أي حجم شاشة -->
+    <!-- (تعديل - المرحلة 1 من خطة الريسبونسف): id="appShell" كان ناقص
+         هنا رغم إن onboarding.css (body.onb-scroll-lock #appShell) بيفترض
+         وجوده أصلاً عشان يخفي الإطار وقت شاشة الترحيب - القاعدة دي كانت
+         "ميتة" (Dead CSS) من غير ما تعمل حاجة فعليًا. اتضاف الـ id هنا
+         عشان القاعدة تشتغل زي ما كانت متوقعة أصلاً. كمان: عرض الحاوية بقى
+         متدرّج (max-w-md على الموبايل → max-w-2xl من 768px → max-w-4xl
+         من 1024px) بدل سقف max-w-md مسمّر على كل الشاشات - نفس القرار
+         الموثّق في style.css §1.2 -->
+    <div id="appShell" class="w-full max-w-md md:max-w-2xl lg:max-w-4xl min-h-screen bg-lux-950 flex flex-col relative overflow-x-hidden pb-[calc(6rem+env(safe-area-inset-bottom,0px))]">
 
         <!-- Top Bar Header -->
         <!-- ==================================================================
@@ -1237,7 +1265,7 @@
              تحت الهيدر (شوف #headerSpacer تحت). لو غيّرت أي حاجة بتأثر
              على ارتفاع الهيدر (بادينج، حجم الأفتار...) لازم تحدّث ارتفاع
              الـ Spacer معاها بنفس القيمة بالظبط. -->
-        <header class="fixed top-0 left-1/2 -translate-x-1/2 z-30 w-full max-w-md bg-lux-900/90 backdrop-blur-md border-b border-gold-500/10 px-4 pt-[calc(0.75rem+env(safe-area-inset-top,0px))] pb-3 shadow-sm transition-all duration-300">
+        <header class="fixed top-0 left-1/2 -translate-x-1/2 z-30 w-full max-w-md md:max-w-2xl lg:max-w-4xl bg-lux-900/90 backdrop-blur-md border-b border-gold-500/10 px-4 pt-[calc(0.75rem+env(safe-area-inset-top,0px))] pb-3 shadow-sm transition-all duration-300">
             <div class="flex items-center justify-between gap-3">
                 <!-- User Profile Info (الجانب الأيمن) - بقت كلها زرار واحد
                      قابل للضغط (الأفتار + الاسم + اللقب سوا) بيودّي
@@ -1642,7 +1670,30 @@
 
                     <!-- حاوية كروت المنشورات - posts.js بيملاها بالكامل
                          عن طريق renderPosts()/buildPostCardElement() -->
-                    <div id="postsFeed" class="space-y-4"></div>
+                    <!-- (تعديل - المرحلة 5 من خطة الريسبونسف، قرار سكوب
+                         مهم): الخطة الأصلية اقترحت تحويل القائمة دي لشبكة
+                         عمودين/تلاتة (auto-fit زي بادجز/الأصدقاء في
+                         المرحلة 3) - لكن بعد فحص buildPostCardElement()
+                         في js/posts.js طلع إن كل كارت منشور ارتفاعه
+                         **متغيّر وغير متوقع تمامًا**: نص اختياري بطول حر
+                         + صورة اختيارية + قسم كومنتات قابل للفتح/القفل
+                         (.post-comments-section) بعدد كومنتات مفتوح.
+                         CSS Grid بيسوّي ارتفاع كل صف على أطول عنصر فيه،
+                         فلو فتح حد قسم كومنتات طويل في كارت، الكارت
+                         المجاور له في نفس الصف كان هيفضل معلّق فراغ كبير
+                         تحته - ده فعليًا "كسر بصري" أوضح من المشكلة اللي
+                         بنحاول نحلها. عمود multi-column (column-count)
+                         كمان مش مناسب هنا لأنه بيقلب ترتيب القراءة
+                         الزمني للفيد (يملي عمود كامل الأول قبل التاني).
+                         الحل المتبع بدل كده: نفس منطق "قائمة رأسية
+                         بعرض مقصود" المذكور في قرار الخطة الأساسي (زي
+                         شات الدعم) - القائمة فضلت عمود واحد (space-y-4
+                         زي ما هي)، بس بعرض متوسط محسوب (560px تابلت،
+                         640px شاشات أكبر - نفس عرض صفحات الأونبوردنج
+                         بالظبط) بدل ما تتمدد لعرض appShell الكامل
+                         (672/896px) وتخلي سطور النص طويلة جدًا صعبة
+                         القراءة والصورة عريضة أوي بلا داعي -->
+                    <div id="postsFeed" class="space-y-4 md:max-w-[560px] lg:max-w-[640px] md:mx-auto"></div>
                 </section>
 
             </section>
@@ -1876,7 +1927,16 @@
                      الكلاسات الداخلية القديمة - شوف التعديل المصاحب في
                      js/profiles.js
                      ========================================================= -->
-                <div class="space-y-2.5" id="leaderboardList">
+                <!-- (تعديل - المرحلة 4 من خطة الريسبونسف): كانت space-y-2.5
+                     (عمود واحد بس مهما اتسعت الشاشة، زي friendsList قبل
+                     تعديل المرحلة 3). بقت grid بعمود واحد على الموبايل
+                     وعمودين من 768px، عشان تستفيد من عرض appShell الأوسع
+                     من المرحلة 1 بدل عمود طويل وسط فراغ جانبي. .rank-card
+                     أصلاً display:flex كارت مستقل بارتفاع ثابت واسم بيتقص
+                     بـ ellipsis (.rank-card-name: white-space:nowrap +
+                     text-overflow:ellipsis في leaderboard-championships.css)
+                     - فمتأمّن بالكامل في أي عرض عمود من غير أي تعديل إضافي -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-2.5" id="leaderboardList">
                     <!-- Javascript populates this dynamically -->
                 </div>
 
@@ -1987,6 +2047,12 @@
                     </div>
 
                     <!-- Personal Quick Stats Grid (تُملأ ديناميكياً من js/profiles.js) -->
+                    <!-- (فحص - المرحلة 3، من غير تغيير عن قصد): الشبكة دي فيها
+                         دايمًا 3 عناصر بالظبط (خطوات/إجابات صح/ستريك) - مش
+                         مجموعة بتكبر وتصغر زي الأوسمة أو الأصدقاء، فمفيش داعي
+                         لـ auto-fit هنا؛ grid-cols-3 ثابتة أصلاً بتوزّع المساحة
+                         المتاحة بالتساوي على الـ3 كروت على أي عرض (موبايل أو
+                         تابلت) من غير أي خطر Scroll أفقي أو كسر -->
                     <div class="grid grid-cols-3 gap-2 mt-5 pt-4 border-t border-gold-500/10">
                         <div class="bg-lux-800 p-2.5 rounded-2xl">
                             <span id="statTotalSteps" class="block text-base font-black text-lux-50">—</span>
@@ -2011,6 +2077,7 @@
                         <h3 class="font-extrabold text-lux-50 text-sm">بطولاتي</h3>
                     </div>
 
+                    <!-- (فحص - المرحلة 3، من غير تغيير): نفس سبب الإحصائيات فوق - 3 عناصر ثابتة (يومي/أسبوعي/شهري) -->
                     <div class="grid grid-cols-3 gap-2">
                         <div class="bg-lux-800 p-2.5 rounded-2xl text-center">
                             <span id="statDailyWins" class="block text-base font-black text-gold-400">—</span>
@@ -2043,7 +2110,15 @@
 
                     <!-- معاينة مصغّرة بس (أول 6 - الأحدث فتحًا أولاً) - القائمة
                          الكاملة مقسّمة بالتصنيفات في صفحة #tab-badges-page -->
-                    <div id="badgesGrid" class="grid grid-cols-3 gap-3 pt-1">
+                    <!-- (تعديل - المرحلة 3 من خطة الريسبونسف): grid-cols-3 كانت
+                         ثابتة على كل الشاشات، يعني على تابلت (appShell أوسع من
+                         المرحلة 1) كانت الكروت بس بتتمدد عرضًا من غير أي استفادة
+                         حقيقية من المساحة الإضافية. بقت auto-fit بحد أدنى 4.5rem
+                         (72px - نفس عرض الكارت تقريبًا على أضيق موبايل مدعوم
+                         320px حاليًا، فمحافظين على نفس شكل الموبايل بالظبط)
+                         لكل كارت، فبتضيف أعمدة فعلية (6-7 بدل 3) على تابلت بدل
+                         ما تفضل 3 كروت عريضة بس -->
+                    <div id="badgesGrid" class="grid grid-cols-[repeat(auto-fit,minmax(4.5rem,1fr))] gap-3 pt-1">
                         <!-- سيتم حقن الشارات هنا عبر renderBadges() في js/profiles.js -->
                     </div>
                 </div>
@@ -2056,7 +2131,14 @@
                         <h3 class="font-extrabold text-lux-50 text-sm">طلبات صداقة واردة</h3>
                         <span id="friendRequestsCount" class="text-xs text-gold-400 font-bold bg-gold-500/10 px-2 py-0.5 rounded-lg">0</span>
                     </div>
-                    <div id="friendRequestsList" class="space-y-2">
+                    <!-- (تعديل - المرحلة 3 من خطة الريسبونسف): كانت space-y-2
+                         (عمود واحد بس مهما اتسعت الشاشة) - بقت grid بعمود واحد
+                         على الموبايل وعمودين من 768px، عشان تستفيد من عرض
+                         appShell الأوسع بدل ما تفضل عمود طويل وسط فراغ جانبي.
+                         الصف نفسه (buildFriendRequestRowHtml) أصلاً فيه
+                         truncate + flex-1 min-w-0 للاسم، فمتأمّن ضد الأسماء
+                         الطويلة في أي عرض عمود -->
+                    <div id="friendRequestsList" class="grid grid-cols-1 md:grid-cols-2 gap-2">
                         <!-- سيتم حقن طلبات الصداقة الواردة هنا عبر renderIncomingFriendRequests() في js/profiles.js -->
                     </div>
 
@@ -2080,7 +2162,8 @@
                         <span id="friendsCount" class="text-xs text-lux-400 font-bold">— صديق</span>
                     </div>
 
-                    <div id="friendsList" class="space-y-2">
+                    <!-- (تعديل - المرحلة 3): نفس تعديل #friendRequestsList فوق بالظبط -->
+                    <div id="friendsList" class="grid grid-cols-1 md:grid-cols-2 gap-2">
                         <!-- سيتم حقن قائمة الأصدقاء هنا عبر renderFriends() في js/profiles.js -->
                     </div>
 
@@ -2198,6 +2281,7 @@
 
                     <!-- إحصائيات الخطوات/الأسئلة/أطول ستريك - نفس عناصر بروفايل
                          المستخدم الحالي بالظبط، بس بأرقام صاحب البروفايل ده -->
+                    <!-- (فحص - المرحلة 3، من غير تغيير): نفس سبب Personal Quick Stats Grid بتاع بروفايلي -->
                     <div class="grid grid-cols-3 gap-2 mt-5 pt-4 border-t border-gold-500/10">
                         <div class="bg-lux-800 p-2.5 rounded-2xl">
                             <span id="publicProfileTotalSteps" class="block text-base font-black text-lux-50">—</span>
@@ -2235,6 +2319,7 @@
                         <h3 class="font-extrabold text-lux-50 text-sm">البطولة</h3>
                     </div>
 
+                    <!-- (فحص - المرحلة 3، من غير تغيير): نفس سبب "بطولاتي" فوق -->
                     <div class="grid grid-cols-3 gap-2">
                         <div class="bg-lux-800 p-2.5 rounded-2xl text-center">
                             <span id="publicProfileDailyWins" class="block text-base font-black text-gold-400">—</span>
@@ -2269,7 +2354,8 @@
                     <!-- معاينة مصغّرة بس (أول 6 - نفس ترتيب renderBadges بتاع
                          بروفايلي: تصنيف ثم الأحدث فتحًا أولاً) - القائمة الكاملة
                          مقسّمة بالتصنيفات في صفحة #tab-public-badges-page -->
-                    <div id="publicProfileBadgesGrid" class="grid grid-cols-3 gap-3 pt-1">
+                    <!-- (تعديل - المرحلة 3): نفس تعديل #badgesGrid بالظبط -->
+                    <div id="publicProfileBadgesGrid" class="grid grid-cols-[repeat(auto-fit,minmax(4.5rem,1fr))] gap-3 pt-1">
                         <!-- سيتم حقن الشارات هنا عبر renderPublicProfileBadges() في js/profiles.js -->
                     </div>
                 </div>
@@ -2576,7 +2662,8 @@
                         <span id="friendsListFullCount" class="text-xs text-lux-400 font-bold">— صديق</span>
                     </div>
 
-                    <div id="friendsListFull" class="space-y-2">
+                    <!-- (تعديل - المرحلة 3): نفس تعديل #friendRequestsList فوق بالظبط -->
+                    <div id="friendsListFull" class="grid grid-cols-1 md:grid-cols-2 gap-2">
                         <!-- سيتم حقن كل الأصدقاء هنا عبر renderFriendsFull() في js/profiles.js -->
                     </div>
                 </div>
@@ -2606,7 +2693,8 @@
                         <span id="friendRequestsListFullCount" class="text-xs text-gold-400 font-bold bg-gold-500/10 px-2 py-0.5 rounded-lg">0</span>
                     </div>
 
-                    <div id="friendRequestsListFull" class="space-y-2">
+                    <!-- (تعديل - المرحلة 3): نفس تعديل #friendRequestsList فوق بالظبط -->
+                    <div id="friendRequestsListFull" class="grid grid-cols-1 md:grid-cols-2 gap-2">
                         <!-- سيتم حقن كل الطلبات الواردة هنا عبر renderFriendRequestsFull() في js/profiles.js -->
                     </div>
                 </div>
@@ -2656,7 +2744,14 @@
         </div>
 
         <!-- BOTTOM NAVIGATION BAR -->
-        <nav class="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md bg-lux-900/95 backdrop-blur-lg border-t border-gold-500/10 px-6 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom,0px))] flex items-center justify-around z-40 shadow-lg">
+        <!-- (تعديل - المرحلة 1): على الموبايل fضل justify-around (3 أزرار
+             موزعة بانتظام على عرض 448px، شكلها طبيعي). على التابلت لما
+             الحاوية بقت أعرض (max-w-2xl/4xl)، لو سبنا justify-around
+             هتبان الأزرار متباعدة جدًا عن بعض بشكل غير منظم - فبدّلنا
+             لـ justify-center مع gap محسوب، عشان الأزرار تفضل مجمّعة
+             كمجموعة واحدة متمركزة وسط البار الأعرض، بدل ما تتوزع لحواف
+             شاشة عريضة -->
+        <nav class="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md md:max-w-2xl lg:max-w-4xl bg-lux-900/95 backdrop-blur-lg border-t border-gold-500/10 px-6 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom,0px))] flex items-center justify-around md:justify-center md:gap-16 lg:gap-24 z-40 shadow-lg">
             
             <!-- Nav Item 1: الرئيسية -->
             <button id="nav-home" data-tab="home" 
@@ -3334,7 +3429,21 @@
              بقت w-full h-full من غير padding/rounded/border/max-w عشان تفتح
              بكامل الشاشة زي أي ستوري سوشيال ميديا (إنستجرام/واتساب) بدل ما
              تبان كنافذة منبثقة صغيرة في النص -->
-        <div id="storyViewerCard" class="w-full h-full relative overflow-hidden bg-lux-900">
+        <!-- (تعديل - المرحلة 5 من خطة الريسبونسف): على الموبايل (زي ما هي)
+             بتاخد الشاشة كاملة - لسه w-full h-full من غير أي تغيير. من
+             768px فأكثر، القصة نفسها (فحص فعلي: مفيش صور/فيديوهات مرفوعة
+             في المشروع - الاستوريز نص بخلفية لونية + ملصق إنجاز اختياري
+             بس، شوف renderCurrentStory في js/stories.js) بتاخد عرض متوسط
+             (420px تابلت → 480px شاشات أكبر) بدل ما تتمدد سطور النص لعرض
+             شاشة كاملة (بيبقى صعب القراءة)، وخلفية #storyViewerModal
+             السودة (bg-black/95، already fixed inset-0) بتملأ الفراغ
+             الجانبي بشكل منظم بدل ما تفضل فارغة تمامًا - زي مشغّلات
+             الاستوري في نسخ الديسكتوب من إنستجرام/واتساب بالظبط.
+             positionRenderedSticker في stories.js بيحسب مكان ملصق الإنجاز
+             بناءً على clientWidth/clientHeight الفعلية لـ #storyContent
+             وقت العرض (مش قيمة مفترضة)، فبيتصحح تلقائيًا مع أي عرض جديد
+             من غير أي تعديل إضافي هناك -->
+        <div id="storyViewerCard" class="w-full h-full md:max-w-[420px] lg:max-w-[480px] md:mx-auto relative overflow-hidden bg-lux-900">
             <!-- أشرطة تقدم الستوريز -->
             <div id="storyProgressBars" class="absolute top-2 left-2 right-2 z-20 flex gap-1"></div>
             <!-- رأس الستوري (اسم صاحبها + وقت النشر) -->
@@ -3474,8 +3583,20 @@
         </div>
 
         <!-- جسم الشاشة: قابل للتمرير، ومحتواه محصور بعرض max-w-md في المنتصف
-             زي باقي شاشات التطبيق (الهيدر نفسه بياخد العرض الكامل فوق) -->
-        <div class="flex-1 overflow-y-auto w-full max-w-md mx-auto px-4 pt-4 pb-[calc(env(safe-area-inset-bottom)+1.25rem)] space-y-4">
+             زي باقي شاشات التطبيق (الهيدر نفسه بياخد العرض الكامل فوق).
+             (تعديل - المرحلة 5 من خطة الريسبونسف): كانت هنا عالقة على
+             max-w-md (448px) ثابت على كل المقاسات - نسيان من وقت تنفيذ
+             مودال المشاهدة (storyViewerCard فوق) لأن الاتنين "شاشة استوري
+             full-screen" بنفس المنطق بالظبط. اتضافلها نفس تدرّج
+             storyViewerCard (420px تابلت → 480px شاشات أكبر) بدل ما تفضل
+             448px على طول - عمداً أضيق من تدرّج الأونبوردنج (560/640) رغم
+             إن الاتنين شاشات "فورم"، لأن #storyPreviewArea جواها محكوم
+             بـ aspect-[9/16] + max-h-[55vh] معاً (الارتفاع بيتقفل عند
+             55vh مش بيتبع العرض)، فلو الحاوية اتمددت أكتر كان
+             #storyPreviewArea هيبقى أعرض من اللازم ويخسر شكل "استوري
+             موبايل" (9:16) اللي هو أصل الفكرة - نفس السبب اللي خلّى
+             storyViewerCard ياخد 420/480 مش 560/640 من الأساس -->
+        <div class="flex-1 overflow-y-auto w-full max-w-md md:max-w-[420px] lg:max-w-[480px] mx-auto px-4 pt-4 pb-[calc(env(safe-area-inset-bottom)+1.25rem)] space-y-4"
 
             <!-- منطقة المعاينة الحية: بتعرض النص فوق الخلفية والخط المختارين
                  بنفس شكل مودال المشاهدة الفعلي (storyContent) بالظبط، بس
@@ -3851,7 +3972,7 @@
          على الشاشات العريضة. bottom-24 عشان مايتغطاش بشريط التنقل
          السفلي (اللي ارتفاعه تقريباً ~64px + بادينج)، وz-[45] عشانه
          فوق الـ nav (z-40) وتحت أي مودال (z-[60] فأكتر) -->
-    <div class="fixed bottom-24 left-1/2 -translate-x-1/2 w-full max-w-md z-[45] pointer-events-none">
+    <div class="fixed bottom-24 left-1/2 -translate-x-1/2 w-full max-w-md md:max-w-2xl lg:max-w-4xl z-[45] pointer-events-none">
         <button type="button" id="supportInboxFab"
                 aria-label="صندوق رسائل الدعم"
                 class="hidden pointer-events-auto absolute end-4 w-12 h-12 rounded-full bg-gold-500 text-lux-950 shadow-soft-card flex items-center justify-center active:scale-95 transition-all duration-150">

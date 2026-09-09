@@ -929,8 +929,11 @@ function renderLeaderboardRemainingList(rows, shouldAnimate = true) {
     const currentUserId = getCurrentUserId();
 
     if (remaining.length === 0) {
+        // (تعديل - المرحلة 4): #leaderboardList بقى grid بعمودين على تابلت
+        // (index.html) - من غير col-span-full كانت الرسالة هتاخد نص العرض
+        // بس وتبان مش متمركزة صح على شاشة واسعة
         list.innerHTML = `
-            <p class="text-xs text-lux-500 font-medium text-center py-6">
+            <p class="col-span-full text-xs text-lux-500 font-medium text-center py-6">
                 لسه مفيش متسابقين تانيين في البطولة دي
             </p>
         `;

@@ -551,6 +551,82 @@ function openAdminInbox() {
 
 
 /* ------------------------------------------------------------------
+   16) وعي لوحة المفاتيح (Keyboard-aware layout) - المرحلة 6 من خطة
+   الريسبونسف
+   ------------------------------------------------------------------
+   المشكلة: #supportChatModal شاشة مستقلة (fixed inset-0)، وحقل الكتابة
+   (#supportChatInput) في آخرها كـ shrink-0 داخل عمود flex. ده تخطيط
+   شات صحيح من ناحية المنطق، لكن على الموبايل (خصوصًا جوه WebView
+   أندرويد بتاع Capacitor، وأحيانًا حتى متصفح عادي من غير
+   `interactive-widget=resizes-content` في viewport meta) لما لوحة
+   المفاتيح تفتح، الـ Layout Viewport (اللي fixed/inset-0 بيتحسب
+   عليه) مبيتقلّصش زي المتوقع - يعني حقل الكتابة بيفضل "موجود" في آخر
+   عمود بارتفاع الشاشة الكامل، لكن لوحة المفاتيح بتغطّيه فعليًا من
+   غير ما نلاحظ أي تغيير في الـ DOM/CSS نفسه.
+
+   الحل: نستخدم window.visualViewport (المساحة المرئية الفعلية،
+   بتتحدث فورًا لما الكيبورد يفتح/يقفل - مدعومة في WebView أندرويد
+   ومتصفحات الموبايل الحديثة كلها من غير أي إضافة/بلجن Capacitor
+   جديد) - بنحسب الفرق بين ارتفاع الشاشة الكامل و`visualViewport.height`
+   (يعني ارتفاع الكيبورد الفعلي وقت ما يكون فاتح)، ونحطه كمتغيّر CSS
+   (--support-chat-kb-offset) بيتحكم في `bottom` بتاع #supportChatModal
+   نفسه (شوف style.css قسم 16) - فيصغّر الشاشة كلها من تحت بمقدار
+   ارتفاع الكيبورد بالظبط، وحقل الكتابة (اللي في آخر عمود flex) بيفضل
+   دايماً فوق الكيبورد على طول، من غير ما نلمس أي حاجة تانية في
+   الـ HTML/الـ Flex layout الأساسي.
+
+   بيتفعّل بس وقت ما المودال مفتوح فعلاً (bindKeyboardAwareness من
+   showModal تحت، وunbind من hideSupportChatModal) عشان مانضيفش أي
+   Listener شغال طول الوقت من غير داعي على باقي شاشات التطبيق.
+   ------------------------------------------------------------------ */
+
+/** true لو الـ Listener بتاع visualViewport مربوط دلوقتي (تجنب ربط مكرر) */
+let keyboardAwarenessBound = false;
+
+/**
+ * بتتنادى مع كل 'resize'/'scroll' من visualViewport وقت ما المودال
+ * مفتوح - بتحسب ارتفاع الكيبورد الحالي (0 لو مقفول) وتحطه في متغيّر
+ * CSS، وبتفضل الرسائل متمررة لآخرها عشان آخر رسالة تفضل ظاهرة فوق
+ * حقل الكتابة بعد ما تتقلص المساحة.
+ */
+function updateKeyboardOffset() {
+    const vv = window.visualViewport;
+    if (!vv) return;
+
+    // window.innerHeight = ارتفاع الـ Layout Viewport الكامل (زي ما
+    // لو الكيبورد مقفول تمامًا) - الفرق بينه وبين المساحة المرئية
+    // الفعلية (vv.height + أي إزاحة علوية vv.offsetTop) هو ارتفاع
+    // الكيبورد الفعلي (أو أي شريط تاني بياخد مساحة، زي شريط أدوات
+    // بعض الكيبوردز). Math.max(0, ...) عشان مننزلش تحت الصفر لو فيه
+    // فروق تقريب بسيطة في بعض المتصفحات.
+    const keyboardHeight = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+
+    document.documentElement.style.setProperty('--support-chat-kb-offset', `${keyboardHeight}px`);
+
+    const messagesEl = document.getElementById('supportChatMessagesList');
+    if (messagesEl) messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+/** بتربط الـ Listener - اتنادت من showModal() بس وقت فتح المودال */
+function bindKeyboardAwareness() {
+    if (!window.visualViewport || keyboardAwarenessBound) return;
+    window.visualViewport.addEventListener('resize', updateKeyboardOffset);
+    window.visualViewport.addEventListener('scroll', updateKeyboardOffset);
+    keyboardAwarenessBound = true;
+    updateKeyboardOffset();
+}
+
+/** بتشيل الـ Listener وترجّع القيمة صفر - اتنادت من hideSupportChatModal() */
+function unbindKeyboardAwareness() {
+    if (!window.visualViewport || !keyboardAwarenessBound) return;
+    window.visualViewport.removeEventListener('resize', updateKeyboardOffset);
+    window.visualViewport.removeEventListener('scroll', updateKeyboardOffset);
+    keyboardAwarenessBound = false;
+    document.documentElement.style.setProperty('--support-chat-kb-offset', '0px');
+}
+
+
+/* ------------------------------------------------------------------
    5) فتح/قفل المودال (نفس نمط hideAvatarLightbox في profiles.js)
    ------------------------------------------------------------------ */
 
@@ -562,12 +638,16 @@ function showModal() {
     modalEl.classList.add('flex');
 
     pushModalState(hideSupportChatModal);
+    // (المرحلة 6 من خطة الريسبونسف) شوف قسم 16 فوق - بيخلي حقل
+    // الكتابة يفضل فوق لوحة المفاتيح مباشرة على كل الأجهزة
+    bindKeyboardAwareness();
 }
 
 /** الإخفاء الخام فقط - استخدم closeModal() من أي مكان تاني عشان يتزامن مع تاريخ المتصفح */
 function hideSupportChatModal() {
     hideMessageInfoPopover();
     hideDeleteConfirmDialog();
+    unbindKeyboardAwareness();
 
     const modalEl = document.getElementById('supportChatModal');
     if (modalEl) {

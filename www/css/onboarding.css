@@ -27,6 +27,18 @@
     margin-inline: auto;
 }
 
+/* (إضافة - المرحلة 2 من خطة الريسبونسف): نفس منطق توسيع appShell في
+   index.html (شوف style.css §1.2) - على التابلت الحاوية تاخد مساحة
+   أوسع بدل ما تفضل عمود 420px ضيق وسط شاشة كبيرة فاضية. القيم هنا
+   أقل من appShell (672/896) عمدًا لأن محتوى كل سلايد نص+أيقونة واحدة
+   في النص - عرض زيادة عن كده هيخلي سطور النص طويلة جدًا وصعبة القراءة */
+@media (min-width: 768px) {
+    #onboardingOverlay { max-width: 560px; }
+}
+@media (min-width: 1024px) {
+    #onboardingOverlay { max-width: 640px; }
+}
+
 /* (إصلاح - باج حقيقي): بيتحط على <body> طول ما #onboardingOverlay
    ظاهر (initOnboarding()/showAuthGate() في js/onboarding.js) - بيمنع
    أي سكرول على الصفحة تماماً حتى لو واجهة التطبيق اللي وراء الـ Overlay
@@ -159,6 +171,15 @@ body.onb-scroll-lock #appShell {
                 visibility 0s linear 0.22s;
 }
 
+/* (إضافة - المرحلة 2): تطابق مع توسيع #onboardingOverlay فوق - كل
+   سلايد لازم ياخد نفس العرض بالظبط على أي مقاس */
+@media (min-width: 768px) {
+    #onboardingOverlay .onb-page { max-width: 560px; }
+}
+@media (min-width: 1024px) {
+    #onboardingOverlay .onb-page { max-width: 640px; }
+}
+
 #onboardingOverlay .onb-page-active {
     opacity: 1;
     transform: translateY(0);
@@ -277,6 +298,15 @@ body.onb-scroll-lock #appShell {
     position: relative;
     width: 215px;
     height: 215px;
+}
+
+/* (إضافة - المرحلة 2): الأيقونة تكبر شوية مع اتساع الحاوية على
+   التابلت، بدل ما تفضل بنفس حجم الموبايل وسط مساحة أكبر حواليها */
+@media (min-width: 768px) {
+    #onboardingOverlay .onb-icon-wrap { width: 250px; height: 250px; }
+}
+@media (min-width: 1024px) {
+    #onboardingOverlay .onb-icon-wrap { width: 270px; height: 270px; }
 }
 
 #onboardingOverlay .onb-icon-halo {
@@ -1278,6 +1308,11 @@ body.onb-scroll-lock #appShell {
    اللي كانت هتحسب غلط هنا) - ده بيخلي align-items:center يتمركز جوه
    مساحة أصغر من تحت، فالنتيجة إن الفورم بيتزحزح لفوق شوية زي المطلوب،
    من غير ما نلغي التمركز الرأسي خالص */
+/* (تعديل - المرحلة 2 من خطة الريسبونسف): كان 8vh صافي - على شاشة
+   تابلت بورتريه طويلة (~1024px ارتفاع) ده بيبقى ~82px إزاحة، أكتر من
+   المطلوب كـ"لمسة تزحزح بسيطة". clamp() بيحافظ على نفس الإحساس على
+   الموبايل (بين 24px و64px تقريبًا) بس بيمنعه يكبر أكتر من اللازم على
+   الشاشات الطويلة */
 #onbAuthFormDock > .flex-1 {
-    padding-bottom: 8vh;
+    padding-bottom: clamp(24px, 8vh, 64px);
 }
