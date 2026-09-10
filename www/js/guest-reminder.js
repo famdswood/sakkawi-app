@@ -24,17 +24,11 @@ import { pushModalState, closeModal } from './modal-history.js';
       منطق الملف
    ------------------------------------------------------------------ */
 
-// أول ظهور للمودال: بعد كام مللي ثانية "تصفح فعلي" (تاب مفتوح وشغال)
-// من أول ما الزائر يدخل وضع الزائر. 3 دقايق - المحتوى نفسه بسيط
-// (أسئلة، لوحة صدارة، أكونتات، استوريهات) والزائر أصلاً ممنوع من حل
-// الأسئلة، فمفيش خطر إن التنبيه يقاطعه وسط حاجة تفاعلية فعلاً
-const FIRST_REMINDER_DELAY_MS = 3 * 60 * 1000;
+// أول ظهور للمودال: بعد 15 دقيقة تصفح فعلي هادئ دون أي إزعاج للمستخدم
+const FIRST_REMINDER_DELAY_MS = 15 * 60 * 1000;
 
-// بعد أول ظهور، كل قد إيه يتكرر تاني طول ما لسه في وضع الزائر ومقفلش
-// حساب. أطول شوية من الأول (5 دقايق بدل 3) عشان التكرار النشط (Active
-// Interruption - مودال لازم يتقفل بإيد الزائر) ميبقاش مزعج مع الوقت،
-// حتى لو أول تذكير بدري ومناسب
-const REPEAT_INTERVAL_MS = 5 * 60 * 1000;
+// بعد أول ظهور، يتكرر كل 45 دقيقة تصفح فعلي لتجنب أي إزعاج
+const REPEAT_INTERVAL_MS = 45 * 60 * 1000;
 
 // كل قد إيه بنفحص/نعدّ الوقت (Tick) - 15 ثانية دقة كافية جداً لغرض
 // تذكير، ومفيش داعي لدقة أعلى (زي ثانية بثانية) تستهلك بطارية بلاش
@@ -68,6 +62,9 @@ let tickIntervalId = null;
 // true لو المودال ظاهر فعليًا دلوقتي - بنوقف العد أثناء ما هو ظاهر
 // (مفيش داعي نعدّ وقت وهو أصلاً شايف رسالة التذكير)
 let isModalCurrentlyOpen = false;
+
+// true لو الزائر اختار "تصفح كزائر" في هذه الجلسة لمنع أي مقاطعة إضافية
+let sessionDismissed = false;
 
 
 /* ==================================================================
@@ -225,11 +222,8 @@ function closeGuestReminderModal() {
    ------------------------------------------------------------------ */
 
 function handleTick() {
-    // لو خرج من وضع الزائر أثناء ما العدّاد شغال (سجّل دخول من مكان
-    // تاني في التطبيق مثلاً)، بنوقف كل حاجة فورًا - الحدث
-    // 'geofence:guest-mode-change' هيتكفّل بالتصفير أصلاً، بس ده حماية
-    // إضافية لو الـ Tick اتنفّذ في نفس اللحظة قبل ما الحدث يوصل
-    if (!window.isGuestMode) {
+    // لو خرج من وضع الزائر أثناء ما العدّاد شغال أو اختار تصفح كزائر في هذه الجلسة
+    if (!window.isGuestMode || sessionDismissed) {
         stopTicking();
         return;
     }
@@ -263,7 +257,7 @@ function handleTick() {
 
 function startTickingIfNeeded() {
     if (tickIntervalId !== null) return; // شغال بالفعل
-    if (!window.isGuestMode) return;
+    if (!window.isGuestMode || sessionDismissed) return;
     if (isModalCurrentlyOpen) return;
 
     // نحاول نسترجع أي تقدّم محفوظ من قبل (مثلاً قبل آخر Refresh) قبل ما
@@ -286,6 +280,7 @@ function stopTicking() {
 function resetGuestReminderState() {
     accumulatedActiveMs = 0;
     nextThresholdMs = FIRST_REMINDER_DELAY_MS;
+    sessionDismissed = false;
     stopTicking();
     // (ملحوظة) بننادي هنا الدالة الخام (hideGuestReminderModal) مباشرة
     // مش closeGuestReminderModal() - الحالة دي تصفير قسري بسبب خروج
@@ -314,7 +309,13 @@ function initGuestReminder() {
 
     if (closeBtn) closeBtn.addEventListener('click', closeGuestReminderModal);
     if (backdrop) backdrop.addEventListener('click', closeGuestReminderModal);
-    if (dismissBtn) dismissBtn.addEventListener('click', closeGuestReminderModal);
+    if (dismissBtn) {
+        dismissBtn.addEventListener('click', () => {
+            sessionDismissed = true;
+            stopTicking();
+            closeGuestReminderModal();
+        });
+    }
 
     if (ctaBtn) {
         ctaBtn.addEventListener('click', () => {

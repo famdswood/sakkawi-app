@@ -79,6 +79,7 @@ import { fetchWithCache, setCached } from './offline-cache.js';
 // اليوم الفعلية من sensors.js عشان نعرضها كبادج فوق المعاينة الحية
 // لإنشاء الاستوري (شوف bindCreateStoryModalEvents تحت)
 import { getStepsCount } from './sensors.js';
+import { showAuthGate } from './onboarding.js';
 
 /** مدة عرض كل ستوري بالميلي ثانية قبل الانتقال التلقائي للتالية (10 ثواني) */
 const STORY_DURATION_MS = 10000;
@@ -2144,6 +2145,14 @@ function resetCreateStoryForm() {
  * فتح مودال إنشاء استوري جديدة
  */
 function openCreateStoryModal() {
+    if (window.isGuestMode || !currentUserId) {
+        document.dispatchEvent(new CustomEvent('app:toast', {
+            detail: { message: 'سجّل حسابك في سِكّاوي الأول عشان تشارك استوري مع الأبطال!' },
+        }));
+        showAuthGate();
+        return;
+    }
+
     const modal = document.getElementById('createStoryModal');
     if (!modal) return;
 

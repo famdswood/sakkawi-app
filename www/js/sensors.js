@@ -315,26 +315,8 @@ async function syncFromNativeStepCounter() {
     if (isSyncingFromNative) return; // فيه مزامنة شغّالة بالفعل - نرفض عشان نمنع التضاعف
     isSyncingFromNative = true;
 
-    // (إصلاح - باج Race Condition حقيقي، اكتشاف لاحق - شوف تعليق
-    // window.isGuestModeResolved في js/guest-banner.js للتفاصيل الكاملة):
-    // النسخة القديمة من الحاجز ده كانت بتفحص isGuestMode بس - ومشكلتها
-    // إن isGuestMode بتتبدأ بـfalse "متفائلة" لحد ما applyGuestModeRestrictions()
-    // تحسم القيمة الحقيقية Async من geofence.js. الاستدعاء الأول لهذه
-    // الدالة (من DOMContentLoaded تحت في آخر الملف) بيحصل *قبل* ما الحسم
-    // ده يخلّص غالبًا - يعني زائر حقيقي كان بيعدّي الحاجز القديم لبضع
-    // ثواني ويشغّل StepCounter.startTracking() فعليًا، لحد ما
-    // applyGuestModeRestrictions(false) توصل متأخرة وتقفلها.
-    //
-    // الحل: منستناش isGuestMode بس - لازم isGuestModeResolved تبقى true
-    // الأول (يعني الحسم الحقيقي حصل فعلاً)، وبعدين نفحص isGuestMode.
-    // لو الحسم لسه ماوصلش، بنرفض ونسيب الحدث/البولينج يعيد المحاولة
-    // تلقائيًا لاحقًا (شوف مستمع 'geofence:guest-mode-change' تحت اللي
-    // بيعيد النداء فورًا أول ما الحسم يخلّص، من غير ما ننتظر البولينج
-    // العادي كل 4 ثواني).
-    if (!window.isGuestModeResolved || window.isGuestMode) {
-        isSyncingFromNative = false; // مهم: نفك القفل هنا كمان، مش بس في try/finally تحت
-        return;
-    }
+    // (ملاحظة): العداد المحلي يعمل للأعضاء وللزوار على السواء لاحتساب
+    // الخطوات الحقيقية من الحساس على الجهاز محلياً في الوقت الفعلي.
 
     try {
         const { StepCounter } = Capacitor.Plugins;
@@ -520,10 +502,8 @@ document.addEventListener('DOMContentLoaded', syncFromNativeStepCounter);
 // جوه applyGuestModeRestrictions - يعني نفس اللحظة اللي isGuestModeResolved
 // بتتحول فيها لـtrue بالظبط. لو النتيجة "مش زائر" (عضو حقيقي)، نعيد
 // نداء المزامنة فورًا فتشتغل الخدمة الأصلية من غير أي تأخير محسوس.
-document.addEventListener('geofence:guest-mode-change', (event) => {
-    if (!event.detail?.isGuestMode) {
-        syncFromNativeStepCounter();
-    }
+document.addEventListener('geofence:guest-mode-change', () => {
+    syncFromNativeStepCounter();
 });
 
 // ومزامنة تانية كل ما التطبيق يرجع للمقدمة (المستخدم فتح التطبيق تاني

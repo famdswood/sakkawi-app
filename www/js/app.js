@@ -387,13 +387,9 @@ function updateStepsUI() {
 
 /** الاستجابة لأي زيادة في الخطوات (سواء جاية من زر المحاكاة أو حساس حقيقي) */
 function handleStepsIncrease(delta) {
-    // منع احتساب أي خطوات/نقاط فعليًا في وضع الزائر (مفيش حساب شخصي
-    // داخل بيه المستخدم - window.isGuestMode بيتحدد في geofence.js عبر
-    // applyGuestModeRestrictions، حسب حالة تسجيل الدخول بس، مش حسب
-    // الموقع الجغرافي - شوف اختيار 2 في initSharedUIBridge/initApp).
-    // ملحوظة: ده طبقة UX بس، الإلزام الحقيقي لازم يبقى على مستوى
-    // Supabase (RLS/SECURITY DEFINER) زي ما موضح في geofence.js.
-    if (window.isGuestMode) return;
+    // (جديد - تجربة الزائر): احتساب الخطوات محلياً على الجهاز للزائر
+    // دون إرسالها إلى Supabase إلا بعد تسجيل حساب حقيقي
+    // (يتم حفظها كـ pendingStepsDelta في profiles.js).
 
     // (جديد) وصلنا لسقف الأمان اليومي بالفعل - مفيش أي تسجيل إضافي خالص
     // (ده سقف أمان مش سقف تحفيزي، محدش حقيقي هيوصله في الاستخدام الطبيعي)
@@ -573,13 +569,13 @@ function applySilentStepsResync(newSteps) {
 function resetStepsUIForGuestMode() {
     syncActiveUser(null);
 
-    appState.steps = 0;
-    appState.stageIndex = getStageIndexForSteps(0);
-    appState.earnedFromSteps = 0;
-    appState.previousBestSteps = 0;
-    appState.recordBrokenToday = false;
-    appState.reachedDailyGoalToday = false;
-    appState.hitHardCapToday = false;
+    appState.steps = getStepsCount();
+    appState.stageIndex = getStageIndexForSteps(appState.steps);
+    appState.earnedFromSteps = Math.floor(appState.steps / STEPS_PER_POINT);
+    appState.previousBestSteps = getPreviousBestSteps();
+    appState.recordBrokenToday = getPreviousBestSteps() > 0 && appState.steps > getPreviousBestSteps();
+    appState.reachedDailyGoalToday = appState.steps >= STAGE_MILESTONES[STAGE_MILESTONES.length - 1];
+    appState.hitHardCapToday = appState.steps >= HARD_DAILY_STEPS_CAP;
 
     updateStepsUI();
 }

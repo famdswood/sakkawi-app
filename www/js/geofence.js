@@ -977,16 +977,13 @@ export function applyGuestModeRestrictions(isAllowed) {
         // الشهرية، زرار إرسال إجابة السؤال اليومي، وأي زرار "اكسب نقاط")
         lockGuestRestrictedElements();
 
-        // تعتيم بصري لعداد الخطوات كإشارة إضافية إن الاحتساب متوقف
-        setStepsCounterMutedVisual(true);
+        // (تجربة الزائر المحسّنة): عداد الخطوات يظل نشطاً وواضحاً بصرياً
+        // للزائر ليحتسب خطواته المحلية على جهازه في الوقت الفعلي
+        setStepsCounterMutedVisual(false);
 
-        // (إصلاح - جذر المشكلة): إيقاف الخدمة الأصلية (Native Foreground
-        // Service) فعليًا، مش بس تعتيم بصري في الواجهة. من غير السطر ده،
-        // كانت الخدمة بتفضل شغّالة وبتحسب خطوات حقيقية في الخلفية حتى لو
-        // الزائر شايف العداد معتم على الشاشة - لأن sensors.js/StepCounterPlugin
-        // معندهومش أي فكرة عن isGuestMode أصلاً.
+        // خدمة تتبع الخطوات تظل تعمل للزائر محلياً على الجهاز
         if (window.Capacitor?.isNativePlatform?.()) {
-            Capacitor.Plugins.StepCounter?.stopTracking().catch(() => {});
+            Capacitor.Plugins.StepCounter?.startTracking().catch(() => {});
         }
     } else {
         // --- إتاحة كامل الميزات ---
@@ -994,10 +991,6 @@ export function applyGuestModeRestrictions(isAllowed) {
         unlockGuestRestrictedElements();
         setStepsCounterMutedVisual(false);
 
-        // (إصلاح): نشغّل الخدمة الأصلية بس لما نتأكد فعليًا إن المستخدم
-        // عضو حقيقي (isAllowed === true) - النداء آمن حتى لو الخدمة
-        // شغّالة أصلاً (StepCounterPlugin.startTracking بترجع فورًا من
-        // غير أي تأثير إضافي في الحالة دي).
         if (window.Capacitor?.isNativePlatform?.()) {
             Capacitor.Plugins.StepCounter?.startTracking().catch(() => {});
         }
