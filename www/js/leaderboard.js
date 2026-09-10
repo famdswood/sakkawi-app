@@ -456,18 +456,42 @@ function bindChampionshipTabs() {
     });
 }
 
+/** علم لو فيه تحديث Realtime وصل بس التبويب مش مفتوح دلوقتي - يتحدّث أول ما يفتح */
+let hasPendingLeaderboardUpdate = false;
+
+/**
+ * فحص هل تبويب الليدربورد مفتوح ومرئي للمستخدم حالياً
+ * @returns {boolean}
+ */
+function isLeaderboardTabVisible() {
+    const tabEl = document.getElementById('tab-leaderboard');
+    const isVisible = !!(tabEl && tabEl.classList.contains('active') && !tabEl.classList.contains('hidden'));
+    return isVisible && document.visibilityState === 'visible';
+}
+
 /**
  * جدولة تحديث مُجمَّع (Debounced) للفترة النشطة حالياً بسبب Event
  * Realtime وصل من Supabase - بيلغي أي مؤقّت سابق لسه مستني وبيبدأ
  * العدّ من الصفر تاني، عشان لو وصلنا شلال Events قريبة من بعض في وقت
  * قصير (مثلاً زحمة مستخدمين بيسجّلوا خطوات في نفس اللحظة) نعمل جلب
  * ورسم واحد بس بعد ما الزحمة تهدى، مش مرة لكل Event لوحده.
+ * (تحديث ذكي): لا يتم الجلب إذا كان المستخدم في تبويب آخر (الرئيسية/البروفايل)
+ * لتوفير الإنترنت والبطارية، ويُحفظ كطلب معلق يتنفّذ فور دخول التبويب.
  */
 function scheduleRealtimeLeaderboardRefresh() {
+    if (!isLeaderboardTabVisible()) {
+        hasPendingLeaderboardUpdate = true;
+        return;
+    }
+
     if (leaderboardRealtimeDebounceId) clearTimeout(leaderboardRealtimeDebounceId);
 
     leaderboardRealtimeDebounceId = setTimeout(() => {
         leaderboardRealtimeDebounceId = null;
+        if (!isLeaderboardTabVisible()) {
+            hasPendingLeaderboardUpdate = true;
+            return;
+        }
         refreshActiveLeaderboard();
     }, LEADERBOARD_REALTIME_DEBOUNCE_MS);
 }
@@ -527,6 +551,48 @@ function stopLeaderboardRealtimeSync() {
     }
 
     realtimeSyncStarted = false;
+}
+
+/** علم لمنع تكرار طلبات التحديث اليدوي أثناء دوران الأيقونة */
+let isRefreshingLeaderboard = false;
+
+/**
+ * ربط زر التحديث اليدوي لليدربورد (#leaderboardRefreshBtn)
+ * يقوم بتدوير الأيقونة وعمل جلب فوري لبيانات البطولة النشطة
+ */
+function bindLeaderboardRefreshButton() {
+    const refreshBtn = document.getElementById('leaderboardRefreshBtn');
+    const refreshIcon = document.getElementById('leaderboardRefreshIcon');
+    if (!refreshBtn || refreshBtn.dataset.bound === 'true') return;
+    refreshBtn.dataset.bound = 'true';
+
+    refreshBtn.addEventListener('click', async () => {
+        if (isRefreshingLeaderboard) return;
+        isRefreshingLeaderboard = true;
+        if (refreshIcon) {
+            refreshIcon.classList.add('animate-spin');
+        }
+        try {
+            await loadAndRenderPeriod(activePeriod);
+        } finally {
+            setTimeout(() => {
+                if (refreshIcon) {
+                    refreshIcon.classList.remove('animate-spin');
+                }
+                isRefreshingLeaderboard = false;
+            }, 600);
+        }
+    });
+}
+
+// استئناف أي تحديثات Realtime معلقة فور عودة المستخدم لتطبيق/تبويب الليدربورد
+if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible' && isLeaderboardTabVisible() && hasPendingLeaderboardUpdate) {
+            hasPendingLeaderboardUpdate = false;
+            refreshActiveLeaderboard();
+        }
+    });
 }
 
 
@@ -1180,9 +1246,10 @@ function renderSelfRankBar(rows, metric) {
         if (aboveRow) {
             const gapValue = Math.max(0, metricValueOf(aboveRow, metric) - metricValueOf(myRow, metric));
             const unit = metricUnitLabel(metric);
+            const rivalName = aboveRow.full_name ? aboveRow.full_name.trim().split(' ')[0] : `المركز ${aboveRow.rank}`;
             gapTextEl.textContent = gapValue > 0
-                ? `فاضلك ${gapValue.toLocaleString()} ${unit} لتسبق المركز ${aboveRow.rank}`
-                : 'قربت جداً من اللي فوقك.. كمّل!';
+                ? `فاضلك ${gapValue.toLocaleString()} ${unit} وتسبق ${rivalName} (مركز ${aboveRow.rank})! 🔥`
+                : `متساوي مع ${rivalName}! أي ${unit} زيادة هتخليك تسبقه! 🔥`;
         } else {
             gapTextEl.textContent = 'كمّل نشاطك عشان تتقدم في الترتيب!';
         }
@@ -1197,6 +1264,7 @@ function renderSelfRankBar(rows, metric) {
  * بصرية أو ظهور مفاجئ لبيانات فاضية/قديمة أثناء انتظار الرد من Supabase.
  */
 function renderLeaderboardLoadingState() {
+    lastRenderedLeaderboardSignature = null;
     const podium = document.getElementById('podiumContainer');
     if (podium) podium.classList.add('animate-pulse', 'opacity-60', 'pointer-events-none');
 
@@ -1329,6 +1397,27 @@ async function loadAndRenderPeriod(periodKey) {
     }
 }
 
+/** آخر توقيع (Signature) لقائمة الليدربورد المرئية - لمنع وميض الشاشة وإعادة بناء الـ DOM إذا لم تتغير البيانات */
+let lastRenderedLeaderboardSignature = null;
+
+/**
+ * حساب توقيع رقمي للمراكز المرئية ومركز المستخدم الحالي
+ * @param {Array<object>} rows
+ * @param {string} periodKey
+ * @returns {string}
+ */
+function computeLeaderboardSignature(rows, periodKey) {
+    if (!rows || rows.length === 0) return `${periodKey}:empty`;
+    const currentUserId = getCurrentUserId();
+    const visibleRows = rows.slice(0, LEADERBOARD_DISPLAY_LIMIT);
+    const myRow = currentUserId ? rows.find((r) => r.id === currentUserId) : null;
+
+    const visibleSig = visibleRows.map((r) => `${r.id}:${r.rank}:${r.points}:${r.total_steps}:${r.featured_badge_id || ''}:${r.title || ''}`).join('|');
+    const myRowSig = myRow ? `${myRow.id}:${myRow.rank}:${myRow.points}:${myRow.total_steps}` : 'none';
+
+    return `${periodKey}#${visibleSig}#${myRowSig}`;
+}
+
 /**
  * (جديد - كاش الأوفلاين) رسم نتيجة فترة بطولة معينة - مفصولة عن
  * loadAndRenderPeriod عشان تتنادى مرتين: مرة بالداتا المخزّنة محلياً
@@ -1337,11 +1426,19 @@ async function loadAndRenderPeriod(periodKey) {
  * بقت بتاخد shouldAnimate كمان وبتمررها لـrenderLeaderboardPodium
  * وrenderLeaderboardRemainingList - شوف التعليق فوق كل واحدة منهم
  * للتفاصيل الكاملة عن سبب الباج والحل.
+ * (تحديث جديد - فحص التوقيع Signature Diffing): إذا كان الاستدعاء من الخلفية/Realtime
+ * والبيانات لم تتغير إطلاقاً، يتم تفادي مسح وإعادة بناء الـ DOM تماماً لمنع القفز والوميض.
  * @param {Array<object>} rows
- * @param {{metric: string}} config - إعدادات الفترة النشطة (CHAMPIONSHIP_PERIODS[periodKey])
+ * @param {{metric: string, key: string}} config - إعدادات الفترة النشطة (CHAMPIONSHIP_PERIODS[periodKey])
  * @param {boolean} [shouldAnimate=true]
  */
 function renderLeaderboardResult(rows, config, shouldAnimate = true) {
+    const currentSignature = computeLeaderboardSignature(rows, config.key);
+    if (!shouldAnimate && lastRenderedLeaderboardSignature === currentSignature) {
+        clearLeaderboardLoadingState();
+        return;
+    }
+    lastRenderedLeaderboardSignature = currentSignature;
     leaderboardRows = rows;
 
     clearLeaderboardLoadingState();
@@ -1411,6 +1508,7 @@ export function getActiveMetric() {
 export function initChampionshipTabs(initialPeriod = 'today') {
     const alreadyInitialized = tabEventsBound;
     bindChampionshipTabs();
+    bindLeaderboardRefreshButton();
     // (جديد - تحديث مباشر) بدء الاشتراك في تحديثات Realtime لجدول
     // profiles - محمي بعلم realtimeSyncStarted جواه، فمفيش خطورة نناديها
     // هنا حتى لو initChampionshipTabs اتنادت أكتر من مرة (نفس فلسفة

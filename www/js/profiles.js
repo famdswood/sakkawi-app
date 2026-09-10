@@ -602,8 +602,15 @@ async function applyDailyCheckIn() {
 async function applyStepsProgressServerSide(addedSteps) {
     if (!currentAuthUser) return currentProfileRow;
 
+    // (فحص أمان سيرفر-سايد): حجب أي قيم غير منطقية أو سالبة
+    const safeSteps = Number(addedSteps);
+    if (!Number.isFinite(safeSteps) || safeSteps < 0 || safeSteps > 15000) {
+        console.warn('[profiles.js] حجب خطوات غير منطقية قبل إرسالها للسيرفر:', addedSteps);
+        return currentProfileRow;
+    }
+
     const { data: updatedRow, error } = await supabaseClient
-        .rpc('apply_steps_progress', { p_added_steps: addedSteps })
+        .rpc('apply_steps_progress', { p_added_steps: safeSteps })
         .maybeSingle();
 
     if (error) {
@@ -832,6 +839,16 @@ function scheduleStepsBatchFlush() {
 export function recordStepsProgress(addedSteps, pointsEarned = 0) {
     if (!addedSteps) return;
 
+    // (فحص أمان Anti-Cheat): حجب أي قيم غير منطقية أو سالبة تتجاوز 10,000 خطوة
+    const safeSteps = Number(addedSteps);
+    if (!Number.isFinite(safeSteps) || safeSteps <= 0 || safeSteps > 10000) {
+        if (safeSteps > 10000) {
+            console.warn('[profiles.js] تم حجب دفعة خطوات مريبة تتجاوز 10,000 خطوة:', addedSteps);
+        }
+        return;
+    }
+    const safePoints = (typeof pointsEarned === 'number' && Number.isFinite(pointsEarned) && pointsEarned > 0) ? pointsEarned : 0;
+
     // (إصلاح - باج حقيقي): كنا بنرفض الخطوة كاملة هنا لو currentAuthUser/
     // currentProfileRow لسه مش متظبطين (يعني لسه بنحمّل بيانات البروفايل
     // من الشبكة، أو bindActivityEvents اتربطت متأخرة). الرفض ده كان
@@ -839,23 +856,23 @@ export function recordStepsProgress(addedSteps, pointsEarned = 0) {
     // الليدربورد كان بيفضل أقل من الشاشة الرئيسية (اللي بتتحدث فورًا من
     // غير الشرط ده في app.js).
     // دلوقتي: بنجمّع الخطوات دايمًا بغض النظر عن حالة تسجيل الدخول.
-    pendingStepsDelta += addedSteps;
-    pendingStepsPointsDelta += pointsEarned;
+    pendingStepsDelta += safeSteps;
+    pendingStepsPointsDelta += safePoints;
 
     // (تحديث تفاؤلي فوري - Optimistic UI): نزيد أرقام البروفايل والهيدر فوراً في الواجهة
     // حتى لو النت مقطوع، عشان المستخدم يشوف خطواته ونقاطه بتزيد قدامه لحظياً
     // في كل التابات وميحسش بإن فيه انفصال بين الشاشة الرئيسية وشاشة البروفايل
     if (currentProfileRow) {
-        currentProfileRow.total_steps = (currentProfileRow.total_steps ?? 0) + addedSteps;
-        currentProfileRow.points = (currentProfileRow.points ?? 0) + pointsEarned;
+        currentProfileRow.total_steps = (currentProfileRow.total_steps ?? 0) + safeSteps;
+        currentProfileRow.points = (currentProfileRow.points ?? 0) + safePoints;
         updateProfileStats({
             totalSteps: currentProfileRow.total_steps,
             points: currentProfileRow.points,
         });
     } else {
         updateProfileStats({
-            totalSteps: (profileStats.totalSteps || 0) + addedSteps,
-            points: (profileStats.points || 0) + pointsEarned,
+            totalSteps: (profileStats.totalSteps || 0) + safeSteps,
+            points: (profileStats.points || 0) + safePoints,
         });
     }
 
