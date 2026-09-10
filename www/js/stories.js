@@ -117,13 +117,22 @@ const STORY_MAX_CHARS = 120;
  *  بيتخزن كـ string عادي زي أي قيمة سابقة، من غير أي تغيير في شكل
  *  التخزين أو النوع */
 const STORY_BG_OPTIONS = [
-    { id: 'carbon', value: 'linear-gradient(135deg, #0b0d12, #1e2430)' },
-    { id: 'gold',   value: 'linear-gradient(135deg, #F2D77E, #B8942A)' },
-    { id: 'volt',   value: 'linear-gradient(135deg, #10b981, #047857)' },
-    { id: 'orange', value: 'linear-gradient(135deg, #f97316, #c2410c)' },
-    { id: 'teal',   value: 'linear-gradient(135deg, #14b8a6, #0f766e)' },
-    { id: 'crimson',value: 'linear-gradient(135deg, #ef4444, #991b1b)' },
-    { id: 'cyber',  value: 'linear-gradient(135deg, #06b6d4, #0e7490)' },
+    { id: 'gold',   value: 'radial-gradient(circle at 50% 25%, rgba(245, 158, 11, 0.45) 0%, transparent 65%), linear-gradient(160deg, #1f1a10 0%, #0a0805 100%)' },
+    { id: 'carbon', value: 'radial-gradient(circle at 50% 20%, rgba(55, 65, 81, 0.4) 0%, transparent 65%), linear-gradient(160deg, #13161c 0%, #06080b 100%)' },
+    { id: 'volt',   value: 'radial-gradient(circle at 50% 25%, rgba(16, 185, 129, 0.45) 0%, transparent 65%), linear-gradient(160deg, #092318 0%, #030d09 100%)' },
+    { id: 'crimson',value: 'radial-gradient(circle at 50% 25%, rgba(239, 68, 68, 0.45) 0%, transparent 65%), linear-gradient(160deg, #250b0b 0%, #0c0404 100%)' },
+    { id: 'cyber',  value: 'radial-gradient(circle at 50% 25%, rgba(6, 182, 212, 0.45) 0%, transparent 65%), linear-gradient(160deg, #09222c 0%, #030d12 100%)' },
+    { id: 'violet', value: 'radial-gradient(circle at 50% 25%, rgba(168, 85, 247, 0.45) 0%, transparent 65%), linear-gradient(160deg, #1f0c2e 0%, #090311 100%)' },
+    { id: 'sunset', value: 'radial-gradient(circle at 50% 25%, rgba(249, 115, 22, 0.5) 0%, transparent 65%), linear-gradient(160deg, #281006 0%, #0c0502 100%)' },
+];
+
+/** عبارات تحفيزية سريعة بنقرة واحدة لإنشاء الاستوري */
+const STORY_INSPIRATION_CHIPS = [
+    { label: '🔥 10,000 خطوة', text: 'قفلت الـ 10,000 خطوة النهاردة ومستمر! 🔥💪' },
+    { label: '💪 عاش يا أبطال', text: 'عاش يا وحوش سِكّاوي، الاستمرار سر الفوز! 💪' },
+    { label: '⚡ مين ينافسني؟', text: 'مين يقدر يكسر رقمي في الخطوات النهاردة؟ ⚡' },
+    { label: '🏆 في طريقي للقمة', text: 'عيني على المركز الأول في الليدربورد 🏆' },
+    { label: '🏃 خطواتي سر طاقتي', text: 'كل خطوة بتقربني من هدفي، متوقفش! 🏃‍♂️' },
 ];
 
 /** خط الاستوري بقى ثابت (كايرو الأساسي بس) بدل ما كان فيه 4 خيارات -
@@ -2370,27 +2379,61 @@ function renderCreateStoryOptionButtons() {
 }
 
 /**
- * تحديث منطقة المعاينة الحية (الخلفية + الخط + النص) لحظياً مع أي تغيير
+ * تحديث منطقة المعاينة الحية (الخلفية + النص على الكانفاس) لحظياً مع أي تغيير
  */
 function updateLivePreview() {
     const previewArea = document.getElementById('storyPreviewArea');
     const previewText = document.getElementById('storyPreviewText');
     const textarea = document.getElementById('createStoryTextarea');
-    if (!previewArea || !previewText || !textarea) return;
+    if (!previewArea || !textarea) return;
 
     previewArea.style.background = createStoryState.selectedBg.value;
 
-    // تصفير كلاسات الخط القديمة قبل تطبيق الخط الجديد
-    STORY_FONT_OPTIONS.forEach((font) => {
-        font.cssClass.split(' ').forEach((cls) => previewText.classList.remove(cls));
-    });
-    createStoryState.selectedFont.cssClass.split(' ').forEach((cls) => previewText.classList.add(cls));
-
-    // (تعديل) محاذاة النص اتلغت بالكامل - previewText معاه كلاس
-    // text-center ثابت في index.html أصلاً، فمفيش داعي لأي منطق هنا
-
     const typedText = textarea.value.trim();
-    previewText.textContent = typedText.length > 0 ? typedText : 'اكتب استوريك هنا...';
+    if (previewText) {
+        previewText.textContent = typedText.length > 0 ? typedText : 'اكتب استوريك هنا...';
+    }
+
+    // تعديل مقاس الخط ديناميكياً حسب طول النص لتجربة كانفاس احترافية
+    if (typedText.length > 70) {
+        textarea.style.fontSize = '1.05rem';
+    } else if (typedText.length > 35) {
+        textarea.style.fontSize = '1.25rem';
+    } else {
+        textarea.style.fontSize = '1.45rem';
+    }
+
+    // تمدد تلقائي ناعم لارتفاع الخانة حسب عدد الأسطر
+    textarea.style.height = 'auto';
+    textarea.style.height = Math.min(180, Math.max(70, textarea.scrollHeight)) + 'px';
+}
+
+/**
+ * رسم شرائح الإلهام السريعة بنقرة واحدة
+ */
+function renderQuickInspirationChips() {
+    const container = document.getElementById('quickInspirationChips');
+    if (!container) return;
+
+    container.innerHTML = STORY_INSPIRATION_CHIPS.map((chip, idx) => `
+        <button type="button" class="story-chip" data-chip-idx="${idx}">
+            ${chip.label}
+        </button>
+    `).join('');
+
+    container.querySelectorAll('.story-chip').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            const chip = STORY_INSPIRATION_CHIPS[Number(btn.dataset.chipIdx)];
+            if (!chip) return;
+            const textarea = document.getElementById('createStoryTextarea');
+            if (textarea) {
+                textarea.value = chip.text;
+                updateLivePreview();
+                updateCharCount();
+                textarea.focus();
+            }
+        });
+    });
 }
 
 /**
@@ -2560,6 +2603,10 @@ function openCreateStoryModal() {
     modal.classList.remove('hidden');
 
     pushModalState(hideCreateStoryModal);
+    setTimeout(() => {
+        const textarea = document.getElementById('createStoryTextarea');
+        if (textarea) textarea.focus();
+    }, 150);
 }
 
 /** الإخفاء الخام لمودال إنشاء الاستوري فقط - استخدم closeCreateStoryModal تحت */
@@ -2843,6 +2890,7 @@ function bindCreateStoryModalEvents() {
     const statStickerBtn = document.getElementById('btnToggleStatSticker');
 
     renderCreateStoryOptionButtons();
+    renderQuickInspirationChips();
     bindStickerDragAndResize();
 
     if (textarea) {

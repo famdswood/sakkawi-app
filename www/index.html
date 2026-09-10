@@ -3622,121 +3622,86 @@
     <!-- عشان زرار رجوع المتصفح/الموبايل يقفلها بشكل طبيعي (شوف stories.js).-->
     <!-- ================================================================= -->
     <div id="createStoryModal"
-         class="hidden flex flex-col fixed inset-0 z-[70] bg-lux-950">
+         class="hidden flex flex-col fixed inset-0 z-[70] bg-lux-950 select-none overflow-hidden">
 
-        <!-- هيدر الشاشة: ثابت بالأعلى، بياخد عرض الشاشة بالكامل ويدعم
-             الـ safe-area. (تعديل) زرار "رجوع" اتشال بالكامل بناءً على
-             طلب المستخدم - الإغلاق بقى بس عن طريق زرار "✕" (أو الضغط
-             برّه الكارت/زرار رجوع المتصفح، شوف btnCloseCreateStory /
-             pushModalState في stories.js)، فبقى تقسيم عمودين بدل 3
-             (العنوان في الطرف التاني من زرار الإغلاق) -->
-        <div class="flex items-center justify-between gap-2 px-4 pt-[calc(env(safe-area-inset-top)+0.9rem)] pb-3 shrink-0 border-b border-gold-500/10 bg-lux-900/95 backdrop-blur-xl">
-            <h2 class="text-base font-extrabold text-lux-50 tracking-tight truncate">نشر قصة جديدة</h2>
+        <!-- هيدر الشاشة العلوي: شريط زجاجي عائم مستوحى من إنستجرام -->
+        <div class="flex items-center justify-between gap-2 px-4 pt-[calc(env(safe-area-inset-top)+0.8rem)] pb-2.5 z-30 shrink-0 bg-lux-950/80 backdrop-blur-md border-b border-white/5">
+            <!-- زر الإغلاق -->
             <button type="button" id="btnCloseCreateStory"
                     aria-label="إغلاق"
-                    class="w-8 h-8 flex items-center justify-center rounded-full text-lux-400 hover:text-lux-100 hover:bg-lux-800/70 text-lg leading-none transition-colors shrink-0">✕</button>
+                    class="w-8 h-8 flex items-center justify-center rounded-full bg-lux-800/80 hover:bg-lux-700 text-lux-300 hover:text-white transition-all text-base shrink-0 active:scale-95">✕</button>
+
+            <!-- كبسولات التحكم المدمجة: مدة العرض والخصوصية في المنتصف -->
+            <div class="flex items-center gap-1.5 overflow-x-auto" style="scrollbar-width: none;">
+                <div id="storyDurationOptions" class="flex items-center bg-lux-900/90 p-0.5 rounded-full border border-white/10 shrink-0">
+                    <!-- أزرار المدة: 24س / 12س -->
+                </div>
+                <div id="storyVisibilityOptions" class="flex items-center bg-lux-900/90 p-0.5 rounded-full border border-white/10 shrink-0">
+                    <!-- أزرار الخصوصية: الكل / الأصدقاء -->
+                </div>
+            </div>
+
+            <!-- زر النشر العلوي المتوهج -->
+            <button type="button" id="btnPublishStory" data-requires-membership="true"
+                    class="flex items-center justify-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-black text-lux-950 bg-gradient-to-r from-gold-400 via-amber-400 to-gold-500 shadow-glow-amber active:scale-95 transition-all shrink-0 disabled:opacity-50">
+                <span id="publishStoryLoadingSpinner" class="hidden w-3 h-3 border-2 border-lux-950/30 border-t-lux-950 rounded-full animate-spin"></span>
+                <span id="publishStoryBtnLabel">نشر 🚀</span>
+            </button>
         </div>
 
-        <!-- جسم الشاشة: قابل للتمرير، ومحتواه محصور بعرض max-w-md في المنتصف
-             زي باقي شاشات التطبيق (الهيدر نفسه بياخد العرض الكامل فوق).
-             (تعديل - المرحلة 5 من خطة الريسبونسف): كانت هنا عالقة على
-             max-w-md (448px) ثابت على كل المقاسات - نسيان من وقت تنفيذ
-             مودال المشاهدة (storyViewerCard فوق) لأن الاتنين "شاشة استوري
-             full-screen" بنفس المنطق بالظبط. اتضافلها نفس تدرّج
-             storyViewerCard (420px تابلت → 480px شاشات أكبر) بدل ما تفضل
-             448px على طول - عمداً أضيق من تدرّج الأونبوردنج (560/640) رغم
-             إن الاتنين شاشات "فورم"، لأن #storyPreviewArea جواها محكوم
-             بـ aspect-[9/16] + max-h-[55vh] معاً (الارتفاع بيتقفل عند
-             55vh مش بيتبع العرض)، فلو الحاوية اتمددت أكتر كان
-             #storyPreviewArea هيبقى أعرض من اللازم ويخسر شكل "استوري
-             موبايل" (9:16) اللي هو أصل الفكرة - نفس السبب اللي خلّى
-             storyViewerCard ياخد 420/480 مش 560/640 من الأساس -->
-        <div class="flex-1 overflow-y-auto w-full max-w-md md:max-w-[420px] lg:max-w-[480px] mx-auto px-4 pt-4 pb-[calc(env(safe-area-inset-bottom)+1.25rem)] space-y-4"
-
-            <!-- منطقة المعاينة الحية: بتعرض النص فوق الخلفية والخط المختارين
-                 بنفس شكل مودال المشاهدة الفعلي (storyContent) بالظبط، بس
-                 دلوقتي بأبعاد أوضح وأطول تشبه شاشة الموبايل الفعلية -->
+        <!-- منطقة الكانفاس الرئيسية (Story Canvas) -->
+        <div class="flex-1 relative flex items-center justify-center p-3 sm:p-5 overflow-hidden">
             <div id="storyPreviewArea"
-                 class="relative w-full aspect-[9/16] max-h-[55vh] mx-auto rounded-3xl overflow-hidden flex items-center justify-center p-6 border border-gold-500/10 shadow-soft-card transition-colors duration-300"
-                 style="background: linear-gradient(135deg, #14b8a6, #0d9488);">
-                <p id="storyPreviewText"
-                   class="text-white text-lg font-cairo font-black text-center leading-relaxed break-words">
-                    اكتب استوريك هنا...
-                </p>
+                 class="relative w-full h-full max-w-sm aspect-[9/16] max-h-[60vh] sm:max-h-[66vh] rounded-3xl overflow-hidden flex flex-col items-center justify-center p-6 shadow-2xl border border-white/10 transition-all duration-300">
+                
+                <!-- خانة الكتابة المباشرة في قلب القصة (Direct Canvas Typing) -->
+                <div class="w-full relative z-10 flex flex-col items-center justify-center my-auto">
+                    <textarea id="createStoryTextarea" maxlength="120" rows="3"
+                              placeholder="اكتب استوريك هنا يا بطل..."
+                              class="w-full bg-transparent border-none text-center text-white text-xl sm:text-2xl font-cairo font-black leading-relaxed placeholder:text-white/35 focus:outline-none resize-none overflow-hidden drop-shadow-md transition-all"></textarea>
+                    
+                    <!-- عداد الحروف خفيف وصغير أسفل النص مباشرة -->
+                    <span id="createStoryCharCount" class="text-[10px] text-white/50 font-bold mt-1 bg-black/25 px-2 py-0.5 rounded-full backdrop-blur-sm">0 / 120</span>
+                </div>
 
-                <!-- كبسولة ملصق الإنجاز الحي (Live Stat Sticker) - المرحلة 4-أ
-                     مخفية افتراضياً (class="hidden")، وبتتظهر/تتخفى ديناميكياً
-                     من js/stories.js (زرار #btnToggleStatSticker) بمحتوى
-                     الخطوات الفعلية + نسبة الوصول لهدف الـ 10,000 خطوة.
-                     متموضعة كبادج عائم أسفل المعاينة (شوف .story-stat-sticker
-                     في style.css) عشان متتداخلش مع النص الرئيسي
-                     (storyPreviewText) مهما كانت محاذاته -->
+                <!-- كبسولة ملصق الإنجاز الحي القابلة للسحب والتحريك -->
                 <div id="storyPreviewSticker" class="hidden story-stat-sticker">
                     <span id="storyPreviewStickerIcon" class="story-stat-sticker-icon" aria-hidden="true">🔥</span>
                     <span id="storyPreviewStickerSteps" class="story-stat-sticker-steps">0 خطوة</span>
                     <span id="storyPreviewStickerPercent" class="story-stat-sticker-percent">0%</span>
                 </div>
+
+                <!-- عنصر storyPreviewText مخفي للتوافق البرمجي -->
+                <p id="storyPreviewText" class="hidden"></p>
             </div>
-
-            <!-- خانة كتابة النص -->
-            <div class="space-y-1.5">
-                <textarea id="createStoryTextarea" rows="3" maxlength="120"
-                          placeholder="عاش يا بطل! قفلت كام خطوة النهاردة؟"
-                          class="w-full bg-lux-800 border border-gold-500/15 rounded-2xl px-4 py-3 text-sm text-lux-50 font-bold resize-none focus:outline-none focus:border-gold-500/50 placeholder:text-lux-500"></textarea>
-
-                <!-- زرار تفعيل "ملصق الإنجاز الحي" (Live Stat Sticker) - المرحلة 4-أ
-                     Toggle بيقرأ خطوات اليوم الفعلية عبر getStepsCount() (sensors.js)
-                     ويعرضها كبادج فوق المعاينة الحية. المنطق بالكامل في js/stories.js
-                     (bindCreateStoryModalEvents) - هنا بس الشكل الساكن + حالة .is-active -->
-                <button type="button" id="btnToggleStatSticker"
-                        class="story-stat-toggle-btn w-full flex items-center justify-center gap-2 text-xs font-extrabold rounded-2xl py-2.5 transition-colors duration-200">
-                    <span class="text-sm leading-none" aria-hidden="true">🔥</span>
-                    <span>إضافة إنجازي اليوم 🔥</span>
-                </button>
-
-                <div class="flex items-center justify-end">
-                    <span id="createStoryCharCount" class="text-[10px] text-lux-500 font-bold">0 / 120</span>
-                </div>
-            </div>
-
-            <!-- اختيار لون/تدرج الخلفية -->
-            <div class="space-y-1.5">
-                <p class="text-xs font-extrabold text-lux-300">لون الخلفية</p>
-                <div id="storyBgOptions" class="flex items-center gap-2.5 overflow-x-auto pb-1" style="scrollbar-width: none;">
-                    <!-- بتتحقن ديناميكياً من renderCreateStoryOptionButtons() في stories.js -->
-                </div>
-            </div>
-
-            <!-- اختيار مدة عرض الاستوري قبل ما تنتهي -->
-            <div class="space-y-1.5">
-                <p class="text-xs font-extrabold text-lux-300">مدة العرض</p>
-                <div id="storyDurationOptions" class="flex items-center gap-2 flex-wrap">
-                    <!-- بتتحقن ديناميكياً من renderCreateStoryOptionButtons() في stories.js -->
-                </div>
-            </div>
-
-            <!-- اختيار مين يقدر يشوف الاستوري -->
-            <div class="space-y-1.5">
-                <p class="text-xs font-extrabold text-lux-300">مين يقدر يشوفها</p>
-                <div id="storyVisibilityOptions" class="flex items-center gap-2 flex-wrap">
-                    <!-- بتتحقن ديناميكياً من renderCreateStoryOptionButtons() في stories.js -->
-                </div>
-            </div>
-
-            <!-- أزرار النشر/الإلغاء -->
-            <div class="flex items-center gap-2 pt-1">
-                <button type="button" id="btnCancelCreateStory"
-                        class="flex-1 text-xs font-extrabold text-lux-300 bg-lux-800 hover:bg-lux-700 rounded-2xl py-3 transition-colors">
-                    إلغاء
-                </button>
-                <button type="button" id="btnPublishStory" data-requires-membership="true"
-                        class="flex-1 flex items-center justify-center gap-2 text-xs font-extrabold text-lux-950 bg-gradient-to-br from-gold-400 to-gold-600 shadow-glow-amber rounded-2xl py-3 transition-opacity disabled:opacity-60">
-                    <span id="publishStoryLoadingSpinner" class="hidden w-3.5 h-3.5 border-2 border-lux-950/30 border-t-lux-950 rounded-full animate-spin"></span>
-                    <span id="publishStoryBtnLabel">نشر الاستوري</span>
-                </button>
-            </div>
-
         </div>
+
+        <!-- شريط الأدوات العائم السفلي (Bottom Floating Toolbar) -->
+        <div class="z-30 shrink-0 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] pt-2.5 px-3 bg-lux-950/90 backdrop-blur-xl border-t border-white/5 flex flex-col gap-2">
+            
+            <!-- شريط الرقائق التحفيزية السريعة بنقرة واحدة (Quick Inspiration Chips) -->
+            <div id="quickInspirationChips" class="flex items-center gap-1.5 overflow-x-auto pb-1 px-1" style="scrollbar-width: none;">
+                <!-- رقائق سريعة بنقرة واحدة -->
+            </div>
+
+            <!-- شريط الألوان وزر ملصق الإنجاز -->
+            <div class="flex items-center justify-between gap-3 pt-0.5">
+                <!-- باليتة ألوان وتدرجات الخلفية -->
+                <div id="storyBgOptions" class="flex items-center gap-2 overflow-x-auto py-1" style="scrollbar-width: none;">
+                    <!-- بتتحقن ديناميكياً من stories.js -->
+                </div>
+
+                <!-- زر تفعيل ملصق الإنجاز الحي -->
+                <button type="button" id="btnToggleStatSticker"
+                        class="story-stat-toggle-btn shrink-0 flex items-center gap-1.5 px-3.5 py-2 rounded-2xl text-xs font-black transition-all bg-lux-900 border border-gold-500/20 text-gold-400 hover:bg-gold-500/10 active:scale-95">
+                    <span class="text-sm leading-none" aria-hidden="true">🔥</span>
+                    <span class="whitespace-nowrap">إنجازي اليوم</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- زر إلغاء مخفي للتوافق البرمجي الكامل مع أي مستمع حدث قديم -->
+        <button type="button" id="btnCancelCreateStory" class="hidden"></button>
     </div>
 
     <!-- ================================================================= -->
