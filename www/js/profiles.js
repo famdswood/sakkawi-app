@@ -712,10 +712,18 @@ async function flushPendingStepsBatch() {
 
         // (إصلاح) رسالة الخطأ الأصلية (error.message) بتوصل زي ما هي من
         // Supabase/الشبكة - مفيدة للمطوّر لكن مش مفهومة للمستخدم العادي
-        // (مثلاً "TypeError: Failed to fetch"). لو السبب أوفلاين، نعرض
-        // رسالة مطمئنة بدل النص التقني الخام
-        const isOffline = typeof navigator !== 'undefined' && navigator.onLine === false;
-        const friendlyMessage = isOffline
+        // (مثلاً "TypeError: Failed to fetch"). كنا بنعتمد على
+        // navigator.onLine عشان نقرر نعرض الرسالة المطمئنة ولا لأ - بس
+        // navigator.onLine مش موثوق: بيرجّع true طول ما الجهاز متوصّل
+        // بشبكة (واي فاي/بيانات) حتى لو الشبكة دي مالهاش إنترنت حقيقي
+        // أو Supabase نفسه مش قادر يتوصله، فكان بيسيب النص التقني الخام
+        // يظهر للمستخدم في حالات فشل شبكة حقيقية (زي السكرين شوت اللي
+        // وصلنا). دلوقتي بنفحص نص الخطأ نفسه - أي فشل fetch (بغض النظر
+        // عن السبب: مفيش نت فعليًا، DNS، السيرفر مش راد..إلخ) بيدّي نفس
+        // البصمة النصية دي في كل المتصفحات تقريبًا، فهي إشارة أوثق بكتير
+        // من navigator.onLine
+        const isNetworkFailure = /failed to fetch|network\s*error|load failed|networkerror/i.test(error.message || '');
+        const friendlyMessage = isNetworkFailure
             ? 'مفيش نت دلوقتي - هنحفظ تقدّمك ونبعته أول ما النت يرجع'
             : error.message;
 
