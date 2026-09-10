@@ -547,7 +547,7 @@ document.addEventListener('visibilitychange', () => {
  * ما بتعملش حاجة على المتصفح/PWA العادي (مفيش Capacitor) لأن
  * syncFromNativeStepCounter() نفسها بترجع فورًا في الحالة دي أصلاً.
  */
-const NATIVE_SYNC_INTERVAL_MS = 4000;
+const NATIVE_SYNC_INTERVAL_MS = 1000;
 let nativeSyncIntervalId = null;
 
 function startNativeSyncPolling() {
