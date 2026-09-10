@@ -336,6 +336,21 @@ function pruneViewedStoryIds(viewedIds) {
 }
 
 /**
+ * حماية ضد ثغرات XSS: تحويل أي كود HTML لرموز نصية آمنة قبل الحقن في الـ DOM
+ * @param {string} text
+ * @returns {string}
+ */
+function escapeHtml(text) {
+    if (typeof text !== 'string') return '';
+    return text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+/**
  * إرجاع كلاسات CSS الخاصة بشكل خط معيّن حسب معرّفه (font_style)،
  * مع رجوع لأول خيار افتراضي لو المعرّف مش موجود ضمن STORY_FONT_OPTIONS
  * @param {string} fontId
@@ -462,6 +477,7 @@ function mapRpcRowToStory(row) {
         background: row.bg_color || row.background || STORY_BG_OPTIONS[0].value,
         fontClass: getFontClassById(row.font_style),
         createdAt: row.created_at || null,
+        expiresAt: row.expires_at || null,
         viewed: isStoryViewed(storyId),
         // حالة اللايك الحالية للمستخدم على الاستوري دي - لو get_active_text_stories()
         // بترجّع عمود بيعكس ده (liked/is_liked/user_liked)، بنقرأه هنا مباشرة عشان
@@ -671,8 +687,15 @@ function formatRelativeTimeArabic(isoDateString) {
  */
 function getUserStoryIndices(userId) {
     const indices = [];
+    const now = Date.now();
     storiesData.forEach((story, idx) => {
-        if (story.userId === userId) indices.push(idx);
+        if (story.userId === userId) {
+            // استبعاد أي استوري انتهت صلاحيتها
+            if (story.expiresAt && new Date(story.expiresAt).getTime() <= now) {
+                return;
+            }
+            indices.push(idx);
+        }
     });
 
     indices.sort((idxA, idxB) => {
@@ -698,11 +721,15 @@ export function renderStoriesBar() {
     // مشاهدتش لو موجودة، وإلا أول ستوري عنده على الإطلاق
     const seenUserIds = new Set();
     const groupedStories = [];
+    const now = Date.now();
     storiesData.forEach((story) => {
+        if (story.expiresAt && new Date(story.expiresAt).getTime() <= now) return;
         if (seenUserIds.has(story.userId)) return;
-        seenUserIds.add(story.userId);
 
         const userIndices = getUserStoryIndices(story.userId);
+        if (userIndices.length === 0) return;
+        seenUserIds.add(story.userId);
+
         const firstUnviewedIndex = userIndices.find((idx) => !storiesData[idx].viewed);
 
         // أحدث وقت نشر بين كل استوريز الشخص ده - بنستخدمه بعد شوية عشان
@@ -754,11 +781,11 @@ export function renderStoriesBar() {
 
     const myStoryButton = `
         <div class="story-avatar my-story-avatar ${hasOwnActiveStory ? '' : 'no-active-story'}"
-             role="group" aria-label="${hasOwnActiveStory ? `استوريك يا ${myUserName}` : 'أضف قصة جديدة'}">
+             role="group" aria-label="${hasOwnActiveStory ? `استوريك يا ${escapeHtml(myUserName)}` : 'أضف قصة جديدة'}">
             <button id="btnMyStoryAvatar" type="button" class="my-story-avatar-img"
                     aria-label="${hasOwnActiveStory ? 'مشاهدة استوريك' : 'أضف قصة جديدة'}"
                     ${hasOwnActiveStory ? `data-story-index="${ownGroup.openIndex}"` : ''}>
-                <img src="${myAvatarSrc}" alt="${myUserName}"
+                <img src="${escapeHtml(myAvatarSrc)}" alt="${escapeHtml(myUserName)}"
                      onerror="this.src='${DEFAULT_STORY_AVATAR}'">
             </button>
             <button id="btnOpenCreateStory" type="button" class="my-story-add-badge" aria-label="أضف قصة جديدة">
@@ -768,8 +795,8 @@ export function renderStoriesBar() {
     `;
 
     const storyButtons = groupedStories.map((group) => `
-        <button class="story-avatar ${group.allViewed ? 'viewed' : ''}" data-story-index="${group.openIndex}" aria-label="ستوري ${group.userName}">
-            <img src="${group.avatar}" alt="${group.userName}"
+        <button class="story-avatar ${group.allViewed ? 'viewed' : ''}" data-story-index="${group.openIndex}" aria-label="ستوري ${escapeHtml(group.userName)}">
+            <img src="${escapeHtml(group.avatar)}" alt="${escapeHtml(group.userName)}"
                  onerror="this.src='${DEFAULT_STORY_AVATAR}'">
         </button>
     `).join('');
@@ -1186,6 +1213,7 @@ async function performDeleteCurrentStory() {
         }
 
         renderStoriesBar();
+        await setCached('cached_stories', storiesData);
     } catch (err) {
         document.dispatchEvent(new CustomEvent('app:toast', { detail: { message: 'تعذر حذف الاستوري، حاول تاني', type: 'error' } }));
         console.error('تعذر حذف الاستوري:', err.message);
@@ -1259,20 +1287,25 @@ function renderStoryViewersList(viewers) {
     // data-viewer-id بدل ما نربط onclick هنا في innerHTML عشان نتجنب أي
     // مشاكل تسريب الـ id/الاسم جوه HTML خام (escaping) - البيانات نفسها
     // بتتقرا من مصفوفة viewers الأصلية في الـ event handler تحت
-    container.innerHTML = viewers.map((viewer, index) => `
-        <button type="button" class="story-viewer-row w-full text-right bg-lux-800 p-2.5 rounded-2xl flex items-center justify-between hover:bg-lux-700/70 transition-colors" data-viewer-index="${index}" aria-label="بروفايل ${viewer.full_name || 'بطل'}">
+    container.innerHTML = viewers.map((viewer, index) => {
+        const displayName = escapeHtml(viewer.full_name || 'بطل');
+        const username = viewer.username ? escapeHtml(viewer.username) : '';
+        const avatarSrc = escapeHtml(viewer.avatar_url || DEFAULT_STORY_AVATAR);
+        return `
+        <button type="button" class="story-viewer-row w-full text-right bg-lux-800 p-2.5 rounded-2xl flex items-center justify-between hover:bg-lux-700/70 transition-colors" data-viewer-index="${index}" aria-label="بروفايل ${displayName}">
             <div class="flex items-center gap-2.5">
-                <img src="${viewer.avatar_url || DEFAULT_STORY_AVATAR}" alt="${viewer.full_name || 'بطل'}"
+                <img src="${avatarSrc}" alt="${displayName}"
                      class="w-9 h-9 rounded-full object-cover border border-gold-500/20"
                      onerror="this.src='${DEFAULT_STORY_AVATAR}'">
                 <div class="flex flex-col">
-                    <span class="text-xs font-extrabold text-lux-100">${viewer.full_name || 'بطل'}</span>
-                    ${viewer.username ? `<span class="text-[10px] text-lux-500 font-medium">@${viewer.username}</span>` : ''}
+                    <span class="text-xs font-extrabold text-lux-100">${displayName}</span>
+                    ${username ? `<span class="text-[10px] text-lux-500 font-medium">@${username}</span>` : ''}
                 </div>
             </div>
             ${viewer.liked ? `<span class="text-rose-400" aria-label="عمل لايك"><svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M12 21s-6.7-4.35-9.3-8.1C1 10.2 1.6 6.9 4.3 5.3c2.2-1.3 4.9-.7 6.4 1.2l1.3 1.6 1.3-1.6c1.5-1.9 4.2-2.5 6.4-1.2 2.7 1.6 3.3 4.9 1.6 7.6C18.7 16.65 12 21 12 21Z"/></svg></span>` : ''}
         </button>
-    `).join('');
+    `;
+    }).join('');
 
     // نربط حدث الضغط بعد ما الـ innerHTML يتحط، بدل onclick جوه الـ HTML
     // مباشرة، عشان نقدر نستخدم دالة عادية (مش لازم تبقى معرّفة على window)
@@ -1372,12 +1405,14 @@ function renderCurrentStory() {
         // القلب/مين شافها تحت بالظبط: لازم نوقف الـ event bubbling عشان
         // الضغطة ماتتفسرش كمان كتنقل بين الاستوريز (رغم إن storyHeader
         // فوق منطقتي التنقل أصلاً بفضل z-20 > z-10، بس الوقف صريح أضمن)
+        const safeUserName = escapeHtml(story.userName);
+        const safeAvatar = escapeHtml(story.avatar);
         header.innerHTML = `
-            <button type="button" id="storyOwnerProfileBtn" class="flex items-center gap-2 text-right" aria-label="بروفايل ${story.userName}">
-                <img src="${story.avatar}" class="w-8 h-8 rounded-full object-cover border border-white/40" alt="${story.userName}"
+            <button type="button" id="storyOwnerProfileBtn" class="flex items-center gap-2 text-right" aria-label="بروفايل ${safeUserName}">
+                <img src="${safeAvatar}" class="w-8 h-8 rounded-full object-cover border border-white/40" alt="${safeUserName}"
                      onerror="this.src='${DEFAULT_STORY_AVATAR}'">
                 <div class="flex flex-col leading-tight">
-                    <span class="text-white text-xs font-extrabold">${story.userName}</span>
+                    <span class="text-white text-xs font-extrabold">${safeUserName}</span>
                     <span class="text-white/60 text-[10px] font-bold">${formatRelativeTimeArabic(story.createdAt)}</span>
                 </div>
             </button>
@@ -1430,7 +1465,7 @@ function renderCurrentStory() {
                </div>`
             : '';
 
-        content.innerHTML = `<p class="text-white text-lg px-8 ${story.fontClass || 'font-cairo font-black'} text-center">${story.content}</p>${statStickerHtml}`;
+        content.innerHTML = `<p class="text-white text-lg px-8 ${story.fontClass || 'font-cairo font-black'} text-center">${escapeHtml(story.content)}</p>${statStickerHtml}`;
 
         if (story.statData) {
             positionRenderedSticker(content, content.querySelector('.story-stat-sticker'), story.statData);
@@ -1487,6 +1522,7 @@ export function openStory(index) {
     currentStoryIndex = currentGroupStoryIndices[currentGroupPosition];
 
     const modal = document.getElementById('storyViewerModal');
+    const wasAlreadyOpen = modal && !modal.classList.contains('hidden');
     if (modal) {
         modal.classList.remove('hidden');
         modal.classList.add('flex');
@@ -1497,7 +1533,9 @@ export function openStory(index) {
 
     // تسجيل خطوة في تاريخ المتصفح عشان زرار رجوع الموبايل يقفل مودال
     // الاستوري بس (بدل ما يخرج المستخدم بره الصفحة) - شوف js/modal-history.js
-    pushModalState(hideStoryViewerModal);
+    if (!wasAlreadyOpen) {
+        pushModalState(hideStoryViewerModal);
+    }
 }
 
 /**
@@ -1841,6 +1879,26 @@ export async function initStoriesUI() {
             storyContentEl.querySelector('.story-stat-sticker'),
             currentStory.statData,
         );
+    });
+
+    // إيقاف مؤقت التقدّم تلقائياً عند قفل الشاشة أو الانتقال لتطبيق آخر،
+    // واستئنافه من نفس النقطة فور العودة (يمنع القفز المفاجئ لشريط التقدّم
+    // بسبب فرق توقيت performance.now() أثناء نوم المتصفح)
+    document.addEventListener('visibilitychange', () => {
+        const viewerModal = document.getElementById('storyViewerModal');
+        const isViewerOpen = viewerModal && !viewerModal.classList.contains('hidden');
+        if (!isViewerOpen) return;
+
+        if (document.hidden) {
+            pauseStoryProgress();
+        } else {
+            resumeStoryProgress();
+        }
+    });
+
+    // فور استعادة اتصال الإنترنت، تحديث شريط الاستوريات بأحدث البيانات فوراً
+    window.addEventListener('app:online', () => {
+        refreshStoriesRespectingOpenViewer();
     });
 
     // تهيئة مودال إنشاء الاستوري (المرحلة الثانية)
@@ -2203,6 +2261,13 @@ async function publishStory() {
         return;
     }
 
+    if (content.length > STORY_MAX_CHARS) {
+        document.dispatchEvent(new CustomEvent('app:toast', {
+            detail: { message: `نص الاستوري لا يجب أن يتجاوز ${STORY_MAX_CHARS} حرفاً` },
+        }));
+        return;
+    }
+
     const currentUser = await getCurrentUser();
     if (!currentUser) {
         return;
@@ -2298,6 +2363,7 @@ async function publishStory() {
             background: createStoryState.selectedBg.value,
             fontClass: createStoryState.selectedFont.cssClass,
             createdAt: data?.created_at || new Date().toISOString(),
+            expiresAt: data?.expires_at || new Date(Date.now() + createStoryState.selectedDuration.hours * 60 * 60 * 1000).toISOString(),
             viewed: false,
         });
 
@@ -2306,6 +2372,7 @@ async function publishStory() {
         closeCreateStoryModal();
         resetCreateStoryForm();
         renderStoriesBar();
+        await setCached('cached_stories', storiesData);
     } catch (err) {
         document.dispatchEvent(new CustomEvent('app:toast', { detail: { message: 'حصل خطأ أثناء نشر الاستوري، جرب تاني' } }));
     } finally {
