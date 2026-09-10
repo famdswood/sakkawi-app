@@ -15,6 +15,7 @@
    ================================================================== */
 
 import { showAuthGate } from './onboarding.js';
+export { showAuthGate };
 
 // حالة الزائر الحالية - هيتم تحديثها لاحقاً من geofence.js بعد استدعاء
 // supabaseClient.rpc('check_and_update_user_location', ...)

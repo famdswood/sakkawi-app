@@ -1226,31 +1226,50 @@ function renderLeaderboardRemainingList(rows, shouldAnimate = true) {
  * @param {Array<object>} rows
  * @param {'points'|'total_steps'} metric
  */
-let guestLeaderboardEventsBound = false;
-
 /**
  * فتح شاشة التسجيل عند ضغط الزائر على أي زر تحفيزي في لوحة الصدارة
  */
-async function handleGuestLeaderboardJoinCta() {
+export async function handleGuestLeaderboardJoinCta() {
     try {
-        const { showAuthGate } = await import('./guest-banner.js');
+        const { showAuthGate } = await import('./onboarding.js');
         if (typeof showAuthGate === 'function') {
             showAuthGate();
+            return;
         }
     } catch (err) {
-        console.warn('[leaderboard.js] تعذر فتح نافذة الانضمام للزائر:', err);
+        console.warn('[leaderboard.js] تعذر فتح نافذة الانضمام عبر showAuthGate:', err);
     }
+
+    try {
+        const { showAuthModal } = await import('./auth.js');
+        if (typeof showAuthModal === 'function') {
+            showAuthModal('signup');
+        }
+    } catch (err) {
+        console.error('[leaderboard.js] تعذر فتح نافذة التسجيل:', err);
+    }
+}
+
+if (typeof window !== 'undefined') {
+    window.handleGuestLeaderboardJoinCta = handleGuestLeaderboardJoinCta;
+    window.openGuestAuthGate = handleGuestLeaderboardJoinCta;
 }
 
 /**
  * ربط أزرار تحفيز الزائر داخل لوحة الصدارة والشريط العائم
  */
 function bindGuestLeaderboardCtas() {
-    if (guestLeaderboardEventsBound) return;
-    guestLeaderboardEventsBound = true;
+    const selfRankBtn = document.getElementById('btnSelfRankGuestCta');
+    const noticeBtn = document.getElementById('btnLeaderboardGuestNoticeCta');
 
-    document.getElementById('btnSelfRankGuestCta')?.addEventListener('click', handleGuestLeaderboardJoinCta);
-    document.getElementById('btnLeaderboardGuestNoticeCta')?.addEventListener('click', handleGuestLeaderboardJoinCta);
+    if (selfRankBtn && !selfRankBtn.dataset.guestCtaBound) {
+        selfRankBtn.dataset.guestCtaBound = 'true';
+        selfRankBtn.addEventListener('click', handleGuestLeaderboardJoinCta);
+    }
+    if (noticeBtn && !noticeBtn.dataset.guestCtaBound) {
+        noticeBtn.dataset.guestCtaBound = 'true';
+        noticeBtn.addEventListener('click', handleGuestLeaderboardJoinCta);
+    }
 }
 
 function renderSelfRankBar(rows, metric) {

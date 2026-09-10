@@ -3015,7 +3015,7 @@ export async function sendFriendRequest(targetUserId) {
             detail: { message: 'سجّل حسابك في ثواني عشان تقدر تصاحب الأبطال وتتابع خطواتهم سوا!', type: 'info' },
         }));
         try {
-            const { showAuthGate } = await import('./guest-banner.js');
+            const { showAuthGate } = await import('./onboarding.js');
             if (typeof showAuthGate === 'function') showAuthGate();
         } catch (_) {}
         return false;
