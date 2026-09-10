@@ -942,9 +942,19 @@ function bindStepsFlushLifecycleEvents() {
     if (stepsFlushLifecycleBound) return;
     stepsFlushLifecycleBound = true;
 
-    // أي خطوات اتحفظت من جلسة سابقة (المستخدم قفل الصفحة وهو offline)
-    // بنضمّها دلوقتي عشان تتبعت مع أول Flush جاي
-    restorePendingStepsFromStorage();
+    // (إصلاح - باج حقيقي "التضاعف عند إعادة الفتح") النداء اللي كان
+    // هنا لـ restorePendingStepsFromStorage() اتشال نهائيًا - كان بيسبب
+    // تضاعف حقيقي في daily_steps على السيرفر: النداء الأول لنفس الدالة
+    // في أول الملف (شوف فوق) بيغطي الغرض المُعلن بالكامل بالفعل (استرجاع
+    // رصيد من جلسة سابقة اتقفلت) لأنه بيتنفذ قبل أي حدث steps:progress
+    // يقدر يوصله أصلاً. لو recordStepsProgress() كتبت نسخة احتياطية في
+    // localStorage لخطوات وصلت *قبل* ما currentAuthUser يتظبط (شوف الشرط
+    // جواها)، وبعدين loadAndRenderRealProfile عملت flushPendingStepsBatch()
+    // مباشرة من الذاكرة (بتصفّر pendingStepsDelta بس متمسحش النسخة
+    // المحفوظة في localStorage)، كان النداء ده هنا بيلاقي نفس النسخة دي
+    // لسه موجودة ويضيفها *تاني* فوق رصيد اتبعت للسيرفر بالفعل - كل فتحة
+    // جديدة للتطبيق كانت بتديها فرصة جديدة تتكرر (فتضخيم يتراكم فوق
+    // بعضه مع كل مرة تقفل/تفتح).
 
     document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'hidden') {
