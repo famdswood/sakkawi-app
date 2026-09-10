@@ -1,5 +1,6 @@
 package com.sakkawi.app;
 
+import android.Manifest;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
@@ -8,6 +9,8 @@ import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
+import android.content.pm.ServiceInfo;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
@@ -16,6 +19,7 @@ import android.os.Build;
 import android.os.IBinder;
 
 import androidx.core.app.NotificationCompat;
+import androidx.core.content.ContextCompat;
 
 import java.text.SimpleDateFormat;
 import java.util.Date;
@@ -83,7 +87,23 @@ public class StepCounterForegroundService extends Service implements SensorEvent
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        startForeground(NOTIFICATION_ID, buildNotification());
+        // [أمان] التحقق من منح إذن التعرف على النشاط على أندرويد 10+
+        // لمنع حدوث SecurityException إذا سحب المستخدم الإذن يدويًا
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACTIVITY_RECOGNITION)
+                    != PackageManager.PERMISSION_GRANTED) {
+                stopSelf();
+                return START_NOT_STICKY;
+            }
+        }
+
+        // [أندرويد 14+ / API 34+] يجب تمرير نوع الخدمة صراحة عند استدعاء startForeground
+        // وإلا يرمي النظام MissingForegroundServiceTypeException ويكرّش التطبيق
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            startForeground(NOTIFICATION_ID, buildNotification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_HEALTH);
+        } else {
+            startForeground(NOTIFICATION_ID, buildNotification());
+        }
 
         // (إصلاح - باج حقيقي خطير - شوف تعليق sensorListenerRegistered
         // فوق): لو الحساس متسجّل بالفعل، مننداش registerListener() تاني
@@ -118,22 +138,47 @@ public class StepCounterForegroundService extends Service implements SensorEvent
         }
     }
 
-    /** [الوضع 1] بيحسب "خطوات اليوم الحالي بس" من إجمالي الخطوات منذ آخر Reboot */
+    /**
+     * يحسب "خطوات اليوم الحالي" بدقة، مع حماية ضد إعادة تشغيل الموبايل (Reboot Resilience).
+     * حساس TYPE_STEP_COUNTER يعود للصفر عند إعادة تشغيل الهاتف؛ لذلك إذا انخفضت
+     * قيمة totalStepsSinceBoot عن الـ baseline المحفوظ في نفس اليوم، يتم اكتشاف حدوث
+     * Reboot والاحتفاظ بآخر خطوات سُجلت اليوم قبل الإقلاع بدلاً من تصفيرها وضياعها.
+     */
     private int resolveTodayStepCount(float totalStepsSinceBoot) {
         SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
         String todayKey = DAY_FORMAT.format(new Date());
         String savedDay = prefs.getString("baseline_date", null);
         float baseline = prefs.getFloat("baseline_total_steps", -1);
+        int stepsBeforeReboot = prefs.getInt("steps_before_reboot", 0);
+        int lastSavedStepsToday = prefs.getInt("steps_today", 0);
 
         SharedPreferences.Editor editor = prefs.edit();
 
-        if (savedDay == null || !savedDay.equals(todayKey) || baseline < 0) {
+        boolean isNewDay = savedDay == null || !savedDay.equals(todayKey);
+
+        if (isNewDay) {
+            // يوم جديد: إعادة تعيين الـ baseline وتصفير رصيد ما قبل الـ Reboot
             baseline = totalStepsSinceBoot;
+            stepsBeforeReboot = 0;
             editor.putString("baseline_date", todayKey);
+            editor.putFloat("baseline_total_steps", baseline);
+            editor.putInt("steps_before_reboot", 0);
+        } else if (baseline < 0) {
+            // أول قراءة مسجلة لليوم
+            baseline = totalStepsSinceBoot;
+            editor.putFloat("baseline_total_steps", baseline);
+        } else if (totalStepsSinceBoot < baseline) {
+            // [إصلاح ثغرة الـ Reboot]: الهاتف أُعيد تشغيله في منتصف اليوم!
+            // الحساس بدأ برقم أقل من الـ baseline السابق.
+            // نحتفظ بآخر عدد خطوات تم الوصول إليه اليوم كـ offset
+            stepsBeforeReboot = lastSavedStepsToday;
+            baseline = totalStepsSinceBoot;
+            editor.putInt("steps_before_reboot", stepsBeforeReboot);
             editor.putFloat("baseline_total_steps", baseline);
         }
 
-        int stepsToday = Math.max(0, Math.round(totalStepsSinceBoot - baseline));
+        int deltaSinceBaseline = Math.max(0, Math.round(totalStepsSinceBoot - baseline));
+        int stepsToday = stepsBeforeReboot + deltaSinceBaseline;
 
         editor.putInt("steps_today", stepsToday);
         editor.putString("steps_today_date", todayKey);

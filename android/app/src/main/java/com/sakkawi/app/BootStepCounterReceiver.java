@@ -1,11 +1,12 @@
 package com.sakkawi.app;
 
+import android.Manifest;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
-import android.os.Build;
-
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
+import android.os.Build;
 
 import androidx.core.content.ContextCompat;
 
@@ -48,6 +49,15 @@ public class BootStepCounterReceiver extends BroadcastReceiver {
                 "sakkawi_native_step_prefs", Context.MODE_PRIVATE);
         boolean trackingAllowed = prefs.getBoolean("tracking_allowed", false);
         if (!trackingAllowed) return;
+
+        // فحص أمان: التحقق من منح إذن ACTIVITY_RECOGNITION على أندرويد 10+
+        // لمنع حدوث SecurityException إذا سحب المستخدم الصلاحية قبل إعادة التشغيل
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACTIVITY_RECOGNITION)
+                    != PackageManager.PERMISSION_GRANTED) {
+                return;
+            }
+        }
 
         Intent serviceIntent = new Intent(context, StepCounterForegroundService.class);
 
