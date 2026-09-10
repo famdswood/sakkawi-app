@@ -266,6 +266,24 @@ let viewMarkTimer = null;
 /** مؤقت إزالة كلاس .pulse من زرار القلب بعد انتهاء أنيميشن النبضة */
 let heartPulseTimer = null;
 
+/* ------------------------------------------------------------------
+   حالة التفاعل بالإيماءات (Swipe down to dismiss & Double-tap to like)
+   وقائمة ترتيب المستخدمين للتنقل التلقائي
+   ------------------------------------------------------------------ */
+let swipeTouchStartX = 0;
+let swipeTouchStartY = 0;
+let swipeTouchStartTime = 0;
+let isSwipeActive = false;
+let isSwipingActive = false;
+
+let lastTapTimestamp = 0;
+let lastTapX = 0;
+let lastTapY = 0;
+let isDoubleTapTriggered = false;
+
+/** قائمة معرّفات أصحاب الاستوريات النشطة بالترتيب المعروض في الشريط العلوي */
+let orderedStoryUserIds = [];
+
 /**
  * إرجاع مصفوفة الستوريز الحالية (يُستخدم مبدئياً من app.js عند الحاجة)
  */
@@ -708,6 +726,41 @@ function getUserStoryIndices(userId) {
 }
 
 /**
+ * توليد خلفية متدرجة مخروطية (conic-gradient) لتقسيم إطار دائرة الستوري
+ * إلى قطع بعدد الاستوريات النشطة للمستخدم (مثل واتساب وإنستجرام)، مع تلوين
+ * القطع المشاهدة بلون داكن والقطع الجديدة بلون ذهبي متألق
+ * @param {Array<number>} userIndices
+ * @returns {string}
+ */
+function generateSegmentedRing(userIndices) {
+    if (!userIndices || userIndices.length <= 1) return '';
+    const count = userIndices.length;
+    // زاوية الفراغ بين كل قطعة والتانية (بالدرجات)
+    const gapDeg = count <= 4 ? 6 : (count <= 8 ? 4 : 3);
+    const spanDeg = 360 / count;
+    const stops = [];
+
+    for (let i = 0; i < count; i++) {
+        const isViewed = storiesData[userIndices[i]]?.viewed;
+        const segColor = isViewed ? '#4b5563' : '#F2D77E';
+        const startDeg = i * spanDeg + gapDeg / 2;
+        const endDeg = (i + 1) * spanDeg - gapDeg / 2;
+
+        if (i === 0 && startDeg > 0) {
+            stops.push(`var(--lux-950, #0a0c10) 0deg ${startDeg}deg`);
+        } else if (i > 0) {
+            const prevEnd = i * spanDeg - gapDeg / 2;
+            stops.push(`var(--lux-950, #0a0c10) ${prevEnd}deg ${startDeg}deg`);
+        }
+        stops.push(`${segColor} ${startDeg}deg ${endDeg}deg`);
+        if (i === count - 1 && endDeg < 360) {
+            stops.push(`var(--lux-950, #0a0c10) ${endDeg}deg 360deg`);
+        }
+    }
+    return `conic-gradient(from -90deg, ${stops.join(', ')})`;
+}
+
+/**
  * رسم شريط دوائر الستوريز أعلى الشاشة الرئيسية
  * تُستدعى مرة عند تحميل التطبيق، ومرة كل ما تتغير بيانات الستوريز
  */
@@ -744,6 +797,7 @@ export function renderStoriesBar() {
 
         groupedStories.push({
             userId: story.userId,
+            userIndices,
             openIndex: firstUnviewedIndex !== undefined ? firstUnviewedIndex : userIndices[0],
             allViewed: userIndices.every((idx) => storiesData[idx].viewed),
             userName: story.userName,
@@ -779,8 +833,19 @@ export function renderStoriesBar() {
     const myAvatarSrc = (ownGroup && ownGroup.avatar) || currentUserAvatar || DEFAULT_STORY_AVATAR;
     const myUserName = (ownGroup && ownGroup.userName) || currentUserName || 'أنا';
 
+    // حفظ ترتيب المستخدمين المعروضين للتنقل التلقائي
+    orderedStoryUserIds = [
+        ...(hasOwnActiveStory ? [ownGroup.userId] : []),
+        ...groupedStories.map((g) => g.userId),
+    ];
+
+    const mySegmentedBg = (hasOwnActiveStory && ownGroup.userIndices.length > 1)
+        ? generateSegmentedRing(ownGroup.userIndices)
+        : '';
+
     const myStoryButton = `
         <div class="story-avatar my-story-avatar ${hasOwnActiveStory ? '' : 'no-active-story'}"
+             ${mySegmentedBg ? `style="background: ${mySegmentedBg};"` : ''}
              role="group" aria-label="${hasOwnActiveStory ? `استوريك يا ${escapeHtml(myUserName)}` : 'أضف قصة جديدة'}">
             <button id="btnMyStoryAvatar" type="button" class="my-story-avatar-img"
                     aria-label="${hasOwnActiveStory ? 'مشاهدة استوريك' : 'أضف قصة جديدة'}"
@@ -794,12 +859,19 @@ export function renderStoriesBar() {
         </div>
     `;
 
-    const storyButtons = groupedStories.map((group) => `
-        <button class="story-avatar ${group.allViewed ? 'viewed' : ''}" data-story-index="${group.openIndex}" aria-label="ستوري ${escapeHtml(group.userName)}">
+    const storyButtons = groupedStories.map((group) => {
+        const segBg = (group.userIndices && group.userIndices.length > 1)
+            ? generateSegmentedRing(group.userIndices)
+            : '';
+        return `
+        <button class="story-avatar ${group.allViewed ? 'viewed' : ''}" 
+                ${segBg ? `style="background: ${segBg};"` : ''}
+                data-story-index="${group.openIndex}" aria-label="ستوري ${escapeHtml(group.userName)}">
             <img src="${escapeHtml(group.avatar)}" alt="${escapeHtml(group.userName)}"
                  onerror="this.src='${DEFAULT_STORY_AVATAR}'">
         </button>
-    `).join('');
+    `;
+    }).join('');
 
     bar.innerHTML = myStoryButton + storyButtons;
 
@@ -1551,6 +1623,7 @@ function hideStoryViewerModal() {
     clearTimeout(longPressTimer);
     isLongPressActive = false;
     clearTimeout(viewMarkTimer);
+    resetViewerCardSwipeStyles();
     const modal = document.getElementById('storyViewerModal');
     if (modal) {
         modal.classList.add('hidden');
@@ -1579,9 +1652,8 @@ export function closeStory() {
 }
 
 /**
- * الانتقال للستوري التالية بتاعة نفس الشخص، أو إغلاق المودال لو كانت
- * آخر ستوري عنده - عمداً منقلش تلقائي لستوريز شخص تاني، عشان كل شخص
- * يفضل معزول تمامًا عن اللي بعده
+ * الانتقال للستوري التالية لنفس الشخص، أو الانتقال التلقائي للناشر التالي
+ * في شريط الستوريز، أو إغلاق المودال إذا انتهت كافة الاستوريات
  */
 export function goToNextStory() {
     if (currentGroupPosition < currentGroupStoryIndices.length - 1) {
@@ -1589,19 +1661,78 @@ export function goToNextStory() {
         currentStoryIndex = currentGroupStoryIndices[currentGroupPosition];
         renderCurrentStory();
     } else {
-        closeStory();
+        advanceToNextUserOrClose();
     }
 }
 
 /**
- * الرجوع للستوري السابقة بتاعة نفس الشخص (لو موجودة) - بردو من غير ما
- * نطلع لستوريز شخص تاني
+ * الانتقال التلقائي لأول استوري غير مشاهدة عند الناشر التالي في الشريط،
+ * أو إغلاق المودال عند الوصول لآخر ناشر في الشريط
+ */
+function advanceToNextUserOrClose() {
+    const currentStory = storiesData[currentStoryIndex];
+    if (!currentStory) {
+        closeStory();
+        return;
+    }
+
+    const currentOwnerId = currentStory.userId;
+    const currentUserIdx = orderedStoryUserIds.indexOf(currentOwnerId);
+
+    if (currentUserIdx !== -1 && currentUserIdx < orderedStoryUserIds.length - 1) {
+        const nextUserId = orderedStoryUserIds[currentUserIdx + 1];
+        const nextUserStoryIndices = getUserStoryIndices(nextUserId);
+
+        if (nextUserStoryIndices.length > 0) {
+            const firstUnviewed = nextUserStoryIndices.find((idx) => !storiesData[idx].viewed);
+            const targetStoryIndex = firstUnviewed !== undefined ? firstUnviewed : nextUserStoryIndices[0];
+
+            currentGroupStoryIndices = nextUserStoryIndices;
+            currentGroupPosition = nextUserStoryIndices.indexOf(targetStoryIndex);
+            currentStoryIndex = targetStoryIndex;
+
+            renderCurrentStory();
+            return;
+        }
+    }
+
+    closeStory();
+}
+
+/**
+ * الرجوع للستوري السابقة لنفس الشخص، أو الرجوع لآخر ستوري عند الناشر السابق
  */
 export function goToPreviousStory() {
     if (currentGroupPosition > 0) {
         currentGroupPosition -= 1;
         currentStoryIndex = currentGroupStoryIndices[currentGroupPosition];
         renderCurrentStory();
+    } else {
+        regressToPreviousUserOrStay();
+    }
+}
+
+/**
+ * الرجوع لآخر ستوري عند الناشر السابق في الشريط
+ */
+function regressToPreviousUserOrStay() {
+    const currentStory = storiesData[currentStoryIndex];
+    if (!currentStory) return;
+
+    const currentOwnerId = currentStory.userId;
+    const currentUserIdx = orderedStoryUserIds.indexOf(currentOwnerId);
+
+    if (currentUserIdx > 0) {
+        const prevUserId = orderedStoryUserIds[currentUserIdx - 1];
+        const prevUserStoryIndices = getUserStoryIndices(prevUserId);
+
+        if (prevUserStoryIndices.length > 0) {
+            currentGroupStoryIndices = prevUserStoryIndices;
+            currentGroupPosition = prevUserStoryIndices.length - 1;
+            currentStoryIndex = prevUserStoryIndices[currentGroupPosition];
+
+            renderCurrentStory();
+        }
     }
 }
 
@@ -1758,17 +1889,20 @@ export async function initStoriesUI() {
     const heartBtn = document.getElementById('storyHeartBtn');
 
     // ضغطة عادية (تاب) على منطقة يمين/شمال بتنقل بين الاستوريات - إلا
-    // لو كانت النقلة دي في الحقيقة نهاية ضغطة مطولة (هنتجاهلها هنا لأنها
-    // كانت بالفعل قامت بالإيقاف/الاستئناف عن طريق pointerdown/up تحت)
+    // لو كانت النقلة دي في الحقيقة نهاية ضغطة مطولة، سحب لأسفل، أو دبل تاب
     if (nextZone) {
         nextZone.addEventListener('click', () => {
             if (isLongPressActive) { isLongPressActive = false; return; }
+            if (isSwipingActive) { isSwipingActive = false; return; }
+            if (isDoubleTapTriggered) { isDoubleTapTriggered = false; return; }
             goToNextStory();
         });
     }
     if (prevZone) {
         prevZone.addEventListener('click', () => {
             if (isLongPressActive) { isLongPressActive = false; return; }
+            if (isSwipingActive) { isSwipingActive = false; return; }
+            if (isDoubleTapTriggered) { isDoubleTapTriggered = false; return; }
             goToPreviousStory();
         });
     }
@@ -1846,11 +1980,11 @@ export async function initStoriesUI() {
         });
     }
 
-    // الضغطة المطولة: بتتراقب على مستوى الكارت كله (storyViewerCard)
-    // بغض النظر عن العنصر الفرعي اللي اتضغط (منطقة تنقل، محتوى..إلخ)
-    // بفضل الـ event bubbling، زي ما هو موضّح في تعليق الـ HTML الأصلي
+    // الضغطة المطولة، السحب لأسفل للإغلاق، والنقر المزدوج (Double Tap):
+    // بتتراقب على مستوى الكارت كله (storyViewerCard)
     if (viewerCard) {
         viewerCard.addEventListener('pointerdown', handleStoryPointerDown);
+        viewerCard.addEventListener('pointermove', handleStoryPointerMove);
         viewerCard.addEventListener('pointerup', handleStoryPointerUp);
         viewerCard.addEventListener('pointerleave', handleStoryPointerCancel);
         viewerCard.addEventListener('pointercancel', handleStoryPointerCancel);
@@ -1906,42 +2040,250 @@ export async function initStoriesUI() {
 }
 
 /**
- * بداية الضغطة (pointerdown) على كارت الستوري: بندي مهلة
- * LONG_PRESS_THRESHOLD_MS قبل ما نعتبرها ضغطة مطولة فعلاً وتوقف المؤقت
- * (عشان تاب عادي سريع للتنقل مايتوقفش عن طريق الغلط)
+ * بداية الضغطة (pointerdown) على كارت الستوري:
+ * 1) فحص النقر المزدوج (Double Tap) للتفاعل بقلب متطاير وإعجاب تلقائي.
+ * 2) تسجيل إحداثيات ووقت بداية السحب (لإيماءة السحب لأسفل للإغلاق).
+ * 3) تشغيل مهلة الضغطة المطولة لتثبيت شريط التقدّم.
+ * @param {PointerEvent} event
  */
-function handleStoryPointerDown() {
+function handleStoryPointerDown(event) {
+    const now = performance.now();
+    const x = event.clientX;
+    const y = event.clientY;
+
+    // تسجيل إحداثيات السحب لأسفل
+    swipeTouchStartX = x;
+    swipeTouchStartY = y;
+    swipeTouchStartTime = now;
+    isSwipeActive = false;
+
+    // فحص النقر المزدوج (Double-tap)
+    const timeDiff = now - lastTapTimestamp;
+    const distDiff = Math.hypot(x - lastTapX, y - lastTapY);
+
+    if (timeDiff < 320 && distDiff < 45) {
+        // تم رصد دبل تاب
+        isDoubleTapTriggered = true;
+        lastTapTimestamp = 0;
+        clearTimeout(longPressTimer);
+        isLongPressActive = false;
+
+        // تنفيذ اللايك وأنيميشن القلب المتطاير
+        handleStoryDoubleTap(x, y);
+
+        // إعادة ضبط علم الدبل تاب بعد فترة وجيزة حتى لا يتأثر النقر اللاحق
+        setTimeout(() => { isDoubleTapTriggered = false; }, 120);
+        return;
+    }
+
+    lastTapTimestamp = now;
+    lastTapX = x;
+    lastTapY = y;
+
     isLongPressActive = false;
     clearTimeout(longPressTimer);
     longPressTimer = setTimeout(() => {
+        // لا نفعّل الضغطة المطولة إذا كان المستخدم بدأ بالسحب لأسفل بالفعل
+        if (isSwipeActive) return;
         isLongPressActive = true;
         pauseStoryProgress();
     }, LONG_PRESS_THRESHOLD_MS);
 }
 
 /**
- * رفع الضغطة (pointerup): لو كانت وصلت فعلاً لحالة "ضغطة مطولة"،
- * بنستأنف المؤقت من نفس النقطة. لو لسه ماوصلتش (تاب سريع)، بنلغي
- * المهلة من غير أي تأثير على المؤقت أصلاً
+ * حركة المؤشر (pointermove) أثناء لمس الكارت:
+ * تتبّع إيماءة السحب لأسفل (Swipe Down to Dismiss) بسلاسة فيزيائية
+ * @param {PointerEvent} event
  */
-function handleStoryPointerUp() {
+function handleStoryPointerMove(event) {
+    if (!swipeTouchStartTime) return;
+
+    const dy = event.clientY - swipeTouchStartY;
+    const dx = event.clientX - swipeTouchStartX;
+
+    // السحب لأسفل (dy موجبة وتتجاوز الحركة الأفقية بوضوح)
+    if (dy > 12 && Math.abs(dy) > Math.abs(dx) * 1.15) {
+        if (!isSwipeActive) {
+            isSwipeActive = true;
+            isSwipingActive = true;
+            clearTimeout(longPressTimer);
+            isLongPressActive = false;
+            pauseStoryProgress();
+
+            const card = document.getElementById('storyViewerCard');
+            if (card) card.style.transition = 'none';
+        }
+
+        const card = document.getElementById('storyViewerCard');
+        const modal = document.getElementById('storyViewerModal');
+        if (card) {
+            const dragY = Math.max(0, dy);
+            // تقليص الحجم تدريجياً مع السحب لإعطاء شعور فيزيائي طبيعي
+            const scale = Math.max(0.72, 1 - (dragY / 1400));
+            const borderRadius = Math.min(32, dragY / 7);
+            card.style.transform = `translateY(${dragY}px) scale(${scale})`;
+            card.style.borderRadius = `${borderRadius}px`;
+        }
+        if (modal) {
+            const dragY = Math.max(0, dy);
+            const opacity = Math.max(0.2, 0.95 - (dragY / 600));
+            modal.style.backgroundColor = `rgba(0, 0, 0, ${opacity})`;
+        }
+    }
+}
+
+/**
+ * رفع الضغطة (pointerup):
+ * لو كان هناك سحب لأسفل يتجاوز الحد المطلوب -> إغلاق الستوري بأنيميشن انزلاق،
+ * وإلا إعادة الكارت لمكانه الأصلي واستئناف مؤقت التقدّم
+ * @param {PointerEvent} event
+ */
+function handleStoryPointerUp(event) {
     clearTimeout(longPressTimer);
+
+    const card = document.getElementById('storyViewerCard');
+    const modal = document.getElementById('storyViewerModal');
+
+    if (isSwipeActive) {
+        const dy = event.clientY - swipeTouchStartY;
+        const elapsed = performance.now() - swipeTouchStartTime;
+        const velocityY = elapsed > 0 ? (dy / elapsed) : 0;
+
+        // حد الإغلاق: سحب أكثر من 110px أو سرعة نفض لأسفل تزيد عن 0.5px/ms
+        if (dy > 110 || velocityY > 0.5) {
+            if (card) {
+                card.style.transition = 'transform 0.22s ease-out, opacity 0.22s ease-out';
+                card.style.transform = 'translateY(100vh) scale(0.65)';
+                card.style.opacity = '0';
+            }
+            if (modal) {
+                modal.style.transition = 'background-color 0.22s ease-out';
+                modal.style.backgroundColor = 'rgba(0, 0, 0, 0)';
+            }
+            setTimeout(() => {
+                closeStory();
+                resetViewerCardSwipeStyles();
+            }, 220);
+        } else {
+            // إعادة الكارت لمكانه الطبيعي (Snap Back)
+            if (card) {
+                card.style.transition = 'transform 0.22s cubic-bezier(0.175, 0.885, 0.32, 1.2), border-radius 0.2s ease-out';
+                card.style.transform = 'translateY(0) scale(1)';
+                card.style.borderRadius = '';
+            }
+            if (modal) {
+                modal.style.transition = 'background-color 0.2s ease-out';
+                modal.style.backgroundColor = '';
+            }
+            setTimeout(() => {
+                if (card) card.style.transition = '';
+                if (modal) modal.style.transition = '';
+                resumeStoryProgress();
+            }, 220);
+        }
+
+        isSwipeActive = false;
+        setTimeout(() => { isSwipingActive = false; }, 80);
+        swipeTouchStartTime = 0;
+        return;
+    }
+
+    swipeTouchStartTime = 0;
+
     if (isLongPressActive) {
         resumeStoryProgress();
     }
 }
 
 /**
- * خروج المؤشر من الكارت أو إلغاء الضغطة (pointerleave/pointercancel) -
- * نفس منطق الرفع العادي، عشان مانسيبش المؤقت واقف لو المستخدم سحب
- * إصبعه بره الكارت من غير ما يرفعها فعلياً
+ * إلغاء الضغطة أو خروج المؤشر
  */
 function handleStoryPointerCancel() {
     clearTimeout(longPressTimer);
-    if (isLongPressActive) {
+    swipeTouchStartTime = 0;
+
+    if (isSwipeActive) {
+        resetViewerCardSwipeStyles();
+        resumeStoryProgress();
+        isSwipeActive = false;
+        setTimeout(() => { isSwipingActive = false; }, 80);
+    } else if (isLongPressActive) {
         resumeStoryProgress();
     }
-    isLongPressActive = false;
+}
+
+/**
+ * تصفير أي تنسيقات مؤقتة متبقية من إيماءة السحب لأسفل
+ */
+function resetViewerCardSwipeStyles() {
+    const card = document.getElementById('storyViewerCard');
+    const modal = document.getElementById('storyViewerModal');
+    if (card) {
+        card.style.transform = '';
+        card.style.opacity = '';
+        card.style.borderRadius = '';
+        card.style.transition = '';
+    }
+    if (modal) {
+        modal.style.backgroundColor = '';
+        modal.style.transition = '';
+    }
+}
+
+/**
+ * معالجة النقر المزدوج (Double Tap):
+ * وضع لايك للاستوري (إذا لم تكن معجبة بالفعل) وإظهار أنيميشن القلب المتطاير في موضع النقر
+ * @param {number} clientX
+ * @param {number} clientY
+ */
+function handleStoryDoubleTap(clientX, clientY) {
+    const story = storiesData[currentStoryIndex];
+    if (story) {
+        if (!story.liked) {
+            toggleStoryLike();
+        } else {
+            updateHeartButtonUI(true, /* withPulse */ true);
+        }
+    }
+    spawnFloatingHeart(clientX, clientY);
+}
+
+/**
+ * إنشاء عنصر القلب المتطاير المتحرك وحقنه في الكارت ثم حذفه تلقائياً
+ * @param {number} clientX
+ * @param {number} clientY
+ */
+function spawnFloatingHeart(clientX, clientY) {
+    const card = document.getElementById('storyViewerCard');
+    if (!card) return;
+
+    const heartEl = document.createElement('div');
+    heartEl.className = 'story-floating-heart';
+
+    const rect = card.getBoundingClientRect();
+    const relX = clientX ? (clientX - rect.left) : (rect.width / 2);
+    const relY = clientY ? (clientY - rect.top) : (rect.height / 2);
+
+    heartEl.style.left = `${Math.max(45, Math.min(rect.width - 45, relX))}px`;
+    heartEl.style.top = `${Math.max(65, Math.min(rect.height - 65, relY))}px`;
+
+    heartEl.innerHTML = `
+        <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+        </svg>
+    `;
+
+    card.appendChild(heartEl);
+
+    try {
+        if (navigator.vibrate) navigator.vibrate([30, 40, 25]);
+    } catch (_) {}
+
+    setTimeout(() => {
+        if (heartEl.parentNode) {
+            heartEl.parentNode.removeChild(heartEl);
+        }
+    }, 880);
 }
 
 /* ==================================================================
