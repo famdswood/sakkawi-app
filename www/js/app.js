@@ -171,14 +171,10 @@ function switchTab(tabId, { fromPopState = false } = {}) {
     // أي علاقة بينه وبين أي تبويب مفتوح دلوقتي، فكان بيفضل عالق فوق أي
     // تبويب تاني (البروفايل/الرئيسية) بعد أول ظهور ليه في تبويب الترتيب
     // - لأن مفيش حاجة كانت بتقفله تاني غير رسمة ليدربورد جديدة.
-    // الحل: بنتأكد إن العنصر ده موجود فعلياً *جوه* التبويب المستهدف
-    // (targetTab.contains) بدل ما نفترض اسم تبويب معيّن بالإيد - لو
-    // مش جواه، بنقفله فورًا. ولو *هو* جواه (يعني داخلين تبويب الترتيب)،
-    // بنعيد جلب/رسم بيانات الفترة النشطة حالياً عشان الشريط (وكل
-    // أرقام الليدربورد) تفضل حديثة كل مرة تدخل التبويب، وتظهر بس لو
-    // ترتيبك فعلاً معدّي أول 10 في البطولة دي بالذات.
+    // عند دخول تبويب الترتيب، بنعيد تحديث الليدربورد للتأكد من حداثة الأرقام.
+    // وفي حالة الانتقال لأي تبويب آخر، يتم إخفاء شريط الترتيب/شريط الزائر العائم فوراً
     const selfRankBar = document.getElementById('selfRankBar');
-    if (targetTab && selfRankBar && targetTab.contains(selfRankBar)) {
+    if (tabId === 'leaderboard') {
         refreshActiveLeaderboard();
     } else if (selfRankBar) {
         selfRankBar.classList.add('hidden');
@@ -1043,6 +1039,7 @@ function initSharedUIBridge() {
     // فمستخدم مسجل دخول كان بيشوف شريط الزائر يفلاش لحظة عند كل Refresh
     // قبل ما auth:login يرجّع كل حاجة لوضعها الصح.
     document.addEventListener('auth:confirmed-signed-out', () => {
+        initProfileUI(null);
         applyGuestModeRestrictions(false);
     });
 

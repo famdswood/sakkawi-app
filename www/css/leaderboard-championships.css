@@ -976,6 +976,76 @@ html:not(.dark) .self-rank-bar-inner {
     font-weight: 800;
 }
 
+/* حالة شريط الزائر التحفيزي العائم */
+.self-rank-bar-guest {
+    justify-content: space-between;
+    padding: 0.6rem 0.9rem;
+    border: 1px solid rgba(212, 175, 55, 0.45);
+    background: linear-gradient(105deg, rgba(20, 23, 31, 0.97) 0%, rgba(32, 28, 16, 0.95) 100%);
+    box-shadow: 0 10px 25px -5px rgba(212, 175, 55, 0.25), 0 0 0 1px rgba(212, 175, 55, 0.15) inset;
+}
+html:not(.dark) .self-rank-bar-guest {
+    background: linear-gradient(105deg, rgba(255, 255, 255, 0.98) 0%, rgba(254, 243, 199, 0.95) 100%);
+    border-color: rgba(212, 175, 55, 0.5);
+}
+.self-rank-guest-badge {
+    flex-shrink: 0;
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: 999px;
+    background: rgba(212, 175, 55, 0.15);
+    border: 1px solid rgba(212, 175, 55, 0.35);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 0 12px rgba(212, 175, 55, 0.25);
+}
+.self-rank-guest-text {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    padding-inline-start: 0.25rem;
+}
+.self-rank-guest-title {
+    font-size: 0.78rem;
+    font-weight: 900;
+    color: var(--gold-400);
+    line-height: 1.2;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.self-rank-guest-sub {
+    font-size: 0.62rem;
+    font-weight: 700;
+    color: var(--lux-400);
+    line-height: 1.2;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.self-rank-guest-btn {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.45rem 0.75rem;
+    border-radius: 0.85rem;
+    background: linear-gradient(135deg, #F59E0B 0%, #D97706 100%);
+    color: #0A0B0E;
+    font-size: 0.72rem;
+    font-weight: 900;
+    box-shadow: 0 4px 14px rgba(245, 158, 11, 0.4);
+    transition: transform 0.15s ease, filter 0.15s ease;
+    cursor: pointer;
+}
+.self-rank-guest-btn:active {
+    transform: scale(0.95);
+    filter: brightness(0.95);
+}
+
 /* ==================================================================
    7) استجابة الشاشات الصغيرة جداً (أقل من 360px)
    ================================================================== */

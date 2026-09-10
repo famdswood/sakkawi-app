@@ -932,6 +932,19 @@ function renderRemainingParticipantsCount(totalUsersCount) {
 
     if (totalUsersCount === null) return; // فشل الجلب - سيبها مخفية زي ما هي، متفترضش صفر
 
+    const currentUserId = getCurrentUserId();
+    const isGuest = Boolean(window.isGuestMode || !currentUserId);
+
+    // صيغة تحفيزية خاصة بالزائر تبرز حجم المجتمع الرياضي وتدعوه للتسجيل
+    if (isGuest) {
+        const count = totalUsersCount || 0;
+        el.textContent = count > 0 
+            ? `🔥 ${count} بطل مسجلين في سِكّاوي — سجّل مكانك بينهم!`
+            : '🏆 ابدأ المنافسة وكن أول الأبطال!';
+        el.classList.remove('hidden');
+        return;
+    }
+
     const remainingCount = Math.max(0, totalUsersCount - LEADERBOARD_DISPLAY_LIMIT);
     const phrase = buildRemainingParticipantsPhrase(remainingCount);
 
@@ -1213,6 +1226,33 @@ function renderLeaderboardRemainingList(rows, shouldAnimate = true) {
  * @param {Array<object>} rows
  * @param {'points'|'total_steps'} metric
  */
+let guestLeaderboardEventsBound = false;
+
+/**
+ * فتح شاشة التسجيل عند ضغط الزائر على أي زر تحفيزي في لوحة الصدارة
+ */
+async function handleGuestLeaderboardJoinCta() {
+    try {
+        const { showAuthGate } = await import('./guest-banner.js');
+        if (typeof showAuthGate === 'function') {
+            showAuthGate();
+        }
+    } catch (err) {
+        console.warn('[leaderboard.js] تعذر فتح نافذة الانضمام للزائر:', err);
+    }
+}
+
+/**
+ * ربط أزرار تحفيز الزائر داخل لوحة الصدارة والشريط العائم
+ */
+function bindGuestLeaderboardCtas() {
+    if (guestLeaderboardEventsBound) return;
+    guestLeaderboardEventsBound = true;
+
+    document.getElementById('btnSelfRankGuestCta')?.addEventListener('click', handleGuestLeaderboardJoinCta);
+    document.getElementById('btnLeaderboardGuestNoticeCta')?.addEventListener('click', handleGuestLeaderboardJoinCta);
+}
+
 function renderSelfRankBar(rows, metric) {
     const rankNumberEl = document.getElementById('currentUserRankNumber');
     const gapTextEl = document.getElementById('currentUserRankPercentText');
@@ -1220,17 +1260,40 @@ function renderSelfRankBar(rows, metric) {
     const stepsEl = document.getElementById('selfRankSteps');
     const avatarEl = document.getElementById('selfRankAvatar');
     const barEl = document.getElementById('selfRankBar');
+    const userContent = document.getElementById('selfRankBarUserContent');
+    const guestContent = document.getElementById('selfRankBarGuestContent');
+    const guestNotice = document.getElementById('leaderboardGuestNotice');
+
+    bindGuestLeaderboardCtas();
 
     const currentUserId = getCurrentUserId();
+    const isGuest = Boolean(window.isGuestMode || !currentUserId);
+
+    // إدارة لافتة الزائر في أعلى لوحة الصدارة
+    if (guestNotice) {
+        guestNotice.classList.toggle('hidden', !isGuest);
+    }
+
+    if (!barEl) return;
+
+    // في وضع الزائر: إظهار شريط الزائر العائم الفخم للتحفيز على التسجيل والمنافسة
+    if (isGuest) {
+        if (userContent) userContent.classList.add('hidden');
+        if (guestContent) guestContent.classList.remove('hidden');
+        barEl.classList.remove('hidden', 'is-topper');
+        return;
+    }
+
+    // لمستخدم مسجل: إخفاء كارت الزائر والتحقق من موقعه في الترتيب
+    if (guestContent) guestContent.classList.add('hidden');
+
     const myRow = currentUserId ? rows.find((row) => row.id === currentUserId) : null;
-
-    // الشريط بيظهر بس لو المستخدم مسجّل دخول، ترتيبه معروف فعلاً، وبره
-    // أول LEADERBOARD_DISPLAY_LIMIT الظاهرين في القائمة - غير كده بيفضل
-    // مخفي (صفه ظاهر أصلاً جوه القائمة نفسها لو ضمن أول 10)
     const shouldShowBar = Boolean(myRow && myRow.rank > LEADERBOARD_DISPLAY_LIMIT);
-    if (barEl) barEl.classList.toggle('hidden', !shouldShowBar);
 
-    if (!shouldShowBar) return;
+    barEl.classList.toggle('hidden', !shouldShowBar);
+    if (userContent) userContent.classList.toggle('hidden', !shouldShowBar);
+
+    if (!shouldShowBar || !myRow) return;
 
     if (avatarEl && myRow.avatar_url) avatarEl.src = myRow.avatar_url;
     if (rankNumberEl) rankNumberEl.textContent = `ترتيبك (${myRow.rank.toLocaleString()})`;
@@ -1238,9 +1301,6 @@ function renderSelfRankBar(rows, metric) {
     if (stepsEl) stepsEl.textContent = formatCompactNumber(myRow.total_steps);
 
     if (gapTextEl) {
-        // اللي فوق المستخدم الحالي مباشرة - بنلاقيه بالـ rank نفسه
-        // (مش بالـ index) عشان نفضل مظبوطين حتى لو فيه أي فجوة غير
-        // متوقعة في الأرقام الراجعة من الـ RPC
         const aboveRow = rows.find((row) => row.rank === myRow.rank - 1);
 
         if (aboveRow) {
@@ -1255,7 +1315,7 @@ function renderSelfRankBar(rows, metric) {
         }
     }
 
-    if (barEl) barEl.classList.remove('is-topper');
+    barEl.classList.remove('is-topper');
 }
 
 /**
@@ -1390,10 +1450,21 @@ async function loadAndRenderPeriod(periodKey) {
     ]);
 
     // لو مفيش ولا كاش ولا رد شبكة نجح خالص (أول فتح للتطبيق من غير نت
-    // ومن غير أي كاش سابق على الجهاز ده) - نفضّي حالة التحميل بدل ما
-    // تفضل شغالة للأبد (Skeleton معلّق من غير أي محتوى ولا رسالة خطأ)
+    // ومن غير أي كاش سابق على الجهاز ده) - نفضّي حالة التحميل ونعرض كارت إعادة المحاولة
     if (requestToken === leaderboardFetchToken && !hasRenderedRows) {
         clearLeaderboardLoadingState();
+        const list = document.getElementById('leaderboardList');
+        if (list) {
+            list.innerHTML = `
+                <div class="col-span-full bg-lux-900 border border-gold-500/15 rounded-3xl p-6 text-center space-y-3">
+                    <p class="text-xs text-lux-400 font-bold">تعذر جلب بيانات الترتيب حالياً. تأكد من اتصالك بالإنترنت.</p>
+                    <button type="button" onclick="window.refreshActiveLeaderboard ? window.refreshActiveLeaderboard() : location.reload()"
+                            class="py-2 px-5 rounded-2xl bg-gold-500/20 text-gold-400 hover:bg-gold-500/30 text-xs font-black transition active:scale-95 border border-gold-500/30">
+                        إعادة المحاولة 🔄
+                    </button>
+                </div>
+            `;
+        }
     }
 }
 
@@ -1530,4 +1601,9 @@ export function initChampionshipTabs(initialPeriod = 'today') {
 export function destroyChampionshipTimers() {
     stopCountdown();
     stopLeaderboardRealtimeSync();
+}
+
+// إتاحة الدالة على window لتمكين أزرار إعادة المحاولة والأحداث العامة
+if (typeof window !== 'undefined') {
+    window.refreshActiveLeaderboard = refreshActiveLeaderboard;
 }

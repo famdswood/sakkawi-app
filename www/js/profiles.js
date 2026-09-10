@@ -3010,13 +3010,17 @@ export function getFriendsList() {
  * @returns {Promise<boolean>} true لو نجح الإرسال (أو القبول التلقائي)
  */
 export async function sendFriendRequest(targetUserId) {
-    if (window.isGuestMode) {
+    if (window.isGuestMode || !currentAuthUser) {
         document.dispatchEvent(new CustomEvent('app:toast', {
-            detail: { message: 'سجّل دخول الأول عشان تقدر تضيف صديق', type: 'info' },
+            detail: { message: 'سجّل حسابك في ثواني عشان تقدر تصاحب الأبطال وتتابع خطواتهم سوا!', type: 'info' },
         }));
+        try {
+            const { showAuthGate } = await import('./guest-banner.js');
+            if (typeof showAuthGate === 'function') showAuthGate();
+        } catch (_) {}
         return false;
     }
-    if (!currentAuthUser || !targetUserId || targetUserId === currentAuthUser.id) return false;
+    if (!targetUserId || targetUserId === currentAuthUser.id) return false;
 
     // هل هو بعتلك طلب صداقة أصلاً؟ لو آه، بنقبله بدل ما نبعت طلب جديد
     const { data: existingIncoming } = await supabaseClient

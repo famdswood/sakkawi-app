@@ -1805,6 +1805,23 @@
                     </div>
                 </div>
 
+                <!-- كارت تحفيز الزائر داخل لوحة الصدارة -->
+                <div id="leaderboardGuestNotice" class="hidden relative overflow-hidden bg-gradient-to-l from-gold-500/15 via-lux-900 to-lux-900 border border-gold-500/25 rounded-3xl p-4 shadow-soft-card flex items-center justify-between gap-3">
+                    <div class="flex items-center gap-3 min-w-0">
+                        <div class="w-10 h-10 rounded-2xl bg-gold-500/20 border border-gold-500/30 flex items-center justify-center shrink-0 text-xl shadow-inner">
+                            🔥
+                        </div>
+                        <div class="min-w-0">
+                            <h4 class="text-xs font-black text-lux-50 truncate">أنت تتابع السباق كزائر 🏆</h4>
+                            <p class="text-[11px] font-bold text-lux-400 truncate">سجّل خطواتك الآن وادخل المنافسة على درع البطولة!</p>
+                        </div>
+                    </div>
+                    <button type="button" id="btnLeaderboardGuestNoticeCta"
+                            class="shrink-0 py-2 px-3.5 rounded-xl bg-gradient-to-r from-gold-400 to-gold-600 text-lux-950 font-black text-xs transition active:scale-95 shadow-glow-amber">
+                        سجّل ونافس
+                    </button>
+                </div>
+
                 <!-- =========================================================
                      منصة التوب 3 (Top 3 Podium) - p1/p2/p3-* هي نفس الـ ids
                      اللي renderLeaderboardPodium() في js/profiles.js بيملأها
@@ -2739,7 +2756,8 @@
              js/profiles.js - نفس الدالة القديمة، بس بقت بتملأ عناصر أكتر.
              ================================================================= -->
         <div id="selfRankBar" class="self-rank-bar hidden" role="status" aria-label="مركزك الحالي في البطولة">
-            <div class="self-rank-bar-inner">
+            <!-- وضع المستخدم المسجل: يظهر فقط إذا كان ترتيبه خارج أول 10 في البطولة -->
+            <div id="selfRankBarUserContent" class="self-rank-bar-inner hidden">
 
                 <div class="self-rank-position">
                     <span class="self-rank-number" id="currentUserRankNumber">—</span>
@@ -2765,6 +2783,24 @@
                     <p class="self-rank-gap" id="currentUserRankPercentText">بنحسب ترتيبك...</p>
                 </div>
 
+            </div>
+
+            <!-- وضع الزائر: شريط تحفيزي عائم فاخر للانضمام والمنافسة -->
+            <div id="selfRankBarGuestContent" class="self-rank-bar-inner self-rank-bar-guest hidden">
+                <div class="self-rank-guest-badge">
+                    <span class="text-xl" aria-hidden="true">🏆</span>
+                </div>
+                <div class="self-rank-guest-text">
+                    <p class="self-rank-guest-title">عايز تشوف اسمك ورتبتك هنا؟</p>
+                    <p class="self-rank-guest-sub">سجّل وابدأ المشي للمنافسة على درع البطولة!</p>
+                </div>
+                <button type="button" id="btnSelfRankGuestCta"
+                        class="self-rank-guest-btn">
+                    <span>انضم للسباق</span>
+                    <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M5 12h14M12 5l7 7-7 7"/>
+                    </svg>
+                </button>
             </div>
         </div>
 
