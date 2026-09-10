@@ -3499,10 +3499,10 @@
              وقت العرض (مش قيمة مفترضة)، فبيتصحح تلقائيًا مع أي عرض جديد
              من غير أي تعديل إضافي هناك -->
         <div id="storyViewerCard" class="w-full h-full md:max-w-[420px] lg:max-w-[480px] md:mx-auto relative overflow-hidden bg-lux-900">
-            <!-- أشرطة تقدم الستوريز -->
-            <div id="storyProgressBars" class="absolute top-2 left-2 right-2 z-20 flex gap-1"></div>
-            <!-- رأس الستوري (اسم صاحبها + وقت النشر) -->
-            <div id="storyHeader" class="absolute top-5 left-3 right-3 z-20 flex items-center justify-between"></div>
+            <!-- أشرطة تقدم الستوريز - مع مراعاة شريط الحالة والنوتش بأمان -->
+            <div id="storyProgressBars" class="absolute top-[max(2.6rem,calc(env(safe-area-inset-top,0px)+0.75rem))] left-3 right-3 z-20 flex gap-1.5"></div>
+            <!-- رأس الستوري (اسم صاحبها + وقت النشر) - في نفس صف زر الإغلاق وأسفل أشرطة التقدم -->
+            <div id="storyHeader" class="absolute top-[max(3.85rem,calc(env(safe-area-inset-top,0px)+1.85rem))] right-3.5 left-14 z-20 flex items-center justify-end"></div>
             <!-- محتوى الستوري -->
             <div id="storyContent" class="w-full h-full flex items-center justify-center text-white"></div>
             <!-- منطقتا التنقل: يمين = السابقة، شمال = التالية (اتقلب الاتجاه
@@ -3540,8 +3540,9 @@
             <button id="storyDeleteBtn" type="button"
                     class="hidden absolute bottom-5 right-4 z-30 w-9 h-9 flex items-center justify-center rounded-full bg-black/40 hover:bg-rose-500/70 text-white/90 hover:text-white text-base leading-none transition-colors"
                     aria-label="حذف الاستوري"><svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"/><path d="M9 7V4h6v3"/><path d="M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13"/><path d="M10 11v6M14 11v6"/></svg></button>
+            <!-- زر إغلاق الاستوري - متمركز على اليسار بمحاذاة صاحب الاستوري وبعيداً عن أشرطة النظام -->
             <button id="storyCloseBtn"
-                    class="absolute top-4 left-1/2 -translate-x-1/2 z-30 w-8 h-8 flex items-center justify-center rounded-full bg-black/30 hover:bg-black/50 text-white/90 hover:text-white text-sm leading-none transition-colors"
+                    class="absolute top-[max(3.85rem,calc(env(safe-area-inset-top,0px)+1.85rem))] left-3.5 z-30 w-8 h-8 flex items-center justify-center rounded-full bg-black/40 hover:bg-black/60 text-white/90 hover:text-white text-sm leading-none backdrop-blur-sm transition-colors"
                     aria-label="إغلاق الاستوري">✕</button>
         </div>
     </div>
@@ -3624,8 +3625,8 @@
     <div id="createStoryModal"
          class="hidden flex flex-col fixed inset-0 z-[70] bg-lux-950 select-none overflow-hidden">
 
-        <!-- هيدر الشاشة العلوي: شريط زجاجي عائم مستوحى من إنستجرام -->
-        <div class="flex items-center justify-between gap-2 px-4 pt-[calc(env(safe-area-inset-top)+0.8rem)] pb-2.5 z-30 shrink-0 bg-lux-950/80 backdrop-blur-md border-b border-white/5">
+        <!-- هيدر الشاشة العلوي: شريط زجاجي عائم مستوحى من إنستجرام مع مساحة آمنة كافية من شريط الحالة -->
+        <div class="flex items-center justify-between gap-2 px-4 pt-[max(3rem,calc(env(safe-area-inset-top,0px)+1.25rem))] pb-2.5 z-30 shrink-0 bg-lux-950/80 backdrop-blur-md border-b border-white/5">
             <!-- زر الإغلاق -->
             <button type="button" id="btnCloseCreateStory"
                     aria-label="إغلاق"
@@ -3645,7 +3646,7 @@
             <button type="button" id="btnPublishStory" data-requires-membership="true"
                     class="flex items-center justify-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-black text-lux-950 bg-gradient-to-r from-gold-400 via-amber-400 to-gold-500 shadow-glow-amber active:scale-95 transition-all shrink-0 disabled:opacity-50">
                 <span id="publishStoryLoadingSpinner" class="hidden w-3 h-3 border-2 border-lux-950/30 border-t-lux-950 rounded-full animate-spin"></span>
-                <span id="publishStoryBtnLabel">نشر 🚀</span>
+                <span id="publishStoryBtnLabel">نشر</span>
             </button>
         </div>
 
@@ -3657,7 +3658,7 @@
                 <!-- خانة الكتابة المباشرة في قلب القصة (Direct Canvas Typing) -->
                 <div class="w-full relative z-10 flex flex-col items-center justify-center my-auto">
                     <textarea id="createStoryTextarea" maxlength="120" rows="3"
-                              placeholder="اكتب استوريك هنا يا بطل..."
+                              placeholder="اكتب نص هنا.."
                               class="w-full bg-transparent border-none text-center text-white text-xl sm:text-2xl font-cairo font-black leading-relaxed placeholder:text-white/35 focus:outline-none resize-none overflow-hidden drop-shadow-md transition-all"></textarea>
                     
                     <!-- عداد الحروف خفيف وصغير أسفل النص مباشرة -->

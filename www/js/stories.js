@@ -1915,7 +1915,11 @@ export async function initStoriesUI() {
             goToPreviousStory();
         });
     }
-    if (closeBtn) closeBtn.addEventListener('click', closeStory);
+    if (closeBtn) {
+        closeBtn.addEventListener('click', closeStory);
+        closeBtn.addEventListener('pointerdown', (event) => event.stopPropagation());
+        closeBtn.addEventListener('pointerup', (event) => event.stopPropagation());
+    }
 
     // زرار القلب فوق منطقتي التنقل (يمين/شمال) بصرياً (z-30 > z-10 في
     // index.html)، لكن لازم نوقف الـ event bubbling صراحةً عشان الضغطة
@@ -2391,7 +2395,7 @@ function updateLivePreview() {
 
     const typedText = textarea.value.trim();
     if (previewText) {
-        previewText.textContent = typedText.length > 0 ? typedText : 'اكتب استوريك هنا...';
+        previewText.textContent = typedText.length > 0 ? typedText : 'اكتب نص هنا..';
     }
 
     // تعديل مقاس الخط ديناميكياً حسب طول النص لتجربة كانفاس احترافية
@@ -2784,7 +2788,7 @@ function setPublishLoadingState(isLoading) {
 
     publishBtn.disabled = isLoading;
     spinner.classList.toggle('hidden', !isLoading);
-    label.textContent = isLoading ? 'جاري النشر...' : 'نشر الاستوري';
+    label.textContent = isLoading ? 'جاري النشر...' : 'نشر';
 }
 
 /**
