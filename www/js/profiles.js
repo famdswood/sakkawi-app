@@ -668,6 +668,20 @@ async function flushPendingStepsBatch() {
     pendingStepsDelta = 0;
     pendingStepsPointsDelta = 0;
 
+    // (إصلاح - باج حقيقي "التضاعف عند إعادة الفتح - الجزء التاني") لو
+    // recordStepsProgress() كانت كتبت نسخة احتياطية من نفس الرصيد ده في
+    // localStorage وقت ما كنا مستنيين auth (شوف الشرط !currentAuthUser
+    // جوه recordStepsProgress)، لازم نمسحها دلوقتي بالظبط - إحنا بصدد
+    // نبعتها فعليًا للسيرفر. لو سبناها، وقفل التطبيق فجأة قبل أي حدث تاني
+    // يمسحها، هتفضل عالقة على القرص وهي فعليًا خطوات هتتبعت بالفعل خلال
+    // ثواني، وأول restorePendingStepsFromStorage() في الجلسة الجاية
+    // هيضيفها تاني فوق رصيد جديد - تضاعف حقيقي لخطوات اتسجلت خلاص.
+    try {
+        window.localStorage.removeItem(PENDING_STEPS_STORAGE_KEY);
+    } catch (err) {
+        console.warn('تعذر مسح النسخة الاحتياطية من localStorage قبل الـ Flush:', err);
+    }
+
     try {
         const oldPoints = currentProfileRow.points ?? 0;
         const oldTotalSteps = currentProfileRow.total_steps ?? 0;
