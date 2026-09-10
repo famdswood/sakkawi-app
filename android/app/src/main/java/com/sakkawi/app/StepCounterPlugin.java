@@ -13,7 +13,9 @@ import android.provider.Settings;
 
 import androidx.core.content.ContextCompat;
 
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 
@@ -123,10 +125,18 @@ public class StepCounterPlugin extends Plugin {
         SharedPreferences prefs = getContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
         int stepsToday = prefs.getInt("steps_today", 0);
         String date = prefs.getString("steps_today_date", null);
+        String todayKey = new SimpleDateFormat("yyyy-MM-dd", Locale.US).format(new Date());
+
+        // إذا كان التاريخ المحفوظ يخص يوماً سابقاً (قبل أول حركة للجهاز اليوم)،
+        // نرجع صفر خطوات وتاريخ اليوم منعاً لقراءة رصيد الأمس الخامل
+        if (date != null && !date.equals(todayKey)) {
+            stepsToday = 0;
+            date = todayKey;
+        }
 
         JSObject result = new JSObject();
         result.put("steps", stepsToday);
-        result.put("date", date);
+        result.put("date", date != null ? date : todayKey);
         call.resolve(result);
     }
 

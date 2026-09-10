@@ -201,21 +201,27 @@ public class StepCounterForegroundService extends Service implements SensorEvent
         }
     }
 
-    private Notification buildNotification() {
-        createNotificationChannelIfNeeded();
-
+    private PendingIntent getOpenAppPendingIntent() {
         Intent openAppIntent = new Intent(this, MainActivity.class);
         int flags = PendingIntent.FLAG_UPDATE_CURRENT;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             flags |= PendingIntent.FLAG_IMMUTABLE;
         }
-        PendingIntent pendingIntent = PendingIntent.getActivity(this, 0, openAppIntent, flags);
+        return PendingIntent.getActivity(this, 0, openAppIntent, flags);
+    }
+
+    private int getNotificationIcon() {
+        return R.drawable.ic_stat_notify;
+    }
+
+    private Notification buildNotification() {
+        createNotificationChannelIfNeeded();
 
         return new NotificationCompat.Builder(this, CHANNEL_ID)
                 .setContentTitle("سِكّاوي بيتابع خطواتك")
                 .setContentText("التتبع شغّال في الخلفية")
-                .setSmallIcon(android.R.drawable.ic_menu_compass) // مؤقت، غيّره لأيقونة التطبيق الحقيقية لاحقًا
-                .setContentIntent(pendingIntent)
+                .setSmallIcon(getNotificationIcon())
+                .setContentIntent(getOpenAppPendingIntent())
                 .setOngoing(true)
                 .build();
     }
@@ -224,7 +230,8 @@ public class StepCounterForegroundService extends Service implements SensorEvent
         Notification notification = new NotificationCompat.Builder(this, CHANNEL_ID)
                 .setContentTitle("سِكّاوي بيتابع خطواتك")
                 .setContentText("خطوات النهاردة: " + stepsToday)
-                .setSmallIcon(android.R.drawable.ic_menu_compass)
+                .setSmallIcon(getNotificationIcon())
+                .setContentIntent(getOpenAppPendingIntent())
                 .setOngoing(true)
                 .build();
 
@@ -237,7 +244,8 @@ public class StepCounterForegroundService extends Service implements SensorEvent
         Notification notification = new NotificationCompat.Builder(this, CHANNEL_ID)
                 .setContentTitle("سِكّاوي")
                 .setContentText(message)
-                .setSmallIcon(android.R.drawable.ic_menu_compass)
+                .setSmallIcon(getNotificationIcon())
+                .setContentIntent(getOpenAppPendingIntent())
                 .setOngoing(true)
                 .build();
 

@@ -668,18 +668,14 @@ async function flushPendingStepsBatch() {
     pendingStepsDelta = 0;
     pendingStepsPointsDelta = 0;
 
-    // (إصلاح - باج حقيقي "التضاعف عند إعادة الفتح - الجزء التاني") لو
-    // recordStepsProgress() كانت كتبت نسخة احتياطية من نفس الرصيد ده في
-    // localStorage وقت ما كنا مستنيين auth (شوف الشرط !currentAuthUser
-    // جوه recordStepsProgress)، لازم نمسحها دلوقتي بالظبط - إحنا بصدد
-    // نبعتها فعليًا للسيرفر. لو سبناها، وقفل التطبيق فجأة قبل أي حدث تاني
-    // يمسحها، هتفضل عالقة على القرص وهي فعليًا خطوات هتتبعت بالفعل خلال
-    // ثواني، وأول restorePendingStepsFromStorage() في الجلسة الجاية
-    // هيضيفها تاني فوق رصيد جديد - تضاعف حقيقي لخطوات اتسجلت خلاص.
+    // (تأمين رصيد الإرسال): نحفظ الرصيد كشبكة أمان في localStorage تحسباً لإغلاق التطبيق فجأة أثناء الطلب
     try {
-        window.localStorage.removeItem(PENDING_STEPS_STORAGE_KEY);
+        window.localStorage.setItem(PENDING_STEPS_STORAGE_KEY, JSON.stringify({
+            stepsDelta: stepsToFlush,
+            pointsDelta: pointsToFlush,
+        }));
     } catch (err) {
-        console.warn('تعذر مسح النسخة الاحتياطية من localStorage قبل الـ Flush:', err);
+        console.warn('تعذر تحديث رصيد الخطوات في localStorage قبل الـ Flush:', err);
     }
 
     try {
@@ -694,6 +690,13 @@ async function flushPendingStepsBatch() {
         // وتكتبها فعليًا جوه الداتابيز - pointsToFlush بقت مجرد قيمة
         // تقديرية للعرض المحلي، مش مصدر الحقيقة تاني.
         await applyStepsProgressServerSide(stepsToFlush);
+
+        // تم تأكيد استلام السيرفر للخطوات بنجاح - الآن فقط نمسح النسخة الاحتياطية بأمان
+        try {
+            window.localStorage.removeItem(PENDING_STEPS_STORAGE_KEY);
+        } catch (err) {
+            console.warn('تعذر مسح النسخة الاحتياطية من localStorage بعد نجاح الـ Flush:', err);
+        }
 
         // الـ Flush بيحدّث المقياسين (points و total_steps) مع بعض، فبنتحقق
         // من التخطي على الاتنين - كل واحد وليدربورده المستقل (شوف
@@ -838,6 +841,23 @@ export function recordStepsProgress(addedSteps, pointsEarned = 0) {
     // دلوقتي: بنجمّع الخطوات دايمًا بغض النظر عن حالة تسجيل الدخول.
     pendingStepsDelta += addedSteps;
     pendingStepsPointsDelta += pointsEarned;
+
+    // (تحديث تفاؤلي فوري - Optimistic UI): نزيد أرقام البروفايل والهيدر فوراً في الواجهة
+    // حتى لو النت مقطوع، عشان المستخدم يشوف خطواته ونقاطه بتزيد قدامه لحظياً
+    // في كل التابات وميحسش بإن فيه انفصال بين الشاشة الرئيسية وشاشة البروفايل
+    if (currentProfileRow) {
+        currentProfileRow.total_steps = (currentProfileRow.total_steps ?? 0) + addedSteps;
+        currentProfileRow.points = (currentProfileRow.points ?? 0) + pointsEarned;
+        updateProfileStats({
+            totalSteps: currentProfileRow.total_steps,
+            points: currentProfileRow.points,
+        });
+    } else {
+        updateProfileStats({
+            totalSteps: (profileStats.totalSteps || 0) + addedSteps,
+            points: (profileStats.points || 0) + pointsEarned,
+        });
+    }
 
     if (!currentAuthUser || !currentProfileRow) {
         // لسه مفيش مستخدم/بروفايل جاهز نبعت له - نحفظ الرصيد ده محليًا
@@ -3825,7 +3845,14 @@ async function loadAndRenderRealProfile(user) {
         // قيمة معروفة من Supabase - reconcileWithServerSteps بتتجاهل
         // النداء لو القيمة المحلية أصلاً أكبر أو مساوية (مفيش تراجع للخلف).
         if (currentProfileRow) {
-            reconcileWithServerSteps(currentProfileRow.daily_steps ?? 0);
+            // (إصلاح ثغرة انبعاث خطوات الأمس): نتأكد أولاً أن تاريخ البروفايل يطابق اليوم الحالي
+            // إذا كان البروفايل من الكاش وكان يخص يوماً سابقاً (والنت مقطوع فلم يتم تصفيره بالسيرفر بعد)،
+            // نتجاهل daily_steps القديمة حتى لا تنبعث كخطوات لليوم الجديد!
+            const todayStr = getLocalDateString();
+            const isRowFromToday = currentProfileRow.last_active_date === todayStr;
+            const safeServerDailySteps = isRowFromToday ? (currentProfileRow.daily_steps ?? 0) : 0;
+
+            reconcileWithServerSteps(safeServerDailySteps);
             // (جديد) نفس فكرة السطر اللي فوق بالظبط بس للرقم القياسي
             // (best_daily_steps) - عشان "رقمك القياسي" يفضل صح عبر كل
             // الأجهزة لنفس الحساب، مش بس محفوظ محليًا على جهاز واحد
