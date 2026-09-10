@@ -351,7 +351,7 @@ function buildPostCardElement(post) {
         ? `<p class="post-card-content">${escapeHtml(post.content).replace(/\n/g, '<br>')}</p>`
         : '';
     const imageHtml = post.image_url
-        ? `<img class="post-card-image" src="${post.image_url}" alt="" loading="lazy">`
+        ? `<img class="post-card-image" src="${escapeHtml(post.image_url)}" alt="" loading="lazy">`
         : '';
     const commentsOpen = openCommentSections.has(post.id);
 
@@ -615,7 +615,7 @@ function buildCommentElement(card, post, comment, isReply) {
     const likeCountText = comment.likesCount > 0 ? comment.likesCount.toLocaleString('ar-EG') : '';
 
     li.innerHTML = `
-        <img class="post-comment-avatar post-comment-clickable" src="${avatarUrl}" alt="" loading="lazy">
+        <img class="post-comment-avatar post-comment-clickable" src="${escapeHtml(avatarUrl)}" alt="" loading="lazy">
         <div class="post-comment-body">
             <div class="post-comment-bubble">
                 <span class="post-comment-author post-comment-clickable">${displayName}</span>
