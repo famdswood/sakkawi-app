@@ -81,14 +81,16 @@ body.onb-scroll-lock #appShell {
 #onboardingOverlay .onb-glow-1,
 #onboardingOverlay .onb-glow-2 {
     position: absolute;
-    width: 340px;
-    height: 340px;
+    width: 320px;
+    height: 320px;
     border-radius: 50%;
-    filter: blur(45px);
-    opacity: 0.4;
+    filter: blur(40px);
+    opacity: 0.35;
     pointer-events: none;
     z-index: 0;
-    transition: background-color 0.7s cubic-bezier(0.4, 0, 0.2, 1);
+    transform: translateZ(0);
+    contain: strict;
+    transition: background-color 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* ------------------------------------------------------------------
@@ -163,9 +165,11 @@ body.onb-scroll-lock #appShell {
 
     z-index: 2;
     opacity: 0;
-    transform: translateY(8px);
+    transform: translate3d(0, 10px, 0);
     visibility: hidden;
     pointer-events: none;
+    will-change: transform, opacity;
+    contain: layout paint;
     transition: opacity 0.22s cubic-bezier(0.22, 1, 0.36, 1),
                 transform 0.22s cubic-bezier(0.22, 1, 0.36, 1),
                 visibility 0s linear 0.22s;
@@ -182,7 +186,7 @@ body.onb-scroll-lock #appShell {
 
 #onboardingOverlay .onb-page-active {
     opacity: 1;
-    transform: translateY(0);
+    transform: translate3d(0, 0, 0);
     visibility: visible;
     pointer-events: auto;
     transition: opacity 0.22s cubic-bezier(0.22, 1, 0.36, 1),
@@ -326,6 +330,11 @@ body.onb-scroll-lock #appShell {
     animation: onbTrophyEnter 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) both,
                onbTrophyFloat 3.8s ease-in-out 0.8s infinite;
     transform-origin: 50% 85%;
+}
+
+@keyframes onbTrophyFloat {
+    0%, 100% { transform: translateY(0); }
+    50%      { transform: translateY(-7px); }
 }
 
 /* ------------------------------------------------------------------
@@ -646,172 +655,70 @@ body.onb-scroll-lock #appShell {
 }
 .onb-trophy-lottie svg { display: block; }
 
-/* الكأس الاحتياطي (SVG/CSS) - مخفي افتراضياً، js/onboarding.js بيظهره
-   (بيضيف onb-trophy-fallback-active) بس لو الـ Lottie فشل يحمّل أو
-   يشتغل */
-.onb-trophy-fallback {
-    display: none;
-}
-.onb-trophy-fallback.onb-trophy-fallback-active {
-    display: block;
-}
-
-/* حاوية شخصية الماشي الحقيقية (Lottie) - سلايد 2 بس. نفس مقاس
-   وموقع onb-icon-wrap (190×190) بالظبط، عشان أي تبديل بينها وبين
-   الأيقونة الاحتياطية (حالة فشل التحميل) ميغيّرش أي حاجة في التخطيط،
-   بنفس فلسفة onb-trophy-lottie تماماً */
-.onb-walk-lottie {
-    position: relative;
-    z-index: 1;
-    width: 100%;
-    height: 100%;
-    overflow: hidden;
-    border-radius: 12px;
-    filter: drop-shadow(0 8px 20px rgba(0, 0, 0, 0.4));
-}
-.onb-walk-lottie svg { display: block; }
-
-/* الأيقونة الاحتياطية (SVG/CSS) - مخفية افتراضياً، js/onboarding.js
-   بيظهرها (بيضيف onb-walk-fallback-active) بس لو الـ Lottie فشل
-   يحمّل/يشتغل */
-.onb-walk-fallback {
-    display: none;
-}
-.onb-walk-fallback.onb-walk-fallback-active {
-    display: block;
-}
-
-/* حاوية علامات الاستفهام الحقيقية (Lottie) - سلايد 3 بس. نفس مقاس
-   وموقع onb-icon-wrap (215×215) بالظبط، عشان أي تبديل بينها وبين
-   الأيقونة الاحتياطية (حالة فشل التحميل) ميغيّرش أي حاجة في التخطيط،
-   بنفس فلسفة onb-walk-lottie تماماً */
-.onb-quiz-lottie {
-    position: relative;
-    z-index: 1;
-    width: 100%;
-    height: 100%;
-    filter: drop-shadow(0 8px 20px rgba(0, 0, 0, 0.4));
-}
-.onb-quiz-lottie svg { display: block; }
-
-/* الأيقونة الاحتياطية (SVG/CSS) - مخفية افتراضياً، js/onboarding.js
-   بيظهرها (بيضيف onb-quiz-fallback-active) بس لو الـ Lottie فشل
-   يحمّل/يشتغل */
-.onb-quiz-fallback {
-    display: none;
-}
-.onb-quiz-fallback.onb-quiz-fallback-active {
-    display: block;
-}
-
-/* حاوية الدبوس/الموقع الحقيقي (Lottie) - سلايد 4 بس. نفس مقاس
-   وموقع onb-icon-wrap (215×215) بالظبط، عشان أي تبديل بينها وبين
-   الأيقونة الاحتياطية (حالة فشل التحميل) ميغيّرش أي حاجة في التخطيط.
-   الكانفاس الأصلي بتاع الملف (1080×1200) مش مربع (أطول شوية من
-   عرضه)، فـ "meet" الافتراضي بيحافظ على أبعاده الأصلية جوه المربع
-   من غير قص أو تمطيط - بنفس فلسفة onb-walk-lottie/onb-quiz-lottie */
-.onb-location-lottie {
-    position: relative;
-    z-index: 1;
-    width: 100%;
-    height: 100%;
-    filter: drop-shadow(0 8px 20px rgba(0, 0, 0, 0.4));
-}
-.onb-location-lottie svg { display: block; }
-
-/* الأيقونة الاحتياطية (SVG/CSS) - مخفية افتراضياً، js/onboarding.js
-   بيظهرها (بيضيف onb-location-fallback-active) بس لو الـ Lottie فشل
-   يحمّل/يشتغل */
-.onb-location-fallback {
-    display: none;
-}
-.onb-location-fallback.onb-location-fallback-active {
-    display: block;
-}
-
-/* حاوية البار تشارت الحقيقية (Lottie) - سلايد 5 بس. نفس مقاس وموقع
-   onb-icon-wrap (215×215) بالظبط، عشان أي تبديل بينها وبين الأيقونة
-   الاحتياطية (حالة فشل التحميل) ميغيّرش أي حاجة في التخطيط - بنفس
-   فلسفة onb-quiz-lottie/onb-location-lottie. الفرق هنا: الرسمة
-   الفعلية بتاخد جزء بس من كانفاس الملف الأصلي (500×500) والباقي
-   فاضي، فلو سيبناها على preserveAspectRatio الافتراضي (meet) مش
-   هتملى الحاوية. الحل: overflow:hidden على الحاوية + scale()
-   وtransform-origin على مركز الرسمة الفعلي (من غير ما نغيّر أي حاجة
-   في بيانات الـ Lottie نفسها أو نأثر على موقع/مقاس onb-icon-wrap).
-   (نسخة Gemini الحالية): بعد حساب bounding box كل الـ layers، الرسمة
-   بقت بتاخد تقريباً x:[71,430] y:[88,400] من الـ 500×500 (أكبر بكتير
-   من النسخة القديمة اللي كانت [127,375]x[137,350])، ومركزها لسه
-   ~50% أفقي / ~47% رأسي. بما إن الرسمة نفسها بقت كبيرة، الزوم
-   المطلوب فوقها بسيط جداً دلوقتي: scale(1.2) + origin 50% 47% بتخلي
-   المحتوى ياخد ~85-90% من مساحة onb-icon-wrap من غير ما يتقص أي جزء
-   منه حتى في أقصى لحظة حركة (البادچ اللي بيرقص فوق) */
-.onb-rank-lottie {
-    position: relative;
-    z-index: 1;
-    width: 100%;
-    height: 100%;
-    overflow: hidden;
-    filter: drop-shadow(0 8px 20px rgba(0, 0, 0, 0.4));
-}
-.onb-rank-lottie svg {
-    display: block;
-    transform: scale(1.2);
-    transform-origin: 50% 47%;
-}
-
-/* الأيقونة الاحتياطية (SVG/CSS) - مخفية افتراضياً، js/onboarding.js
-   بيظهرها (بيضيف onb-rank-fallback-active) بس لو الـ Lottie فشل
-   يحمّل/يشتغل */
-.onb-rank-fallback {
-    display: none;
-}
-.onb-rank-fallback.onb-rank-fallback-active {
-    display: block;
-}
-
-/* حاوية عملة النقاط الحقيقية (Lottie) - سلايد 6 بس. نفس مقاس وموقع
-   onb-icon-wrap بالظبط، عشان أي تبديل بينها وبين الأيقونة الاحتياطية
-   (حالة فشل التحميل) ميغيّرش أي حاجة في التخطيط - بنفس فلسفة
-   onb-rank-lottie/onb-quiz-lottie تماماً */
-.onb-points-lottie {
-    position: relative;
-    z-index: 1;
-    width: 100%;
-    height: 100%;
-    filter: drop-shadow(0 8px 20px rgba(0, 0, 0, 0.4));
-}
-.onb-points-lottie svg { display: block; }
-
-/* الأيقونة الاحتياطية (SVG/CSS) - مخفية افتراضياً، js/onboarding.js
-   بيظهرها (بيضيف onb-points-fallback-active) بس لو الـ Lottie فشل
-   يحمّل/يشتغل */
-.onb-points-fallback {
-    display: none;
-}
-.onb-points-fallback.onb-points-fallback-active {
-    display: block;
-}
-
-/* حاوية أيقونة "الكتابة" الحقيقية (Lottie) - سلايد 8 بس. نفس فلسفة
-   onb-points-lottie/onb-rank-lottie بالظبط: نفس مقاس وموقع onb-icon-wrap
-   عشان أي تبديل بينها وبين الأيقونة الاحتياطية ميغيّرش أي حاجة في التخطيط */
-.onb-writing-lottie {
-    position: relative;
-    z-index: 1;
-    width: 100%;
-    height: 100%;
-    filter: drop-shadow(0 8px 20px rgba(0, 0, 0, 0.4));
-}
-.onb-writing-lottie svg { display: block; }
-
-/* الأيقونة الاحتياطية (SVG/CSS) - مخفية افتراضياً، js/onboarding.js
-   بيظهرها (بيضيف onb-writing-fallback-active) بس لو الـ Lottie فشل
-   يحمّل/يشتغل */
+/* ------------------------------------------------------------------
+   الأيقونات الأساسية لجميع السلايدات (SVG/CSS أصلية فائقة الخفة والسرعة)
+   تعمل بمعدل 60fps على كارت الشاشة GPU مباشرة بدون أي سكريبتات Lottie
+   ------------------------------------------------------------------ */
+.onb-trophy-fallback,
+.onb-walk-fallback,
+.onb-quiz-fallback,
+.onb-location-fallback,
+.onb-rank-fallback,
+.onb-points-fallback,
 .onb-writing-fallback {
-    display: none;
+    display: block !important;
 }
-.onb-writing-fallback.onb-writing-fallback-active {
-    display: block;
+
+.onb-trophy-lottie,
+.onb-walk-lottie,
+.onb-quiz-lottie,
+.onb-location-lottie,
+.onb-rank-lottie,
+.onb-points-lottie,
+.onb-writing-lottie {
+    display: none !important;
+}
+
+/* تفاعل أيقونة الكويز */
+#onboardingOverlay .onb-quiz-fallback {
+    animation: onbTrophyEnter 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) both,
+               onbTrophyFloat 3.6s ease-in-out 0.8s infinite;
+}
+#onboardingOverlay .onb-quiz-badge {
+    transform-box: fill-box;
+    transform-origin: 50% 50%;
+    animation: onbStarGlow 2.4s ease-in-out infinite;
+}
+
+/* تفاعل أيقونة اللوكيشن */
+#onboardingOverlay .onb-location-fallback {
+    animation: onbTrophyEnter 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) both,
+               onbTrophyFloat 4s ease-in-out 0.8s infinite;
+}
+
+/* تفاعل أيقونة النقاط والعملات */
+#onboardingOverlay .onb-points-fallback {
+    animation: onbTrophyEnter 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) both,
+               onbTrophyFloat 3.8s ease-in-out 0.8s infinite;
+}
+#onboardingOverlay .onb-point-badge-1 {
+    transform-box: fill-box;
+    transform-origin: 50% 50%;
+    animation: onbBadgeFloat1 2.8s ease-in-out infinite;
+}
+#onboardingOverlay .onb-point-badge-2 {
+    transform-box: fill-box;
+    transform-origin: 50% 50%;
+    animation: onbBadgeFloat2 3.2s ease-in-out 0.3s infinite;
+}
+
+@keyframes onbBadgeFloat1 {
+    0%, 100% { transform: translateY(0) scale(1); }
+    50%      { transform: translateY(-4px) scale(1.06); }
+}
+@keyframes onbBadgeFloat2 {
+    0%, 100% { transform: translateY(0) scale(1); }
+    50%      { transform: translateY(-3px) scale(1.08); }
 }
 
 /* ------------------------------------------------------------------
