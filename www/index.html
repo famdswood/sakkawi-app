@@ -3623,85 +3623,138 @@
     <!-- عشان زرار رجوع المتصفح/الموبايل يقفلها بشكل طبيعي (شوف stories.js).-->
     <!-- ================================================================= -->
     <div id="createStoryModal"
-         class="hidden flex flex-col fixed inset-0 z-[70] bg-lux-950 select-none overflow-hidden">
+         class="hidden fixed inset-0 z-[70] bg-lux-950 select-none overflow-hidden touch-none">
 
-        <!-- هيدر الشاشة العلوي: شريط زجاجي عائم مستوحى من إنستجرام مع مساحة آمنة كافية من شريط الحالة -->
-        <div class="flex items-center justify-between gap-2 px-4 pt-[max(3rem,calc(env(safe-area-inset-top,0px)+1.25rem))] pb-2.5 z-30 shrink-0 bg-lux-950/80 backdrop-blur-md border-b border-white/5">
-            <!-- زر الإغلاق -->
-            <button type="button" id="btnCloseCreateStory"
-                    aria-label="إغلاق"
-                    class="w-8 h-8 flex items-center justify-center rounded-full bg-lux-800/80 hover:bg-lux-700 text-lux-300 hover:text-white transition-all text-base shrink-0 active:scale-95">✕</button>
-
-            <!-- كبسولات التحكم المدمجة: مدة العرض والخصوصية في المنتصف -->
-            <div class="flex items-center gap-1.5 overflow-x-auto" style="scrollbar-width: none;">
-                <div id="storyDurationOptions" class="flex items-center bg-lux-900/90 p-0.5 rounded-full border border-white/10 shrink-0">
-                    <!-- أزرار المدة: 24س / 12س -->
-                </div>
-                <div id="storyVisibilityOptions" class="flex items-center bg-lux-900/90 p-0.5 rounded-full border border-white/10 shrink-0">
-                    <!-- أزرار الخصوصية: الكل / الأصدقاء -->
-                </div>
+        <!-- كانفاس المعاينة الحية الشامل لكامل الشاشة (100% Edge-to-Edge Canvas) -->
+        <div id="storyPreviewArea"
+             class="absolute inset-0 w-full h-full flex flex-col items-center justify-center p-6 transition-all duration-300">
+            
+            <!-- خانة الكتابة المباشرة في قلب الشاشة الحرة -->
+            <div class="w-full max-w-md relative z-10 flex flex-col items-center justify-center my-auto px-4">
+                <textarea id="createStoryTextarea" maxlength="120" rows="3"
+                          placeholder="اكتب نص هنا.."
+                          class="w-full bg-transparent border-none text-center text-white text-2xl sm:text-3xl font-cairo font-black leading-relaxed placeholder:text-white/35 focus:outline-none resize-none overflow-hidden drop-shadow-md transition-all"></textarea>
+                
+                <!-- عداد الحروف خفيف وصغير أسفل النص مباشرة -->
+                <span id="createStoryCharCount" class="text-[10px] text-white/60 font-bold mt-2 bg-black/30 px-2.5 py-0.5 rounded-full backdrop-blur-sm shadow-sm">0 / 120</span>
             </div>
 
-            <!-- زر النشر العلوي المتوهج -->
-            <button type="button" id="btnPublishStory" data-requires-membership="true"
-                    class="flex items-center justify-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-black text-lux-950 bg-gradient-to-r from-gold-400 via-amber-400 to-gold-500 shadow-glow-amber active:scale-95 transition-all shrink-0 disabled:opacity-50">
-                <span id="publishStoryLoadingSpinner" class="hidden w-3 h-3 border-2 border-lux-950/30 border-t-lux-950 rounded-full animate-spin"></span>
-                <span id="publishStoryBtnLabel">نشر</span>
+            <!-- كبسولة ملصق الإنجاز الحي القابلة للسحب والتحريك على كامل أبعاد الشاشة -->
+            <div id="storyPreviewSticker" class="hidden story-stat-sticker">
+                <span id="storyPreviewStickerIcon" class="story-stat-sticker-icon flex items-center justify-center text-amber-400" aria-hidden="true">
+                    <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/>
+                    </svg>
+                </span>
+                <span id="storyPreviewStickerSteps" class="story-stat-sticker-steps">0 خطوة</span>
+                <span id="storyPreviewStickerPercent" class="story-stat-sticker-percent">0%</span>
+            </div>
+
+            <!-- عنصر storyPreviewText مخفي للتوافق البرمجي -->
+            <p id="storyPreviewText" class="hidden"></p>
+        </div>
+
+        <!-- زر الإغلاق العلوي العائم (Minimal Floating Close Button) في مساحة آمنة -->
+        <div class="absolute top-[max(2.8rem,calc(env(safe-area-inset-top,0px)+1rem))] left-4 z-40">
+            <button type="button" id="btnCloseCreateStory"
+                    aria-label="إغلاق"
+                    class="w-10 h-10 flex items-center justify-center rounded-full bg-lux-950/60 hover:bg-lux-900 border border-white/10 text-white/90 hover:text-white backdrop-blur-md shadow-lg transition-all active:scale-95">
+                <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
             </button>
         </div>
 
-        <!-- منطقة الكانفاس الرئيسية (Story Canvas) -->
-        <div class="flex-1 relative flex items-center justify-center p-3 sm:p-5 overflow-hidden">
-            <div id="storyPreviewArea"
-                 class="relative w-full h-full max-w-sm aspect-[9/16] max-h-[60vh] sm:max-h-[66vh] rounded-3xl overflow-hidden flex flex-col items-center justify-center p-6 shadow-2xl border border-white/10 transition-all duration-300">
-                
-                <!-- خانة الكتابة المباشرة في قلب القصة (Direct Canvas Typing) -->
-                <div class="w-full relative z-10 flex flex-col items-center justify-center my-auto">
-                    <textarea id="createStoryTextarea" maxlength="120" rows="3"
-                              placeholder="اكتب نص هنا.."
-                              class="w-full bg-transparent border-none text-center text-white text-xl sm:text-2xl font-cairo font-black leading-relaxed placeholder:text-white/35 focus:outline-none resize-none overflow-hidden drop-shadow-md transition-all"></textarea>
-                    
-                    <!-- عداد الحروف خفيف وصغير أسفل النص مباشرة -->
-                    <span id="createStoryCharCount" class="text-[10px] text-white/50 font-bold mt-1 bg-black/25 px-2 py-0.5 rounded-full backdrop-blur-sm">0 / 120</span>
-                </div>
-
-                <!-- كبسولة ملصق الإنجاز الحي القابلة للسحب والتحريك -->
-                <div id="storyPreviewSticker" class="hidden story-stat-sticker">
-                    <span id="storyPreviewStickerIcon" class="story-stat-sticker-icon" aria-hidden="true">🔥</span>
-                    <span id="storyPreviewStickerSteps" class="story-stat-sticker-steps">0 خطوة</span>
-                    <span id="storyPreviewStickerPercent" class="story-stat-sticker-percent">0%</span>
-                </div>
-
-                <!-- عنصر storyPreviewText مخفي للتوافق البرمجي -->
-                <p id="storyPreviewText" class="hidden"></p>
-            </div>
-        </div>
-
-        <!-- شريط الأدوات العائم السفلي (Bottom Floating Toolbar) -->
-        <div class="z-30 shrink-0 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] pt-2.5 px-3 bg-lux-950/90 backdrop-blur-xl border-t border-white/5 flex flex-col gap-2">
+        <!-- الشريط الجانبي العمودي العائم (Floating Vertical Sidebar) بأيقونات كودية SVG -->
+        <div id="storySidebarTools"
+             class="absolute top-[max(4.8rem,calc(env(safe-area-inset-top,0px)+3rem))] right-3.5 z-40 flex flex-col items-center gap-2.5 transition-all duration-300">
             
-            <!-- شريط الرقائق التحفيزية السريعة بنقرة واحدة (Quick Inspiration Chips) -->
-            <div id="quickInspirationChips" class="flex items-center gap-1.5 overflow-x-auto pb-1 px-1" style="scrollbar-width: none;">
-                <!-- رقائق سريعة بنقرة واحدة -->
-            </div>
+            <!-- 1. زر تبديل/فتح ألوان الخلفية -->
+            <button type="button" id="btnStoryToolBg" class="story-sidebar-tool-btn" aria-label="تغيير لون الخلفية" title="ألوان وتدرجات">
+                <svg class="w-5 h-5 text-gold-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="13.5" cy="6.5" r=".5" fill="currentColor"></circle>
+                    <circle cx="17.5" cy="10.5" r=".5" fill="currentColor"></circle>
+                    <circle cx="8.5" cy="7.5" r=".5" fill="currentColor"></circle>
+                    <circle cx="6.5" cy="12.5" r=".5" fill="currentColor"></circle>
+                    <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"></path>
+                </svg>
+            </button>
 
-            <!-- شريط الألوان وزر ملصق الإنجاز -->
-            <div class="flex items-center justify-between gap-3 pt-0.5">
-                <!-- باليتة ألوان وتدرجات الخلفية -->
-                <div id="storyBgOptions" class="flex items-center gap-2 overflow-x-auto py-1" style="scrollbar-width: none;">
-                    <!-- بتتحقن ديناميكياً من stories.js -->
-                </div>
+            <!-- 2. زر تفعيل ملصق الإنجاز الحي (عداد الخطوات) -->
+            <button type="button" id="btnToggleStatSticker" class="story-sidebar-tool-btn story-stat-toggle-btn" aria-label="إضافة إنجازي اليوم" title="إنجاز اليوم">
+                <svg class="w-5 h-5 text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"></path>
+                </svg>
+            </button>
 
-                <!-- زر تفعيل ملصق الإنجاز الحي -->
-                <button type="button" id="btnToggleStatSticker"
-                        class="story-stat-toggle-btn shrink-0 flex items-center gap-1.5 px-3.5 py-2 rounded-2xl text-xs font-black transition-all bg-lux-900 border border-gold-500/20 text-gold-400 hover:bg-gold-500/10 active:scale-95">
-                    <span class="text-sm leading-none" aria-hidden="true">🔥</span>
-                    <span class="whitespace-nowrap">إنجازي اليوم</span>
-                </button>
+            <!-- 3. زر تبديل مدة العرض -->
+            <button type="button" id="btnStoryToolDuration" class="story-sidebar-tool-btn" aria-label="مدة العرض" title="مدة العرض">
+                <svg class="w-4 h-4 text-lux-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <polyline points="12 6 12 12 16 14"></polyline>
+                </svg>
+                <span id="storyDurationBadge" class="text-[9px] font-black text-gold-400 leading-none mt-0.5">24س</span>
+            </button>
+
+            <!-- 4. زر تبديل الخصوصية -->
+            <button type="button" id="btnStoryToolVisibility" class="story-sidebar-tool-btn" aria-label="الخصوصية" title="مين يشوفها">
+                <svg class="w-4 h-4 text-lux-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                    <circle cx="9" cy="7" r="4"></circle>
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                </svg>
+                <span id="storyVisibilityBadge" class="text-[9px] font-black text-gold-400 leading-none mt-0.5">الكل</span>
+            </button>
+
+            <!-- 5. زر إظهار رقائق الإلهام والعبارات الجاهزة -->
+            <button type="button" id="btnStoryToolInspiration" class="story-sidebar-tool-btn" aria-label="عبارات سريعة" title="إلهام">
+                <svg class="w-5 h-5 text-amber-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"></path>
+                </svg>
+            </button>
+        </div>
+
+        <!-- درج باليتة الألوان المنزلق (Floating Color Palette Drawer) -->
+        <div id="storyBgPaletteBar"
+             class="hidden absolute bottom-[calc(env(safe-area-inset-bottom,0px)+4.8rem)] inset-x-4 z-40 flex items-center justify-center gap-2 overflow-x-auto py-2.5 px-4 bg-lux-950/85 backdrop-blur-xl border border-white/10 rounded-full shadow-2xl transition-all duration-300"
+             style="scrollbar-width: none;">
+            <div id="storyBgOptions" class="flex items-center gap-2.5 py-0.5">
+                <!-- دوائر الألوان تحقن ديناميكياً من stories.js -->
             </div>
         </div>
 
-        <!-- زر إلغاء مخفي للتوافق البرمجي الكامل مع أي مستمع حدث قديم -->
+        <!-- درج الرقائق والعبارات التحفيزية السريعة (Quick Inspiration Chips Drawer) -->
+        <div id="quickInspirationChips"
+             class="hidden absolute bottom-[calc(env(safe-area-inset-bottom,0px)+4.8rem)] inset-x-4 z-40 flex items-center gap-2 overflow-x-auto py-2 px-3 bg-lux-950/85 backdrop-blur-xl border border-white/10 rounded-full shadow-2xl transition-all duration-300"
+             style="scrollbar-width: none;">
+            <!-- رقائق سريعة بنقرة واحدة -->
+        </div>
+
+        <!-- شريط النشر السفلي العائم بأسلوب إنستجرام (Floating Bottom Publish Action) -->
+        <div id="storyBottomBar"
+             class="absolute bottom-0 inset-x-0 pb-[calc(env(safe-area-inset-bottom,0px)+1.2rem)] pt-3 px-5 z-40 flex items-center justify-between pointer-events-none transition-all duration-300">
+            
+            <!-- زر النشر الفخم في الزاوية اليسرى (أو اليمنى حسب الاتجاه) -->
+            <button type="button" id="btnPublishStory" data-requires-membership="true"
+                    class="pointer-events-auto flex items-center gap-2.5 px-5 py-2.5 rounded-full text-xs font-black text-lux-950 bg-gradient-to-r from-gold-400 via-amber-400 to-gold-500 shadow-glow-amber active:scale-95 transition-all disabled:opacity-50">
+                <img id="publishStoryUserAvatar" src="" class="w-6 h-6 rounded-full object-cover border border-lux-950/40" alt="" onerror="this.style.display='none'">
+                <span id="publishStoryLoadingSpinner" class="hidden w-3.5 h-3.5 border-2 border-lux-950/30 border-t-lux-950 rounded-full animate-spin"></span>
+                <span id="publishStoryBtnLabel">نشر في قصتك</span>
+                <svg class="w-3.5 h-3.5 text-lux-950 shrink-0 rotate-180" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                    <polyline points="12 5 19 12 12 19"></polyline>
+                </svg>
+            </button>
+
+            <!-- لمحة إرشادية خفيفة للسحب الأفقي -->
+            <span class="text-[10px] text-white/40 font-bold bg-black/25 px-2.5 py-1 rounded-full backdrop-blur-sm hidden sm:inline-block">اسحب أفقياً لتغيير اللون ↔</span>
+        </div>
+
+        <!-- حاويات مخفية للتوافق البرمجي الكامل مع الكود القائم -->
+        <div id="storyDurationOptions" class="hidden"></div>
+        <div id="storyVisibilityOptions" class="hidden"></div>
         <button type="button" id="btnCancelCreateStory" class="hidden"></button>
     </div>
 

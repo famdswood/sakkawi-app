@@ -2398,18 +2398,40 @@ function updateLivePreview() {
         previewText.textContent = typedText.length > 0 ? typedText : 'اكتب نص هنا..';
     }
 
-    // تعديل مقاس الخط ديناميكياً حسب طول النص لتجربة كانفاس احترافية
+    // تعديل مقاس الخط ديناميكياً حسب طول النص لتجربة كانفاس كاملة شاشة احترافية
     if (typedText.length > 70) {
-        textarea.style.fontSize = '1.05rem';
+        textarea.style.fontSize = '1.2rem';
     } else if (typedText.length > 35) {
-        textarea.style.fontSize = '1.25rem';
+        textarea.style.fontSize = '1.5rem';
     } else {
-        textarea.style.fontSize = '1.45rem';
+        textarea.style.fontSize = '1.9rem';
     }
 
     // تمدد تلقائي ناعم لارتفاع الخانة حسب عدد الأسطر
     textarea.style.height = 'auto';
-    textarea.style.height = Math.min(180, Math.max(70, textarea.scrollHeight)) + 'px';
+    textarea.style.height = Math.min(260, Math.max(80, textarea.scrollHeight)) + 'px';
+
+    // مزامنة حالة التحديد في شريط ألوان الخلفية
+    const bgContainer = document.getElementById('storyBgOptions');
+    if (bgContainer) {
+        bgContainer.querySelectorAll('.story-bg-swatch').forEach((el) => {
+            el.classList.toggle('selected', el.dataset.bgId === createStoryState.selectedBg.id);
+        });
+    }
+}
+
+/**
+ * التبديل التلقائي بين التدرجات اللونية (للسحب الأفقي أو زر الألوان)
+ * @param {number} direction 1 للتالي، -1 للسابق
+ */
+function cycleStoryBackground(direction = 1) {
+    const currentIdx = STORY_BG_OPTIONS.findIndex((b) => b.id === createStoryState.selectedBg.id);
+    const nextIdx = (currentIdx + direction + STORY_BG_OPTIONS.length) % STORY_BG_OPTIONS.length;
+    createStoryState.selectedBg = STORY_BG_OPTIONS[nextIdx];
+    updateLivePreview();
+    try {
+        if (navigator.vibrate) navigator.vibrate(20);
+    } catch (_) {}
 }
 
 /**
@@ -2435,6 +2457,9 @@ function renderQuickInspirationChips() {
                 updateLivePreview();
                 updateCharCount();
                 textarea.focus();
+                // إغلاق درج الإلهام بعد الاختيار
+                container.classList.add('hidden');
+                document.getElementById('btnStoryToolInspiration')?.classList.remove('is-active');
             }
         });
     });
@@ -2576,12 +2601,22 @@ function resetCreateStoryForm() {
     createStoryState.selectedVisibility = STORY_VISIBILITY_OPTIONS[0]; // نرجع لـ "الكل" كافتراضي
 
     // (المرحلة 4-أ) تصفير حالة ملصق الإنجاز الحي + إخفاؤه من المعاينة
-    // وإلغاء تنشيط زراره - بيحصل عند كل نشر أو إلغاء (فتح مودال جديد)
     createStoryState.includeStats = false;
-    // (تعديل) تصفير موضع/مقاس الكبسولة اللي المستخدم سحبها/كبّرها كمان،
-    // عشان أي استوري جديدة تبدأ من نفس المكان الافتراضي دايمًا
     createStoryState.stickerPosition = { ...DEFAULT_STICKER_POSITION };
     updateStatStickerPreview();
+
+    // تصفير الأدراج العائمة وحالة الأزرار والشارات
+    document.getElementById('storyBgPaletteBar')?.classList.add('hidden');
+    document.getElementById('quickInspirationChips')?.classList.add('hidden');
+    document.getElementById('btnStoryToolBg')?.classList.remove('is-active');
+    document.getElementById('btnStoryToolInspiration')?.classList.remove('is-active');
+    document.getElementById('createStoryModal')?.classList.remove('story-creator-focus-mode');
+
+    const durationBadge = document.getElementById('storyDurationBadge');
+    if (durationBadge) durationBadge.textContent = createStoryState.selectedDuration.label;
+
+    const visibilityBadge = document.getElementById('storyVisibilityBadge');
+    if (visibilityBadge) visibilityBadge.textContent = createStoryState.selectedVisibility.label;
 
     updateCharCount();
     renderCreateStoryOptionButtons();
@@ -2604,6 +2639,14 @@ function openCreateStoryModal() {
     if (!modal) return;
 
     resetCreateStoryForm();
+
+    // ضبط صورة المستخدم في زر النشر
+    const avatarEl = document.getElementById('publishStoryUserAvatar');
+    if (avatarEl) {
+        avatarEl.src = currentUserAvatar || DEFAULT_STORY_AVATAR;
+        avatarEl.style.display = 'block';
+    }
+
     modal.classList.remove('hidden');
 
     pushModalState(hideCreateStoryModal);
@@ -2897,32 +2940,152 @@ function bindCreateStoryModalEvents() {
     renderQuickInspirationChips();
     bindStickerDragAndResize();
 
+    const previewArea = document.getElementById('storyPreviewArea');
+
     if (textarea) {
         textarea.addEventListener('input', () => {
             updateCharCount();
             updateLivePreview();
         });
+
+        // تفعيل وضع التركيز التلقائي عند الكتابة لإخفاء الأدوات بسلاسة
+        textarea.addEventListener('focus', () => {
+            modal?.classList.add('story-creator-focus-mode');
+            document.getElementById('storyBgPaletteBar')?.classList.add('hidden');
+            document.getElementById('quickInspirationChips')?.classList.add('hidden');
+            document.getElementById('btnStoryToolBg')?.classList.remove('is-active');
+            document.getElementById('btnStoryToolInspiration')?.classList.remove('is-active');
+        });
+        textarea.addEventListener('blur', () => {
+            modal?.classList.remove('story-creator-focus-mode');
+        });
     }
 
-    // (المرحلة 4-أ) زرار "إضافة إنجازي اليوم 🔥" - Toggle بسيط بيقلب
-    // createStoryState.includeStats ويسيب updateStatStickerPreview تتكفل
-    // بجلب خطوات اليوم الفعلية وعرضها/إخفائها في المعاينة الحية
+    // 1. زر ألوان وتدرجات الخلفية (فتح/إغلاق شريط الألوان العائم)
+    const bgToolBtn = document.getElementById('btnStoryToolBg');
+    if (bgToolBtn) {
+        bgToolBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const palette = document.getElementById('storyBgPaletteBar');
+            const chips = document.getElementById('quickInspirationChips');
+            if (chips) chips.classList.add('hidden');
+            document.getElementById('btnStoryToolInspiration')?.classList.remove('is-active');
+
+            if (palette) {
+                const willOpen = palette.classList.contains('hidden');
+                palette.classList.toggle('hidden', !willOpen);
+                bgToolBtn.classList.toggle('is-active', willOpen);
+            }
+        });
+    }
+
+    // 2. زر ملصق الإنجاز الحي (عداد الخطوات)
     if (statStickerBtn) {
-        statStickerBtn.addEventListener('click', () => {
+        statStickerBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
             createStoryState.includeStats = !createStoryState.includeStats;
             updateStatStickerPreview();
+        });
+    }
+
+    // 3. زر تبديل مدة العرض بنقرة واحدة سريعة
+    const durationBtn = document.getElementById('btnStoryToolDuration');
+    if (durationBtn) {
+        durationBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const currentIdx = STORY_DURATION_OPTIONS.findIndex((d) => d.id === createStoryState.selectedDuration.id);
+            const nextIdx = (currentIdx + 1) % STORY_DURATION_OPTIONS.length;
+            createStoryState.selectedDuration = STORY_DURATION_OPTIONS[nextIdx];
+            const badge = document.getElementById('storyDurationBadge');
+            if (badge) badge.textContent = createStoryState.selectedDuration.label;
+            try { if (navigator.vibrate) navigator.vibrate(15); } catch (_) {}
+        });
+    }
+
+    // 4. زر تبديل الخصوصية بنقرة واحدة سريعة
+    const visibilityBtn = document.getElementById('btnStoryToolVisibility');
+    if (visibilityBtn) {
+        visibilityBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const currentIdx = STORY_VISIBILITY_OPTIONS.findIndex((v) => v.id === createStoryState.selectedVisibility.id);
+            const nextIdx = (currentIdx + 1) % STORY_VISIBILITY_OPTIONS.length;
+            createStoryState.selectedVisibility = STORY_VISIBILITY_OPTIONS[nextIdx];
+            const badge = document.getElementById('storyVisibilityBadge');
+            if (badge) badge.textContent = createStoryState.selectedVisibility.label;
+            try { if (navigator.vibrate) navigator.vibrate(15); } catch (_) {}
+        });
+    }
+
+    // 5. زر إظهار رقائق الإلهام والعبارات الجاهزة
+    const inspirationToolBtn = document.getElementById('btnStoryToolInspiration');
+    if (inspirationToolBtn) {
+        inspirationToolBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const chips = document.getElementById('quickInspirationChips');
+            const palette = document.getElementById('storyBgPaletteBar');
+            if (palette) palette.classList.add('hidden');
+            document.getElementById('btnStoryToolBg')?.classList.remove('is-active');
+
+            if (chips) {
+                const willOpen = chips.classList.contains('hidden');
+                chips.classList.toggle('hidden', !willOpen);
+                inspirationToolBtn.classList.toggle('is-active', willOpen);
+            }
+        });
+    }
+
+    // إيماءة السحب الأفقي عبر الكانفاس لتبديل التدرج اللوني (Swipe to change background)
+    if (previewArea) {
+        let swipeStartX = 0;
+        let swipeStartY = 0;
+        let swipeStartTime = 0;
+        let isPotentialSwipe = false;
+
+        previewArea.addEventListener('pointerdown', (e) => {
+            if (e.target.closest('#createStoryTextarea') ||
+                e.target.closest('#storyPreviewSticker') ||
+                e.target.closest('button')) {
+                isPotentialSwipe = false;
+                return;
+            }
+            if (document.activeElement === textarea) {
+                textarea.blur();
+            }
+            // إغلاق أي أدراج عائمة مفتوحة بمجرد لمس الكانفاس
+            document.getElementById('storyBgPaletteBar')?.classList.add('hidden');
+            document.getElementById('quickInspirationChips')?.classList.add('hidden');
+            document.getElementById('btnStoryToolBg')?.classList.remove('is-active');
+            document.getElementById('btnStoryToolInspiration')?.classList.remove('is-active');
+
+            swipeStartX = e.clientX;
+            swipeStartY = e.clientY;
+            swipeStartTime = Date.now();
+            isPotentialSwipe = true;
+        });
+
+        previewArea.addEventListener('pointerup', (e) => {
+            if (!isPotentialSwipe) return;
+            isPotentialSwipe = false;
+
+            const diffX = e.clientX - swipeStartX;
+            const diffY = e.clientY - swipeStartY;
+            const elapsed = Date.now() - swipeStartTime;
+
+            if (Math.abs(diffX) > 40 && Math.abs(diffY) < 45 && elapsed < 450) {
+                if (diffX < 0) {
+                    cycleStoryBackground(1);
+                } else {
+                    cycleStoryBackground(-1);
+                }
+            }
+        });
+
+        previewArea.addEventListener('pointercancel', () => {
+            isPotentialSwipe = false;
         });
     }
 
     if (closeBtn) closeBtn.addEventListener('click', closeCreateStoryModal);
     if (cancelBtn) cancelBtn.addEventListener('click', closeCreateStoryModal);
     if (publishBtn) publishBtn.addEventListener('click', publishStory);
-
-    // الضغط على الخلفية المظلمة نفسها (بره الكارت) بيقفل المودال، بنفس
-    // فلسفة باقي المودالز في المشروع (logoutConfirmModal، إلخ)
-    if (modal) {
-        modal.addEventListener('click', (event) => {
-            if (event.target === modal) closeCreateStoryModal();
-        });
-    }
 }
