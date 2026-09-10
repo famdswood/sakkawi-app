@@ -1540,7 +1540,11 @@ function renderCurrentStory() {
         // تتعرض بالظبط زي ما كانت من غير أي تغيير - مفيش HTML إضافي بيتحقن خالص
         const statStickerHtml = story.statData
             ? `<div class="story-stat-sticker" aria-hidden="true">
-                    <span class="story-stat-sticker-icon">🔥</span>
+                    <span class="story-stat-sticker-icon flex items-center justify-center text-amber-400">
+                        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/>
+                        </svg>
+                    </span>
                     <span class="story-stat-sticker-steps">${story.statData.steps.toLocaleString('en-US')} خطوة</span>
                     <span class="story-stat-sticker-percent">${story.statData.percent}%</span>
                </div>`
@@ -2493,55 +2497,22 @@ function measureAspectRatio(el) {
 }
 
 /**
- * حساب ووضع موضع/مقاس ملصق الإنجاز الحي (--sticker-x/-y بالبكسل +
- * --sticker-scale) جوه حاوية العرض الفعلية وقت المشاهدة (#storyContent).
- *
- * ليه محتاجين الدالة دي أصلاً: صندوق المعاينة وقت الإنشاء (#storyPreviewArea)
- * بيبقى بنسبة عرض/ارتفاع معيّنة (بتتأثر بـ max-height الشاشة وقت الإنشاء)،
- * لكن مشغل المشاهدة الفعلي (#storyContent) بياخد الشاشة بالكامل وممكن
- * تبقى نسبته مختلفة تمامًا (خصوصًا لو اختلف حجم/اتجاه الشاشة بين لحظة
- * الإنشاء ولحظة المشاهدة). لو استخدمنا نفس نسبة x%/y% على طول بين
- * الاتنين من غير تصحيح، الملصق كان بيبان في مكان مختلف عن اللي المستخدم
- * فعليًا حدده وقت الضبط - ده بالظبط سبب مشكلة "الملصق بيتحرك بعد النشر".
- *
- * الحل: statData.ar بتحفظ نسبة عرض/ارتفاع صندوق المعاينة وقت النشر (شوف
- * publishStory)، وهنا بنحسب أكبر مستطيل بنفس النسبة دي بيتلم بالكامل جوه
- * حاوية العرض الفعلية (نفس منطق CSS "object-fit: contain" تمامًا)، وبعدين
- * بنحط الملصق بنسبته x%/y% الأصلية *جوه المستطيل ده* مش جوه الحاوية كلها
- * - فيبقى نفس المكان النسبي بالظبط بغض النظر عن اختلاف نسبة الحاوية
+ * تطبيق موضع/مقاس ملصق الإنجاز الحي على كبسولة العرض (#storyContent .story-stat-sticker)
+ * بنسب مئوية مباشرة متطابقة 1:1 مع ما حدده المستخدم في شاشة الإعدادات والمعاينة،
+ * بعد توحيد حاوية المعاينة والعرض (#createStoryCard / #storyViewerCard) هندسيًا
  * @param {HTMLElement} containerEl - #storyContent
  * @param {HTMLElement} stickerEl
- * @param {{x: number, y: number, scale: number, ar: number}} statData
+ * @param {{x: number, y: number, scale: number}} statData
  */
 function positionRenderedSticker(containerEl, stickerEl, statData) {
     if (!containerEl || !stickerEl || !statData) return;
-    const containerWidth = containerEl.clientWidth;
-    const containerHeight = containerEl.clientHeight;
-    if (!containerWidth || !containerHeight) return;
+    const x = typeof statData.x === 'number' ? statData.x : DEFAULT_STICKER_POSITION.x;
+    const y = typeof statData.y === 'number' ? statData.y : DEFAULT_STICKER_POSITION.y;
+    const scale = typeof statData.scale === 'number' ? statData.scale : DEFAULT_STICKER_POSITION.scale;
 
-    const targetRatio = statData.ar || DEFAULT_STICKER_POSITION.ratio;
-    const containerRatio = containerWidth / containerHeight;
-
-    // نفس منطق "object-fit: contain": لو الحاوية الفعلية أعرض نسبيًا من
-    // صندوق المعاينة الأصلي، الارتفاع هو القيد (والعكس صحيح)
-    let contentWidth;
-    let contentHeight;
-    if (containerRatio > targetRatio) {
-        contentHeight = containerHeight;
-        contentWidth = contentHeight * targetRatio;
-    } else {
-        contentWidth = containerWidth;
-        contentHeight = contentWidth / targetRatio;
-    }
-    const offsetX = (containerWidth - contentWidth) / 2;
-    const offsetY = (containerHeight - contentHeight) / 2;
-
-    const pxX = offsetX + (statData.x / 100) * contentWidth;
-    const pxY = offsetY + (statData.y / 100) * contentHeight;
-
-    stickerEl.style.setProperty('--sticker-x', `${pxX}px`);
-    stickerEl.style.setProperty('--sticker-y', `${pxY}px`);
-    stickerEl.style.setProperty('--sticker-scale', statData.scale || DEFAULT_STICKER_POSITION.scale);
+    stickerEl.style.setProperty('--sticker-x', `${x}%`);
+    stickerEl.style.setProperty('--sticker-y', `${y}%`);
+    stickerEl.style.setProperty('--sticker-scale', scale);
 }
 
 /**
@@ -2648,6 +2619,7 @@ function openCreateStoryModal() {
     }
 
     modal.classList.remove('hidden');
+    modal.classList.add('flex');
 
     pushModalState(hideCreateStoryModal);
     setTimeout(() => {
@@ -2659,7 +2631,10 @@ function openCreateStoryModal() {
 /** الإخفاء الخام لمودال إنشاء الاستوري فقط - استخدم closeCreateStoryModal تحت */
 function hideCreateStoryModal() {
     const modal = document.getElementById('createStoryModal');
-    if (modal) modal.classList.add('hidden');
+    if (modal) {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+    }
 }
 
 /**

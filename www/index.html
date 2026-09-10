@@ -3501,10 +3501,10 @@
         <div id="storyViewerCard" class="w-full h-full md:max-w-[420px] lg:max-w-[480px] md:mx-auto relative overflow-hidden bg-lux-900">
             <!-- أشرطة تقدم الستوريز - مع مراعاة شريط الحالة والنوتش بأمان -->
             <div id="storyProgressBars" class="absolute top-[max(2.6rem,calc(env(safe-area-inset-top,0px)+0.75rem))] left-3 right-3 z-20 flex gap-1.5"></div>
-            <!-- رأس الستوري (اسم صاحبها + وقت النشر) - في نفس صف زر الإغلاق وأسفل أشرطة التقدم -->
-            <div id="storyHeader" class="absolute top-[max(3.85rem,calc(env(safe-area-inset-top,0px)+1.85rem))] right-3.5 left-14 z-20 flex items-center justify-end"></div>
+            <!-- رأس الستوري (اسم صاحبها + وقت النشر) - في أقصى اليمين وأسفل أشرطة التقدم مع مساحة آمنة لزر الإغلاق -->
+            <div id="storyHeader" class="absolute top-[max(3.85rem,calc(env(safe-area-inset-top,0px)+1.85rem))] right-3.5 z-20 flex items-center max-w-[calc(100%-5rem)]"></div>
             <!-- محتوى الستوري -->
-            <div id="storyContent" class="w-full h-full flex items-center justify-center text-white"></div>
+            <div id="storyContent" class="w-full h-full flex items-center justify-center text-white relative"></div>
             <!-- منطقتا التنقل: يمين = السابقة، شمال = التالية (اتقلب الاتجاه
                  عمداً حسب طلب المستخدم عشان يماشي اتجاه القراءة العربي)،
                  right-0/left-0 دول خصائص فيزيائية ثابتة مش منطقية، والربط
@@ -3623,10 +3623,13 @@
     <!-- عشان زرار رجوع المتصفح/الموبايل يقفلها بشكل طبيعي (شوف stories.js).-->
     <!-- ================================================================= -->
     <div id="createStoryModal"
-         class="hidden fixed inset-0 z-[70] bg-lux-950 select-none overflow-hidden touch-none">
+         class="hidden fixed inset-0 z-[70] flex items-center justify-center bg-black/95 select-none overflow-hidden touch-none">
 
-        <!-- كانفاس المعاينة الحية الشامل لكامل الشاشة (100% Edge-to-Edge Canvas) -->
-        <div id="storyPreviewArea"
+        <!-- بطاقة إنشاء الستوري - متطابقة 1:1 مع #storyViewerCard في المقاس والنسبة لضمان دقة المعاينة والمحاكاة -->
+        <div id="createStoryCard" class="w-full h-full md:max-w-[420px] lg:max-w-[480px] md:mx-auto relative overflow-hidden bg-lux-950">
+
+            <!-- كانفاس المعاينة الحية الشامل لكامل الشاشة (100% Edge-to-Edge Canvas) -->
+            <div id="storyPreviewArea"
              class="absolute inset-0 w-full h-full flex flex-col items-center justify-center p-6 transition-all duration-300">
             
             <!-- خانة الكتابة المباشرة في قلب الشاشة الحرة -->
@@ -3756,6 +3759,7 @@
         <div id="storyDurationOptions" class="hidden"></div>
         <div id="storyVisibilityOptions" class="hidden"></div>
         <button type="button" id="btnCancelCreateStory" class="hidden"></button>
+        </div>
     </div>
 
     <!-- ================================================================= -->
