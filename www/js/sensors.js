@@ -123,19 +123,27 @@ function loadPersistedDailyState() {
 }
 
 /**
- * فحص دفاعي بسيط: لو التطبيق فاضل فاتح عدّاء منتصف الليل، أي خطوة
- * جديدة بتتسجل بتتأكد الأول إننا لسه في نفس اليوم المحفوظ، وإلا
- * بتعمل نفس أرشفة/تصفير الـ Daily Reset قبل ما تضيف الخطوة الجديدة.
+ * فحص دفاعي مهم: لو التطبيق فاضل فاتح عدّى منتصف الليل، أو تم استئنافه بعد
+ * منتصف الليل، نتأكد إننا لسه في نفس اليوم المحفوظ، وإلا بنأرشف خطوات اليوم
+ * السابق، ونصفّر العداد، ونحفظ الحالة محلياً، ونطلق حدث 'sensors:day-reset'
+ * لـ app.js عشان يصفّر العداد في الواجهة فوراً.
  */
-function ensureStillSameDay() {
+export function ensureStillSameDay() {
     const todayKey = getTodayKey();
     if (todayKey !== currentDayKey) {
+        const previousDay = currentDayKey;
         if (currentDayKey) {
             stepsHistory[currentDayKey] = stepCount;
         }
         currentDayKey = todayKey;
         stepCount = 0;
+        persistDailyState();
+        document.dispatchEvent(new CustomEvent('sensors:day-reset', {
+            detail: { date: todayKey, previousDay }
+        }));
+        return true;
     }
+    return false;
 }
 
 /**
@@ -311,6 +319,7 @@ function autoInit() {
 let isSyncingFromNative = false;
 
 async function syncFromNativeStepCounter() {
+    ensureStillSameDay();
     if (!window.Capacitor?.isNativePlatform?.()) return;
     if (isSyncingFromNative) return; // فيه مزامنة شغّالة بالفعل - نرفض عشان نمنع التضاعف
     isSyncingFromNative = true;
@@ -510,6 +519,7 @@ document.addEventListener('geofence:guest-mode-change', () => {
 // بعد ما كان في الخلفية أو مقفول) - عشان يلحق أي خطوات اتسجلت وهو غايب
 document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') {
+        ensureStillSameDay();
         syncFromNativeStepCounter();
         startNativeSyncPolling();
     } else {

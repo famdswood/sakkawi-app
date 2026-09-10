@@ -745,13 +745,13 @@ async function flushPendingStepsBatch() {
         // وصلنا). دلوقتي بنفحص نص الخطأ نفسه - أي فشل fetch (بغض النظر
         // عن السبب: مفيش نت فعليًا، DNS، السيرفر مش راد..إلخ) بيدّي نفس
         // البصمة النصية دي في كل المتصفحات تقريبًا، فهي إشارة أوثق بكتير
-        // من navigator.onLine
         const isNetworkFailure = /failed to fetch|network\s*error|load failed|networkerror/i.test(error.message || '');
-        const friendlyMessage = isNetworkFailure
-            ? 'مفيش نت دلوقتي - هنحفظ تقدّمك ونبعته أول ما النت يرجع'
-            : error.message;
-
-        document.dispatchEvent(new CustomEvent('app:toast', { detail: { message: friendlyMessage, type: 'error' } }));
+        if (!isNetworkFailure) {
+            console.warn('[profiles] تعذر إرسال دفعة الخطوات:', error);
+        }
+        // (إصلاح تكرار التوست): تم إلغاء إطلاق توست دوري في الخلفية كل 8 ثوانٍ عند انقطاع النت!
+        // خطوات ونقاط المستخدم محفوظة محلياً بأمان في localStorage (persistPendingStepsToStorage)،
+        // وتكرار إظهار التوست أثناء المشي كان يسبب إزعاجاً كبيراً وتراكماً للتوستات المكررة.
     }
 }
 
@@ -904,6 +904,16 @@ export function recordStepsProgress(addedSteps, pointsEarned = 0) {
 // لسه مسجّلش دخول/البروفايل لسه بيتحمّل.
 document.addEventListener('steps:progress', (event) => {
     recordStepsProgress(event.detail?.addedSteps ?? 0, event.detail?.pointsEarned ?? 0);
+});
+
+// (خطة الأوفلاين) عند عودة الاتصال بالإنترنت، نرسل الخطوات المحفوظة ونحدّث بيانات البروفايل فوراً
+document.addEventListener('app:online', async () => {
+    if (pendingStepsDelta > 0) {
+        await flushPendingStepsBatch();
+    }
+    if (currentAuthUser) {
+        await loadAndRenderRealProfile(currentAuthUser);
+    }
 });
 
 // نسترجع فورًا عند تحميل الملف أي رصيد خطوات فضل محفوظ في localStorage
@@ -3902,6 +3912,12 @@ async function loadAndRenderRealProfile(user) {
     // (cached_profile:<userId>) فوراً لو موجودة، وتحدّثها في الخلفية
     // تلقائياً بعد كل قراءة ناجحة من الشبكة
     await fetchWithCache(`cached_profile:${user.id}`, () => fetchUserProfileFromServer(user.id), async ({ profile }) => {
+        if (profile) {
+            // دمج الخطوات والنقاط المتراكمة محلياً التي لم تُرسل بعد (Offline Progress)
+            // مع البيانات المخزنة مؤقتاً حتى لا تظهر شاشة البروفايل أرقاماً قديمة أو أقل أثناء انقطاع النت
+            profile.total_steps = (profile.total_steps ?? 0) + pendingStepsDelta;
+            profile.points = (profile.points ?? 0) + pendingStepsPointsDelta;
+        }
         currentProfileRow = profile;
 
         renderProfileHeader(profile, user);

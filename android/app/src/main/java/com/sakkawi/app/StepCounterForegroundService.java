@@ -269,6 +269,23 @@ public class StepCounterForegroundService extends Service implements SensorEvent
     }
 
     @Override
+    public void onTaskRemoved(Intent rootIntent) {
+        super.onTaskRemoved(rootIntent);
+        // ضمان استمرار خدمة تتبع الخطوات حتى لو مسح المستخدم التطبيق من قائمة التطبيقات الحديثة (Recents)
+        try {
+            Intent restartServiceIntent = new Intent(getApplicationContext(), this.getClass());
+            restartServiceIntent.setPackage(getPackageName());
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startForegroundService(restartServiceIntent);
+            } else {
+                startService(restartServiceIntent);
+            }
+        } catch (Exception e) {
+            android.util.Log.w("Sakkawi", "onTaskRemoved restart failed", e);
+        }
+    }
+
+    @Override
     public IBinder onBind(Intent intent) {
         return null; // مش Bound Service، بس Started Service
     }

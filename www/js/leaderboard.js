@@ -1626,3 +1626,8 @@ export function destroyChampionshipTimers() {
 if (typeof window !== 'undefined') {
     window.refreshActiveLeaderboard = refreshActiveLeaderboard;
 }
+
+// (خطة الأوفلاين) تحديث فوري للوحة الصدارة عند عودة الاتصال بالإنترنت
+document.addEventListener('app:online', () => {
+    refreshActiveLeaderboard();
+});

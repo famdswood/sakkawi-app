@@ -24,7 +24,7 @@
    ================================================================== */
 
 import { restoreSession, bindAuthEventListeners, checkExistingSession, getCurrentUser, hasAnyStoredSessionHint } from './auth.js';
-import { getStepsCount, getStepsHistory, syncActiveUser, requestBatteryOptimizationExemption, requestAutostartPermission } from './sensors.js';
+import { getStepsCount, getStepsHistory, syncActiveUser, ensureStillSameDay, requestBatteryOptimizationExemption, requestAutostartPermission } from './sensors.js';
 import { applyGuestModeRestrictions } from './geofence.js';
 import { initStoriesUI } from './stories.js';
 import { initProfileUI } from './profiles.js';
@@ -576,9 +576,37 @@ function resetStepsUIForGuestMode() {
     updateStepsUI();
 }
 
+/**
+ * (إصلاح ثغرة منتصف الليل): تصفير عداد ومراحل اليوم الحالي عند بداية يوم جديد
+ * استجابةً لحدث 'sensors:day-reset' أو عند كشف تغيّر اليوم في visibilitychange.
+ */
+function handleDayReset() {
+    appState.steps = 0;
+    appState.stageIndex = 0;
+    appState.earnedFromSteps = 0;
+    appState.previousBestSteps = getPreviousBestSteps();
+    appState.recordBrokenToday = false;
+    appState.reachedDailyGoalToday = false;
+    appState.hitHardCapToday = false;
+    renderStageDotsSkeleton();
+    updateStepsUI();
+}
+
 function initStepsCounter() {
     renderStageDotsSkeleton(); // (جديد) بناء نقط المراحل مرة واحدة بس
     updateStepsUI();
+
+    // (إصلاح ثغرة منتصف الليل) الاستماع لإعادة التعيين اليومية
+    document.addEventListener('sensors:day-reset', () => {
+        handleDayReset();
+    });
+
+    // فحص تغيّر اليوم فور عودة المستخدم للتطبيق
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+            ensureStillSameDay();
+        }
+    });
 
     // الاستماع لأي خطوات جاية لايف من js/sensors.js (حساس الحركة الحقيقي فقط)
     document.addEventListener('sensors:steps-update', (event) => {
@@ -652,6 +680,15 @@ function showToast(message) {
 
     const container = document.getElementById('toastContainer');
     if (!container) return;
+
+    // (إصلاح - منع تراكم التوستات المكررة)
+    // إذا كان نفس نص التوست ظاهراً بالفعل في الحاوية، لا نضيف نسخة أخرى فوقه
+    const existingToasts = container.querySelectorAll('[role="status"]');
+    for (const existing of existingToasts) {
+        if (existing.textContent.trim() === message.trim()) {
+            return;
+        }
+    }
 
     const toast = document.createElement('div');
     toast.setAttribute('role', 'status');
