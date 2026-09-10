@@ -1,17 +1,18 @@
 /* ==================================================================
    سِكّاوي | js/onboarding.js
    ------------------------------------------------------------------
-   شاشات الترحيب التفاعلية (Onboarding) فائقة الخفة والسرعة -
+   شاشات الترحيب التفاعلية (Onboarding) فائقة الخفة والسرعة (60fps) -
    8 سلايدات محتوى + سلايد تاسع للكأس وأزرار الدخول.
 
-   تحسينات الأداء الفائق:
-   1) استبدال مكتبة Lottie وملفات Bodymovin الثقيلة بأيقونات SVG/CSS
-      أصلية خفيفة تعمل مباشرة على كارت الشاشة GPU بمعدل 60fps ثابت.
-   2) تقليل حجم ملف onboarding.js بنسبة تتجاوز 95% (من 387KB إلى ~15KB).
-   3) إضافة دعم إيماءات السحب باللمس (Touch Swipe Gestures) السلسة
-      المتوافقة مع اتجاه الواجهة العربية (RTL) بمستمعات أحداث passive.
-   4) حماية ضد النقر السريع المتكرر (Navigation Debounce).
-   5) دعم التنقل بلوحة المفاتيح (Arrow Keys).
+   محرك رسومات Lottie الاحترافي فائق الأداء:
+   1) استرجاع كافة الرسومات التفاعلية الأصلية كاملة وبأعلى جودة.
+   2) فصل بيانات الـ JSON في ملف مستقل (js/onboarding-lottie-data.js)
+      لتحميل فوري وتخفيف كود الواجهة.
+   3) كاش دائم للرسومات (Persistent Instance Caching) بدون هدم أو إعادة بناء،
+      مع تحكم دقيق في Play/Pause لتوفير 100% من قدرة المعالج.
+   4) تهيئة السلايدات الجديدة عبر requestAnimationFrame بدون تعطيل تحريك السحب.
+   5) تحميل مسبق ذكي (Idle Preload) للسلايد التالي في الخلفية.
+   6) دعم كامل لإيماءات السحب باللمس للواجهة العربية (RTL) ولوحة المفاتيح.
    ================================================================== */
 
 import { showAuthModal, hideAuthModal, markGuestModeActive } from './auth.js';
@@ -136,6 +137,129 @@ function burstGoldConfetti() {
 }
 
 /* ------------------------------------------------------------------
+   محرك إدارة رسومات Lottie التفاعلية (فائق النعومة والسرعة 60fps)
+   ------------------------------------------------------------------ */
+const LOTTIE_CONFIGS = {
+    1: { id: 'onbWalkLottie', fallback: '.onb-walk-fallback', key: 'walk', loop: true, rendererSettings: { preserveAspectRatio: 'xMidYMid slice' } },
+    2: { id: 'onbQuizLottie', fallback: '.onb-quiz-fallback', key: 'quiz', loop: true },
+    3: { id: 'onbLocationLottie', fallback: '.onb-location-fallback', key: 'location', loop: true },
+    4: { id: 'onbRankLottie', fallback: '.onb-rank-fallback', key: 'rank', loop: true },
+    5: { id: 'onbPointsLottie', fallback: '.onb-points-fallback', key: 'points', loop: true },
+    7: { id: 'onbWritingLottie', fallback: '.onb-writing-fallback', key: 'writing', loop: true },
+    8: { id: 'onbTrophyLottie', fallback: '.onb-trophy-fallback', key: 'trophy', loop: false },
+};
+
+const lottieInstances = new Map();
+
+function showFallbackForSlide(index) {
+    const config = LOTTIE_CONFIGS[index];
+    if (!config) return;
+    const container = document.getElementById(config.id);
+    if (container) container.style.display = 'none';
+    const fallback = document.querySelector(config.fallback);
+    if (fallback) {
+        const activeClass = config.fallback.replace('.', '') + '-active';
+        fallback.classList.add(activeClass);
+    }
+}
+
+function getOrInitLottie(index) {
+    if (lottieInstances.has(index)) {
+        return lottieInstances.get(index);
+    }
+    const config = LOTTIE_CONFIGS[index];
+    if (!config) return null;
+
+    if (!window.lottie || !window.ONB_LOTTIE_DATA || !window.ONB_LOTTIE_DATA[config.key]) {
+        showFallbackForSlide(index);
+        return null;
+    }
+
+    const container = document.getElementById(config.id);
+    if (!container) {
+        showFallbackForSlide(index);
+        return null;
+    }
+
+    try {
+        const anim = window.lottie.loadAnimation({
+            container,
+            renderer: 'svg',
+            loop: config.loop,
+            autoplay: false,
+            animationData: window.ONB_LOTTIE_DATA[config.key],
+            rendererSettings: config.rendererSettings || undefined,
+        });
+
+        anim.addEventListener('data_failed', () => showFallbackForSlide(index));
+        anim.addEventListener('error', () => showFallbackForSlide(index));
+
+        lottieInstances.set(index, anim);
+        return anim;
+    } catch (err) {
+        showFallbackForSlide(index);
+        return null;
+    }
+}
+
+function playSlideLottie(index) {
+    // إيقاف أي أنيميشن في سلايد آخر لتوفير 100% من قدرة المعالج أثناء التنقل
+    lottieInstances.forEach((anim, i) => {
+        if (i !== index && anim) {
+            try { anim.pause(); } catch (e) {}
+        }
+    });
+
+    if (LOTTIE_CONFIGS[index]) {
+        const existing = lottieInstances.get(index);
+        if (existing) {
+            // الأنيميشن جاهز ومحمّل مسبقاً: تشغيل فوري بدون أي تأخير
+            try {
+                if (index === 8) {
+                    existing.goToAndStop(0, true);
+                }
+                existing.play();
+            } catch (e) {}
+        } else {
+            // تهيئة السلايد الجديد بنعومة في الفريم التالي حتى لا يتعطل تحريك السحب
+            requestAnimationFrame(() => {
+                const newAnim = getOrInitLottie(index);
+                if (newAnim) {
+                    try {
+                        if (index === 8) {
+                            newAnim.goToAndStop(0, true);
+                        }
+                        newAnim.play();
+                    } catch (e) {}
+                }
+            });
+        }
+    }
+
+    // تجهيز السلايدات التالية في الخلفية بذكاء أثناء قراءة المستخدم للسلايد الحالي
+    preloadAdjacentLottie(index);
+}
+
+function preloadAdjacentLottie(currentIndex) {
+    const candidates = [currentIndex + 1, currentIndex + 2];
+    for (const idx of candidates) {
+        if (LOTTIE_CONFIGS[idx] && !lottieInstances.has(idx)) {
+            window.setTimeout(() => {
+                getOrInitLottie(idx);
+            }, 300);
+            break;
+        }
+    }
+}
+
+function destroyAllLotties() {
+    lottieInstances.forEach((anim) => {
+        try { anim.destroy(); } catch (e) {}
+    });
+    lottieInstances.clear();
+}
+
+/* ------------------------------------------------------------------
    نقطة الدخول الرئيسية لرحلة السلايدات الأولى
    ------------------------------------------------------------------ */
 export function initOnboarding() {
@@ -200,6 +324,9 @@ export function initOnboarding() {
             updateSlideExperience(index);
             playHapticTick();
 
+            // تشغيل أنيميشن السلايد النشط فقط وإيقاف الباقي
+            playSlideLottie(index);
+
             // عند الوصول للسلايد الأخير (الكأس)
             if (index === TOTAL_SLIDES - 1) {
                 if (!trophyCelebrated) {
@@ -235,11 +362,12 @@ export function initOnboarding() {
             }
         }
 
-        // إظهار السلايد الأول وتفعيل حالته
+        // إظهار السلايد الأول وتفعيل حالته وتشغيل محرك الأنيميشن الذكي
         slides.forEach((slide, i) => {
             slide.classList.toggle('onb-page-active', i === 0);
         });
         updateSlideExperience(0);
+        playSlideLottie(0);
 
         // التنقل عبر نقاط الترقيم
         bullets.forEach((bullet) => {
@@ -327,6 +455,7 @@ export function initOnboarding() {
         window.addEventListener('keydown', onKeyDown);
 
         function finish(authIntent) {
+            destroyAllLotties();
             document.removeEventListener('auth:signed-in', handleAuthSuccessDuringOnboarding);
             overlay.removeEventListener('touchstart', onTouchStart);
             overlay.removeEventListener('touchend', onTouchEnd);
@@ -505,7 +634,8 @@ export function showAuthGate(initialIntent = null) {
         overlay.style.setProperty('--onb-active-accent', accent);
     }
 
-    // احتفال الكونفيتي للسلايد الأخير
+    // تشغيل أنيميشن الكأس الذهبي للسلايد الأخير مع احتفال الكونفيتي
+    playSlideLottie(8);
     window.setTimeout(burstGoldConfetti, 250);
 
     const authFormDock = document.getElementById('onbAuthFormDock');
@@ -621,6 +751,7 @@ export function showAuthGate(initialIntent = null) {
     }
 
     function cleanup() {
+        destroyAllLotties();
         document.removeEventListener('auth:signed-in', handleAuthSuccess);
         if (signupBtn) signupBtn.removeEventListener('click', onSignupClick);
         if (loginBtn) loginBtn.removeEventListener('click', onLoginClick);

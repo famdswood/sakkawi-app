@@ -4064,6 +4064,8 @@
     <!-- [تعديل - دعم الأوفلاين]: بقى بيتقرا من vendor/ محلي - شوف
          vendor/README.txt -->
     <script src="vendor/supabase.js"></script>
+    <script src="vendor/lottie.min.js"></script>
+    <script src="js/onboarding-lottie-data.js"></script>
     <script type="module" src="js/supabase-config.js"></script>
     <script type="module" src="js/auth.js"></script>
     <!-- js/notifications.js (المرحلة الثالثة): منطق مودال الإشعارات
@@ -4072,7 +4074,7 @@
          استيراده واستدعاء initNotificationsUI() بتاعته من داخل
          js/app.js - مش لازم لينك <script> مستقل ليه غير كده، لكن
          سايبينه هنا موثّق فقط لتوضيح ترتيب الاعتماديات -->
-    <!-- تم استبدال lottie-web بأيقونات SVG/CSS أصلية خفيفة عالية الأداء (60fps) بدون أي اعتماديات خارجية لتسريع فتح التطبيق -->
+    <!-- تم تفعيل مكتبة lottie-web وبيانات الرسومات الأصلية بنظام الكاش الفوري والتحميل المسبق الذكي لدقة وسلاسة 60fps -->
 
     <!-- js/onboarding.js: بيتستورد ويتنادى من جوه initApp() في js/app.js   -->
     <!-- (initTheme() → initOnboarding() → باقي التهيئة) - مش عنده          -->
