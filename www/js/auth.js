@@ -74,8 +74,23 @@ let isCheckingGuestAreaForToggle = false;
  * نفس قيمة storageKey المستخدمة في supabase-config.js عند إنشاء العميل.
  * لازم القيمتين يفضلوا متطابقين، وإلا restoreSession() مش هتلاقي حاجة
  * في localStorage حتى لو فيه جلسة محفوظة فعلاً.
+ *
+ * (إصلاح - باج حقيقي خطير "تضاعف الخطوات مع كل فتح تطبيق"): القيمة دي
+ * كانت 'ta7t-el-balad-auth-session' - اسم قديم للمشروع من قبل ما يتسمى
+ * "سِكّاوي"، وبعد التغيير اتحدّث storageKey في supabase-config.js لـ
+ * 'sekkawy-auth-session' من غير ما القيمة هنا تتحدّث معاها. النتيجة:
+ * restoreSession() (وhasAnyStoredSessionHint()) كانت بتقرا دايمًا من
+ * مفتاح localStorage فاضي تمامًا - محدش بيكتب فيه خالص، لأن Supabase
+ * نفسها بتحفظ الجلسة الحقيقية تحت 'sekkawy-auth-session' - فكانت
+ * بترجع null بشكل مضمون 100% في كل فتحة تطبيق، مش بشكل متقطّع. وده
+ * كان بيخلي app.js ينادي initProfileUI(null) دايمًا عند بداية التطبيق
+ * (يعتبرها "مفيش حساب خالص")، واللي بدورها بتصفّر عداد الخطوات المحلي
+ * في sensors.js (syncActiveUser(null)) وتحفظ الصفر فورًا - فمزامنة
+ * الحساس الأصلي (اللي مالهاش دعوة بحالة الـ auth) كانت بتلاقي "خطوات
+ * النهاردة" الحقيقية أكبر من الصفر ده وتعتبرها كلها جديدة، وتبعتها
+ * زيادة فوق اللي اتبعت خلاص من قبل - تضاعف حقيقي مع كل فتح/قفل.
  */
-const AUTH_STORAGE_KEY = 'ta7t-el-balad-auth-session';
+const AUTH_STORAGE_KEY = 'sekkawy-auth-session';
 
 /**
  * مفتاح localStorage اللي بنحفظ بيه "قرار" المستخدم إنه يكمّل كزائر

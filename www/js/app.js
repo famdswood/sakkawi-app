@@ -23,7 +23,7 @@
    مباشرة من/على Supabase، عشان نمنع أي Race Condition بين نسختين.
    ================================================================== */
 
-import { restoreSession, bindAuthEventListeners, checkExistingSession, getCurrentUser } from './auth.js';
+import { restoreSession, bindAuthEventListeners, checkExistingSession, getCurrentUser, hasAnyStoredSessionHint } from './auth.js';
 import { getStepsCount, getStepsHistory, syncActiveUser, requestBatteryOptimizationExemption, requestAutostartPermission } from './sensors.js';
 import { applyGuestModeRestrictions } from './geofence.js';
 import { initStoriesUI } from './stories.js';
@@ -1158,7 +1158,37 @@ function initApp() {
         // (initLeaderboardUI) بمجرد ما توصل بيانات Supabase الحقيقية -
         // متنادوش على أي دالة نقاط/ليدربورد محلية هنا تاني.
         const currentUser = restoreSession();
-        initProfileUI(currentUser);
+
+        // (إصلاح - باج حقيقي "تضاعف الخطوات مع كل فتح تطبيق"):
+        // initProfileUI(null) مش مجرد "اعرض واجهة زائر" - profiles.js
+        // بتتعامل معاها كتأكيد نهائي إن مفيش حساب خالص، وبتنفّذ
+        // syncActiveUser(null) اللي بتصفّر عداد الخطوات المحلي في
+        // sensors.js *وتحفظ الصفر ده فورًا على القرص*. المشكلة إن
+        // currentUser هنا (زي ما موضّح بالظبط في كومنت "باج فلاش وضع
+        // الزائر" تحت) ممكن يبقى null مع إن فيه جلسة حقيقية محفوظة
+        // فعلاً - القراءة المتفائلة السريعة بس فشلت تفهم شكلها. قبل
+        // الإصلاح ده كنا بننادي initProfileUI(null) على طول في الحالة
+        // الغامضة دي - فكل فتحة تطبيق فيها جلسة محفوظة بس restoreSession()
+        // معرفتش تفكّها، كانت بتصفّر عداد الخطوات الحقيقي للحظة. وبما إن
+        // مزامنة الحساس الأصلي (syncFromNativeStepCounter) مالهاش أي
+        // دعوة بحالة الـ auth خالص، كانت بتلاقي "خطوات النهاردة" الحقيقية
+        // (محفوظة في الخدمة الأصلية Android، مش في الذاكرة اللي اتصفّرت)
+        // أكبر من الصفر ده، فتعتبرها كلها "خطوات جديدة" وتبعتها زيادة
+        // تاني فوق اللي اتبعتت خلاص - وده بالظبط سبب "الرقم بيتضاعف مع
+        // كل فتح/قفل" حتى من غير أي حركة فعلية، وبيتكرر من جديد كل مرة
+        // لأنه مش باج تراكمي في تخزين قديم (زي باج localStorage اللي
+        // اتصلّح قبل كده) - ده باج بيتولّد من الصفر في كل فتحة.
+        //
+        // الحل: بالظبط نفس منطق applyGuestModeRestrictions تحت - منديش
+        // initProfileUI(null) إلا لو متأكدين 100% إن مفيش أي جلسة خالص
+        // (hasAnyStoredSessionHint() === false). لو الحالة غامضة (فيه
+        // تلميح جلسة محفوظة بس مش متأكدين لسه)، منستدعيش initProfileUI
+        // هنا خالص - نستنى auth:login أو auth:signed-out الحقيقيين
+        // (متسجلين في initSharedUIBridge فوق) يحسموا الأمر بيقين، وهما
+        // اللي هيتكفلوا بنداء initProfileUI بالقيمة الصح وقتها.
+        if (currentUser || !hasAnyStoredSessionHint()) {
+            initProfileUI(currentUser);
+        }
 
         // لو المستخدم اختار "إنشاء حساب" أو "تسجيل دخول" من آخر سلايد في
         // شاشات الترحيب، افتح صفحة اختيار الدخول/التسجيل الكاملة (مش
