@@ -810,7 +810,7 @@ async function fetchAndRenderNotifications() {
             .catch(() => {});
     }
 
-    // 🧠 فحص ذاتي ذكي وتنظيف تلقائي (Self-Healing / Auto-Purge):
+    // فحص ذاتي ذكي وتنظيف تلقائي (Self-Healing / Auto-Purge):
     // فحص إشعارات طلبات الصداقة المعلقة للتأكد من أنها ما زالت صالحة ولم تُقبل أو تُلغى في الخلفية
     const pendingFriendNotifs = notificationsCache.filter((n) => n.type === 'friend_request' && n.data?.request_id);
     if (pendingFriendNotifs.length > 0) {
@@ -1122,6 +1122,12 @@ export function resolveNotificationNavigation(type, data) {
             // للأدمن بس، وبيفتحله شاته هو بالظبط مع المستخدم ده
             if (!data.sender_id) return null;
             return { action: () => openSupportChatAsAdminWithUser(data.sender_id) };
+
+        case 'daily_question':
+        case 'daily_question_forfeited':
+        case 'daily_question_reminder':
+            // إشعارات السؤال اليومي - التوجيه مباشرة لبطاقة السؤال بالرئيسية
+            return { action: () => navigateToDailyQuestionSection() };
 
         default:
             return null;
@@ -1444,6 +1450,16 @@ function navigateToAchievementsSection() {
 function navigateToLeaderboardSection() {
     document.dispatchEvent(new CustomEvent('app:switch-tab', {
         detail: { tabId: 'leaderboard' },
+    }));
+}
+
+/**
+ * الانتقال لتبويب الرئيسية والتمرير لكارت السؤال اليومي
+ * بعد الضغط على أي إشعار يخص السؤال اليومي
+ */
+function navigateToDailyQuestionSection() {
+    document.dispatchEvent(new CustomEvent('app:switch-tab', {
+        detail: { tabId: 'home', scrollToId: 'dailyQuestionCard1' },
     }));
 }
 

@@ -44,6 +44,7 @@ import { supabaseClient } from './supabase-config.js';
 import { sendNotification } from './notifications.js';
 import { fetchWithCache } from './offline-cache.js';
 import { evaluateAndScheduleDailyQuestionReminder, cancelDailyQuestionReminder } from './smart-notifications.js';
+import { pushModalState, closeModal, hasOpenModal } from './modal-history.js';
 
 /** مدة السؤال بالثواني (شرط الميزة: 25 ثانية) - نفس القيمة لكل سؤال
  *  من السؤالين */
@@ -246,17 +247,104 @@ function getWarningModalElements() {
  *  متفقين دايمًا على *نفس* اليوم، أيًا كان جهاز أو منطقة المستخدم -
  *  فمفيش فتح مزدوج ممكن يظهر أصلاً، حتى بصريًا */
 function getTodayDateKey() {
-    const parts = new Intl.DateTimeFormat('en-CA', {
-        timeZone: 'Africa/Cairo',
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-    }).formatToParts(new Date());
+    try {
+        const parts = new Intl.DateTimeFormat('en-CA', {
+            timeZone: 'Africa/Cairo',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+        }).formatToParts(new Date());
 
-    const year = parts.find((part) => part.type === 'year').value;
-    const month = parts.find((part) => part.type === 'month').value;
-    const day = parts.find((part) => part.type === 'day').value;
-    return `${year}-${month}-${day}`;
+        const year = parts.find((part) => part.type === 'year')?.value;
+        const month = parts.find((part) => part.type === 'month')?.value;
+        const day = parts.find((part) => part.type === 'day')?.value;
+        if (year && month && day) {
+            return `${year}-${month}-${day}`;
+        }
+    } catch (err) {
+        // احتياطي في حال عدم توفر أو خطأ في قراءة المنطقة الزمنية
+    }
+
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    const d = String(now.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+}
+
+/** مفتاح التخزين المحلي لطابور مزامنة نتائج الأسئلة عند انقطاع الإنترنت */
+const DQ_PENDING_SYNC_STORAGE_KEY = 'skawy_dq_pending_sync';
+
+function getPendingDqSyncList() {
+    try {
+        const raw = window.localStorage.getItem(DQ_PENDING_SYNC_STORAGE_KEY);
+        if (!raw) return [];
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed : [];
+    } catch (e) {
+        return [];
+    }
+}
+
+function queueDqPendingSync(item) {
+    try {
+        const list = getPendingDqSyncList();
+        list.push(item);
+        window.localStorage.setItem(DQ_PENDING_SYNC_STORAGE_KEY, JSON.stringify(list));
+    } catch (e) {
+        console.warn('[daily-question.js] تعذر حفظ نتيجة السؤال في طابور المزامنة:', e);
+    }
+}
+
+/**
+ * إرسال نتائج الأسئلة المعلقة في طابور المزامنة عند عودة الاتصال
+ */
+async function flushPendingDqSync() {
+    if (!currentUserId) return;
+    const list = getPendingDqSyncList();
+    if (list.length === 0) return;
+
+    const remaining = [];
+    for (const item of list) {
+        try {
+            if (item.dateKey === getTodayDateKey() && item.userId === currentUserId) {
+                const { data, error } = await supabaseClient.rpc('record_daily_question_result', {
+                    p_slot: item.slot,
+                    p_status: item.status,
+                    p_option_id: item.extra?.optionId ?? null,
+                    p_remaining_seconds: item.extra?.remainingSeconds ?? null,
+                });
+
+                if (error) {
+                    remaining.push(item);
+                    continue;
+                }
+
+                const row = Array.isArray(data) ? data[0] : data;
+                if (row && !row.out_already_recorded && row.out_is_correct) {
+                    document.dispatchEvent(new CustomEvent('dailyQuestion:answered', {
+                        detail: {
+                            slot: item.slot,
+                            optionId: item.extra?.optionId ?? null,
+                            isCorrect: row.out_is_correct,
+                            pointsAwarded: row.out_points_awarded ?? 0,
+                            alreadyRecorded: false,
+                        },
+                    }));
+                }
+            }
+        } catch (err) {
+            remaining.push(item);
+        }
+    }
+
+    try {
+        if (remaining.length > 0) {
+            window.localStorage.setItem(DQ_PENDING_SYNC_STORAGE_KEY, JSON.stringify(remaining));
+        } else {
+            window.localStorage.removeItem(DQ_PENDING_SYNC_STORAGE_KEY);
+        }
+    } catch (e) {}
 }
 
 /** قراءة حالة سؤالي *النهاردة* بس من الكاش المحلي (لو محفوظة نتيجة
@@ -371,6 +459,17 @@ async function recordSlotResultOnServer(slot, status, extra = {}) {
  * @param {{optionId?: string, remainingSeconds?: number}} [extra]
  */
 async function finalizeSlot(slot, status, extra = {}) {
+    // 1) حفظ متفائل فوري محلياً (Optimistic Persistence) قبل انتظار السيرفر
+    // يضمن أن advanceCardAfterSlot تجد الحالة مسجلة دائماً فور انتهاء المهلة وتمنع عودة زر ابدأ
+    const optimisticIsCorrect = typeof extra.isCorrect === 'boolean' ? extra.isCorrect : null;
+    storeSlotStatus(slot, status, optimisticIsCorrect);
+
+    // إلغاء تذكير السؤال اليومي فوراً بمجرد اكتمال سؤالي اليوم
+    if (areTodaysQuestionsCompleted()) {
+        cancelDailyQuestionReminder();
+    }
+
+    // 2) إرسال النتيجة إلى السيرفر
     const serverResult = await recordSlotResultOnServer(slot, status, extra);
 
     // (إصلاح) لو السيرفر قال "متسجّل بالفعل" (alreadyRecorded)، يبقى
@@ -383,16 +482,28 @@ async function finalizeSlot(slot, status, extra = {}) {
         return;
     }
 
-    // مفيش تسجيل دخول (currentUserId فاضي) → serverResult = null، وبنرجع
-    // لسلوك الـ localStorage القديم بس (مفيش نقاط أصلاً في الحالة دي)
-    const verifiedIsCorrect = serverResult ? serverResult.isCorrect : null;
+    // إذا تعذر الوصول للسيرفر والمستخدم مسجل دخول، نضيف المحاولة لطابور المزامنة
+    if (!serverResult && currentUserId) {
+        queueDqPendingSync({
+            dateKey: getTodayDateKey(),
+            userId: currentUserId,
+            slot,
+            status,
+            extra,
+            timestamp: Date.now(),
+        });
+    }
+
+    // اعتماد نتيجة السيرفر المؤكدة، أو النتيجة المتفائلة كاحتياطي لتفادي رسالة "غلط" كاذبة
+    const verifiedIsCorrect = serverResult
+        ? serverResult.isCorrect
+        : (typeof extra.isCorrect === 'boolean' ? extra.isCorrect : null);
 
     storeSlotStatus(slot, status, verifiedIsCorrect);
 
-    // إلغاء تذكير السؤال اليومي فوراً بمجرد اكتمال سؤالي اليوم
-    if (areTodaysQuestionsCompleted()) {
-        cancelDailyQuestionReminder();
-    }
+    // إعادة رسم بطاقة الـ Slot في الواجهة بالنتيجة المؤكدة
+    const slots = getStoredDailyState();
+    applyLockedUIForSlot(slot, slots[slot]);
 
     if (status === 'answered' && serverResult && !serverResult.alreadyRecorded) {
         document.dispatchEvent(new CustomEvent('dailyQuestion:answered', {
@@ -513,10 +624,15 @@ async function fetchTodaysQuestionsFromServer() {
     data.forEach((row) => {
         if (!row || (row.slot !== 1 && row.slot !== 2)) return;
         bank[row.slot] = {
-            id: row.question_id,
+            id: String(row.question_id || ''),
             text: row.question_text,
-            options: Array.isArray(row.options) ? row.options : [],
-            correctOptionId: row.correct_option_id,
+            options: Array.isArray(row.options)
+                ? row.options.map((opt) => ({
+                    id: String(opt.id),
+                    text: String(opt.text || ''),
+                }))
+                : [],
+            correctOptionId: String(row.correct_option_id ?? ''),
         };
     });
 
@@ -603,7 +719,7 @@ function buildSlotOutcomeMessage(outcome) {
     if (!outcome) return '';
     if (outcome.status === 'answered') {
         return outcome.isCorrect
-            ? 'إجابتك كانت صح! 🎉 تعالى بكرة تلاقي سؤال جديد.'
+            ? 'إجابتك كانت صح! تعالى بكرة تلاقي سؤال جديد.'
             : 'إجابتك كانت غلط، حظ أوفر بكرة!';
     }
     if (outcome.status === 'timeout') {
@@ -668,15 +784,25 @@ function applyLockedUIForAllSlots() {
 function openDqWarningModal() {
     const { warningModal } = getWarningModalElements();
     if (!warningModal) return;
+    pushModalState(hideDqWarningModal);
     warningModal.classList.remove('hidden');
     warningModal.classList.add('flex');
 }
 
-function closeDqWarningModal() {
+function hideDqWarningModal() {
+    pendingSlot = null;
     const { warningModal } = getWarningModalElements();
     if (!warningModal) return;
     warningModal.classList.add('hidden');
     warningModal.classList.remove('flex');
+}
+
+function closeDqWarningModal() {
+    if (hasOpenModal()) {
+        closeModal();
+    } else {
+        hideDqWarningModal();
+    }
 }
 
 /**
@@ -838,7 +964,7 @@ function handleOptionClick(slot, event) {
     const { timerSeconds } = getDailyQuestionElements(slot);
     const remainingSeconds = timerSeconds ? Number(timerSeconds.textContent) : 0;
     const selectedOptionId = optionBtn.dataset.optionId;
-    const isCorrect = selectedOptionId === runtime.questionDef.correctOptionId;
+    const isCorrect = String(selectedOptionId) === String(runtime.questionDef.correctOptionId);
 
     optionBtn.classList.add('is-selected');
     optionBtn.setAttribute('aria-checked', 'true');
@@ -971,11 +1097,9 @@ function handleStartButtonClick(slot) {
  *  المُعلّق فعلياً (الكارت التاني، لو كان في حالة "مغلق"، يفضل زي ما
  *  هو من غير ما يتأثر خالص) */
 function handleWarningConfirmClick() {
-    closeDqWarningModal();
-    if (!pendingSlot) return;
-
     const slotToActivate = pendingSlot;
-    pendingSlot = null;
+    closeDqWarningModal();
+    if (!slotToActivate) return;
     activateDailyQuestion(slotToActivate);
 }
 
@@ -1132,6 +1256,9 @@ export function initDailyQuestionCard() {
         document.addEventListener('visibilitychange', handleVisibilityChange);
     }
 
+    // مزامنة أي نتائج معلقة عند عودة اتصال الإنترنت
+    window.addEventListener('online', flushPendingDqSync);
+
     // تقييم أولي لتذكير السؤال اليومي بناءً على الكاش المحلي
     evaluateAndScheduleDailyQuestionReminder({
         areAllQuestionsDone: areTodaysQuestionsCompleted(),
@@ -1153,6 +1280,7 @@ export function initDailyQuestionCard() {
             areAllQuestionsDone: areTodaysQuestionsCompleted(),
         });
         reconcileTodayStatusFromSupabase();
+        flushPendingDqSync();
     });
     document.addEventListener('auth:signed-out', () => {
         currentUserId = null;
