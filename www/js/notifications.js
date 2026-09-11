@@ -56,6 +56,7 @@ import { getStories, openStory } from './stories.js';
 // مستخدم جديدة توصل للأدمن) يودّي مباشرة لنفس المحادثة بدل ما الإشعار
 // يفضل بلا أي فعل عند الضغط عليه
 import { openSupportChatWithAdmin, openSupportChatAsAdminWithUser } from './support-chat.js';
+import { pushModalState, closeModal, hasOpenModal } from './modal-history.js';
 
 /* ------------------------------------------------------------------
    1) حالة الموديول (Module State)
@@ -102,31 +103,55 @@ const ACHIEVEMENT_BADGE_SVG = `
     </svg>
 `;
 
-/** الأيقونة المعروضة في دايرة كل نوع إشعار (نفس الأنواع المسموحة في CHECK constraint بتاع الجدول) - من غير إيموجي، الدايرة بلونها بس كفاية بصرياً */
+/** الأيقونة المعروضة في دايرة كل نوع إشعار (رسوم SVG نظيفة بدون أي إيموجي بما يتوافق مع هوية سِكّاوي) */
 const NOTIFICATION_ICONS = {
-    friend_request: '',
-    friend_accept: '',
-    achievement: '',
-    achievement_unlocked: '',
-    system_broadcast: '',
-    story_reaction: '',
-    leaderboard_pass: '',
-    // حد رد على كومنت بتاعك في منشور - نفس فلسفة باقي الأنواع اللي ليها
-    // "مُرسل" حقيقي (صورته بتظهر بدل الدايرة الفاضية - شوف
-    // AVATAR_NOTIFICATION_TYPES تحت)
-    comment_reply: '',
-    // حد عمل لايك على كومنت بتاعك - بنفس فلسفة comment_reply فوق بالظبط
-    comment_like: '',
-    // (كان ناقص من القاموس - باج قديم مكتشف أثناء مراجعة المرحلة 3،
-    // مش له علاقة بـ admin_message) فوات إجابة السؤال اليومي: زي
-    // championship_won، مالوش "مُرسل" حقيقي، فبنعرض ساعة رملية بدل
-    // الدايرة الفاضية
-    daily_question_forfeited: '⏳',
-    // إشعار الفوز بالبطولة مالوش "مُرسل" حقيقي (مش حد تاني عمل حاجة -
-    // هو نفسه اللي فاز)، فمش من ضمن AVATAR_NOTIFICATION_TYPES تحت (يعني
-    // صورته الشخصية مش هتتعرض جنبه أصلاً، وده مقصود). بنعرض كأس بدل ما
-    // نسيب الدايرة فاضية تماماً
-    championship_won: '🏆',
+    friend_request: `
+        <svg viewBox="0 0 24 24" class="w-4 h-4 text-emerald-400 stroke-current fill-none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/>
+        </svg>
+    `,
+    friend_accept: `
+        <svg viewBox="0 0 24 24" class="w-4 h-4 text-emerald-400 stroke-current fill-none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><polyline points="16 11 18 13 22 9"/>
+        </svg>
+    `,
+    achievement: ACHIEVEMENT_BADGE_SVG,
+    achievement_unlocked: ACHIEVEMENT_BADGE_SVG,
+    system_broadcast: `
+        <svg viewBox="0 0 24 24" class="w-4 h-4 text-sky-400 stroke-current fill-none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0"/>
+        </svg>
+    `,
+    story_reaction: `
+        <svg viewBox="0 0 24 24" class="w-4 h-4 text-rose-400 fill-rose-500 stroke-current" stroke-width="1.5">
+            <path d="M19.5 12.572l-7.5 7.428l-7.5 -7.428a5 5 0 1 1 7.5 -6.566a5 5 0 1 1 7.5 6.572"/>
+        </svg>
+    `,
+    leaderboard_pass: `
+        <svg viewBox="0 0 24 24" class="w-4 h-4 text-amber-400 stroke-current fill-none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="18 15 12 9 6 15"/>
+        </svg>
+    `,
+    comment_reply: `
+        <svg viewBox="0 0 24 24" class="w-4 h-4 text-amber-400 stroke-current fill-none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+        </svg>
+    `,
+    comment_like: `
+        <svg viewBox="0 0 24 24" class="w-4 h-4 text-rose-400 fill-rose-500 stroke-current" stroke-width="1.5">
+            <path d="M19.5 12.572l-7.5 7.428l-7.5 -7.428a5 5 0 1 1 7.5 -6.566a5 5 0 1 1 7.5 6.572"/>
+        </svg>
+    `,
+    daily_question_forfeited: `
+        <svg viewBox="0 0 24 24" class="w-4 h-4 text-amber-400 stroke-current fill-none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M5 22h14M5 2h14M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2"/>
+        </svg>
+    `,
+    championship_won: `
+        <svg viewBox="0 0 24 24" class="w-4 h-4 text-yellow-400 stroke-current fill-none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6M18 9h1.5a2.5 2.5 0 0 0 0-5H18M4 4h16v5a8 8 0 0 1-16 0V4zM12 17v4M8 21h8"/>
+        </svg>
+    `,
 };
 
 /**
@@ -473,22 +498,21 @@ function handleUserSignedOut() {
    ------------------------------------------------------------------ */
 
 /**
- * فتح لوحة الإشعارات - بتعرض المودال فوراً (حتى لو المستخدم مسجلش
- * دخول بعد، أو البيانات لسه بتتجاب) بدل ما تمنع الفتح بالكامل، عشان
- * الزرار يحس إنه شغال دايماً حتى لو مفيش حاجة تتعرض. لو فيه مستخدم
- * مسجل دخول، بتجيب نسخة محدّثة من الإشعارات من Supabase وتحدد كلها
- * كمقروءة تلقائياً (المطلوب رقم 4)؛ ولو مفيش، بتعرض رسالة "سجّل
- * دخولك الأول" جوه اللوحة نفسها بدل الـ Toast بس.
+ * فتح لوحة الإشعارات - بتعرض المودال فوراً وتسجله في تاريخ المتصفح
+ * لربطه بزرار رجوع الموبايل (الهاردوير). لا نقوم بتمييز الكل كمقروء تلقائياً
+ * فور الفتح للحفاظ على عمل تبويب "غير المقروء" وكروت الإشعارات الجديدة.
  */
-async function openNotificationsModal() {
+export async function openNotificationsModal() {
     const modal = getNotificationsModalEl();
     if (!modal) {
         console.warn('[notifications.js] تعذّر فتح لوحة الإشعارات: عنصر المودال مش موجود في الصفحة.');
         return;
     }
 
-    // لو كان فيه مؤقّت إخفاء (hidden) شغال من محاولة قفل سابقة سريعة،
-    // بنلغيه عشان مايضربش على المودال المفتوح دلوقتي
+    // تسجيل المودال في تاريخ المتصفح لربطه بزرار رجوع الموبايل (الهاردوير)
+    pushModalState(hideNotificationsModal);
+
+    // لو كان فيه مؤقّت إخفاء (hidden) شغال من محاولة قفل سابقة سريعة، بنلغيه
     if (closeModalTimeoutId) {
         clearTimeout(closeModalTimeoutId);
         closeModalTimeoutId = null;
@@ -496,11 +520,15 @@ async function openNotificationsModal() {
 
     modal.classList.remove('hidden');
 
-    // Reflow بسيط إجباري قبل إضافة "is-open" عشان الـ transition يشتغل
-    // فعلاً بدل ما العنصر يقفز على طول لحالته النهائية (نفس التقنية
-    // الموصوفة في تعليق HTML فوق #notificationsModal)
+    // Reflow بسيط إجباري قبل إضافة "is-open" عشان الـ transition يشتغل فعلاً
     void modal.offsetWidth;
     modal.classList.add('is-open');
+
+    // إخفاء نقطة شارة الجرس في الهيدر أثناء وجود المستخدم داخل اللوحة
+    const headerBadge = document.getElementById('headerNotificationBadge');
+    if (headerBadge) {
+        headerBadge.classList.add('hidden');
+    }
 
     if (!currentUser) {
         setEmptyStateMessage('notLoggedIn');
@@ -513,22 +541,35 @@ async function openNotificationsModal() {
     if (!hasFetchedOnce) {
         await fetchAndRenderNotifications();
     }
-
-    await markAllNotificationsAsRead();
 }
 
-/** قفل لوحة الإشعارات بانتقال ناعم (نفس تصرافة الفتح لكن بالعكس) */
-function closeNotificationsModal() {
+/** الإخفاء الفعلي (الخام) للوحة الإشعارات - يُستدعى عبر closeModal() أو عند الضغط على زرار الرجوع */
+export function hideNotificationsModal() {
     const modal = getNotificationsModalEl();
     if (!modal || modal.classList.contains('hidden')) return;
 
     modal.classList.remove('is-open');
+
+    // تحديث شارات الإشعارات غير المقروءة بعد إغلاق اللوحة
+    updateUnreadBadges();
 
     if (closeModalTimeoutId) clearTimeout(closeModalTimeoutId);
     closeModalTimeoutId = setTimeout(() => {
         modal.classList.add('hidden');
         closeModalTimeoutId = null;
     }, MODAL_CLOSE_TRANSITION_MS);
+}
+
+/** قفل لوحة الإشعارات متزامنًا مع تاريخ المتصفح وزرار رجوع الموبايل */
+export function closeNotificationsModal() {
+    const modal = getNotificationsModalEl();
+    if (!modal || modal.classList.contains('hidden')) return;
+
+    if (hasOpenModal()) {
+        closeModal();
+    } else {
+        hideNotificationsModal();
+    }
 }
 
 
@@ -730,7 +771,7 @@ function buildNotificationCard(notification) {
         // في css/style.css)
         && !['admin_message', 'admin_reply', 'support_message'].includes(notification.type)
     ) {
-        iconEl.textContent = NOTIFICATION_ICONS[notification.type] || '';
+        iconEl.innerHTML = NOTIFICATION_ICONS[notification.type] || '';
     }
 
     const titleEl = card.querySelector('.notif-title');
@@ -776,7 +817,18 @@ function updateUnreadBadges() {
     const tabCount = document.getElementById('notifUnreadTabCount');
 
     if (headerCount) headerCount.textContent = unreadCount > 99 ? '99+' : String(unreadCount);
-    if (headerBadge) headerBadge.classList.toggle('hidden', unreadCount === 0);
+
+    const modal = getNotificationsModalEl();
+    const isModalOpen = modal && modal.classList.contains('is-open');
+
+    // إذا كانت لوحة الإشعارات مفتوحة حالياً، نخفي شارة الجرس في الهيدر
+    if (headerBadge) {
+        if (isModalOpen || unreadCount === 0) {
+            headerBadge.classList.add('hidden');
+        } else {
+            headerBadge.classList.remove('hidden');
+        }
+    }
 
     if (tabCount) {
         tabCount.textContent = unreadCount > 99 ? '99+' : String(unreadCount);
@@ -810,6 +862,13 @@ export function resolveNotificationNavigation(type, data) {
     data = data || {};
 
     switch (type) {
+        case 'friend_request':
+            // طلب صداقة وارد - نفتح البروفايل العام للمُرسل أو لوحة الإشعارات
+            if (data.sender_id) {
+                return { action: () => openPublicProfile(data.sender_id, { replaceHistory: true }) };
+            }
+            return { action: () => openNotificationsModal() };
+
         case 'friend_accept':
             // حد قبل طلب صداقتك - بنفتح بروفايله العام مباشرة (نفس
             // فلسفة فتح البروفايل من أي مكان تاني في المشروع)
@@ -822,6 +881,7 @@ export function resolveNotificationNavigation(type, data) {
             if (!data.story_id) return null;
             return { action: () => openStoryById(data.story_id) };
 
+        case 'achievement':
         case 'achievement_unlocked':
             // فتحت وسام جديد - بنودّيك لتبويب بروفايلي عشان تشوفه في
             // دولاب الأوسمة
@@ -1359,6 +1419,11 @@ async function markAllNotificationsAsRead() {
     document.querySelectorAll('#notificationsList .notif-card.is-unread')
         .forEach((card) => card.classList.remove('is-unread'));
 
+    // لو المستخدم واقف على تبويب غير المقروء، نعيد رسم القائمة لتظهر حالة الفراغ فوراً
+    if (currentFilter === 'unread') {
+        renderNotificationsList();
+    }
+
     const { error } = await supabaseClient
         .from('notifications')
         .update({ is_read: true })
@@ -1529,6 +1594,130 @@ function handleIncomingNotification(newNotification) {
     }
 
     playNewNotificationFeedback();
+
+    // عرض الإشعار العائم الزجاجي التفاعلي بالأعلى (In-App Toast Banner)
+    showGlassyInAppNotification(newNotification);
+}
+
+/**
+ * عرض إشعار عائم زجاجي فاخر أعلى الشاشة (In-App Glassy Banner)
+ * يظهر لحظيًا فور وصول إشعار جديد أثناء استخدام التطبيق
+ * يدعم التمرير لأعلى للإغلاق، الضغط للتنقل المباشر، وتلقائية الاختفاء بعد 5 ثوان
+ * @param {object} notification
+ */
+export function showGlassyInAppNotification(notification) {
+    if (!notification) return;
+
+    const container = document.getElementById('toastContainer');
+    if (!container) return;
+
+    const banner = document.createElement('div');
+    banner.className = 'glassy-notif-banner';
+    banner.setAttribute('role', 'alert');
+
+    const iconWrap = document.createElement('div');
+    iconWrap.className = 'glassy-notif-icon-wrap';
+
+    const AVATAR_TYPES = ['friend_request', 'friend_accept', 'leaderboard_pass', 'story_reaction', 'comment_reply', 'comment_like'];
+    const BADGE_TYPES = ['achievement', 'achievement_unlocked'];
+
+    if (AVATAR_TYPES.includes(notification.type) && notification.data && notification.data.sender_avatar_url) {
+        const img = document.createElement('img');
+        img.className = 'glassy-notif-avatar';
+        img.src = notification.data.sender_avatar_url;
+        img.alt = '';
+        img.onerror = () => { img.src = FALLBACK_SENDER_AVATAR; };
+        iconWrap.appendChild(img);
+    } else if (AVATAR_TYPES.includes(notification.type)) {
+        const img = document.createElement('img');
+        img.className = 'glassy-notif-avatar';
+        img.src = FALLBACK_SENDER_AVATAR;
+        img.alt = '';
+        iconWrap.appendChild(img);
+    } else if (BADGE_TYPES.includes(notification.type)) {
+        iconWrap.innerHTML = ACHIEVEMENT_BADGE_SVG;
+    } else if (NOTIFICATION_ICONS[notification.type]) {
+        iconWrap.innerHTML = NOTIFICATION_ICONS[notification.type];
+    } else {
+        iconWrap.innerHTML = `
+            <svg viewBox="0 0 24 24" class="w-5 h-5 text-amber-400 stroke-current fill-none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0"/>
+            </svg>
+        `;
+    }
+
+    const bodyEl = document.createElement('div');
+    bodyEl.className = 'glassy-notif-body';
+
+    const titleEl = document.createElement('div');
+    titleEl.className = 'glassy-notif-title';
+    titleEl.textContent = notification.title || 'إشعار جديد';
+
+    const textEl = document.createElement('div');
+    textEl.className = 'glassy-notif-text';
+    textEl.textContent = notification.message || '';
+
+    bodyEl.appendChild(titleEl);
+    bodyEl.appendChild(textEl);
+
+    const badgeEl = document.createElement('div');
+    badgeEl.className = 'glassy-notif-badge';
+
+    banner.appendChild(iconWrap);
+    banner.appendChild(bodyEl);
+    banner.appendChild(badgeEl);
+
+    let isDismissed = false;
+    const dismissBanner = () => {
+        if (isDismissed) return;
+        isDismissed = true;
+        banner.classList.remove('is-visible');
+        banner.classList.add('is-leaving');
+        setTimeout(() => {
+            banner.remove();
+        }, 340);
+    };
+
+    const autoDismissTimeout = setTimeout(dismissBanner, 5000);
+
+    // النقر على الإشعار العائم: الذهاب للوجهة وتعليمه كمقروء
+    banner.addEventListener('click', () => {
+        clearTimeout(autoDismissTimeout);
+        dismissBanner();
+
+        if (notification.id) {
+            markNotificationAsRead(notification.id);
+        }
+
+        const nav = resolveNotificationNavigation(notification.type, notification.data);
+        if (nav && nav.action) {
+            nav.action();
+        } else {
+            openNotificationsModal();
+        }
+    });
+
+    // سحب لأعلى للإغلاق (Swipe up to dismiss)
+    let startY = 0;
+    banner.addEventListener('touchstart', (e) => {
+        startY = e.touches[0].clientY;
+    }, { passive: true });
+
+    banner.addEventListener('touchmove', (e) => {
+        const currentY = e.touches[0].clientY;
+        const deltaY = currentY - startY;
+        if (deltaY < -15) {
+            clearTimeout(autoDismissTimeout);
+            dismissBanner();
+        }
+    }, { passive: true });
+
+    container.appendChild(banner);
+
+    // تشغيل أنيميشن النزول
+    requestAnimationFrame(() => {
+        banner.classList.add('is-visible');
+    });
 }
 
 /** تنبيه خفيف (صوت + نبضة بصرية على الجرس) عند وصول إشعار جديد لحظياً */

@@ -31,7 +31,7 @@
    ================================================================== */
 
 import { supabaseClient } from './supabase-config.js';
-import { resolveNotificationNavigation } from './notifications.js';
+import { resolveNotificationNavigation, openNotificationsModal } from './notifications.js';
 
 /* ------------------------------------------------------------------
    حالة الموديول (Module State)
@@ -107,6 +107,26 @@ async function handleUserSignedIn(user) {
         if (permStatus.receive !== 'granted') {
             console.warn('[push.js] المستخدم رفض إذن الإشعارات - مش هيقدر يستقبل Push على الجهاز ده.');
             return;
+        }
+
+        // إنشاء قناة إشعارات أندرويد (Android 8.0+ NotificationChannel) بأعلى أهمية (Heads-up / Banner)
+        // عشان الإشعارات تنزل كـ Banner عائم بصوت واهتزاز بدل ما توصل صامتة
+        if (PushNotifications.createChannel) {
+            try {
+                await PushNotifications.createChannel({
+                    id: 'sakkawi_notifications',
+                    name: 'إشعارات سِكّاوي',
+                    description: 'تنبيهات التحديات والأصدقاء والتفاعلات والإنجازات',
+                    importance: 5, // 5 = NotificationManager.IMPORTANCE_HIGH (heads-up notification)
+                    visibility: 1, // 1 = NotificationCompat.VISIBILITY_PUBLIC
+                    sound: 'default',
+                    vibration: true,
+                    lights: true,
+                    lightColor: '#D4AF37',
+                });
+            } catch (channelErr) {
+                console.warn('[push.js] تعذر إنشاء قناة الإشعارات:', channelErr);
+            }
         }
 
         // التسجيل نفسه (الحصول على FCM token) بيحصل بشكل غير متزامن -
@@ -254,8 +274,8 @@ function handleNotificationTapData(data) {
     if (result?.action) {
         result.action();
     } else {
-        // نوع مش معروف أو بيانات ناقصة - نكتفي بـ log، زي أي حالة
-        // تانية معندناش فيها تنقّل واضح نروح له
-        console.log('[push.js] مفيش تنقّل واضح لهذا الإشعار (نوع/بيانات غير كافية):', data);
+        // نوع مش معروف أو بيانات عامة - نفتح لوحة الإشعارات كإجراء افتراضي
+        console.log('[push.js] فتح لوحة الإشعارات كإجراء افتراضي للإشعار:', data);
+        openNotificationsModal();
     }
 }

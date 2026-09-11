@@ -2839,7 +2839,7 @@
              خالص لحد ما يقفل المودال. z-[10100] دلوقتي: أعلى من أي حاجة
              تانية في المشروع (أعلى مودال حاليًا z-[10060])، عشان التوست
              يفضل ظاهر فوق أي مودال مفتوح، مهما كان -->
-        <div id="toastContainer" class="fixed top-16 left-1/2 -translate-x-1/2 z-[10100] pointer-events-none flex flex-col gap-2 w-full max-w-xs px-4"></div>
+        <div id="toastContainer" class="fixed top-[max(1.25rem,calc(env(safe-area-inset-top,0px)+0.75rem))] left-1/2 -translate-x-1/2 z-[10100] pointer-events-none flex flex-col gap-2.5 w-full max-w-sm px-4"></div>
 
     </div>
 
@@ -3839,71 +3839,6 @@
 
             <!-- جسم اللوحة: قائمة الإشعارات (قابلة للتمرير + سكرول بار مخصص) -->
             <div id="notificationsList" class="notif-scroll flex-1 overflow-y-auto px-3 pb-4 pt-1 space-y-2">
-
-                <!-- ===========================================================
-                     أمثلة تصميم ثابتة (Static Design Preview) لأنواع الإشعارات
-                     التلاتة المطلوبة - هتتشال بالكامل وتتستبدل ديناميكياً في
-                     مرحلة الـ JS (renderNotifications() هتحقن الكروت هنا
-                     اعتماداً على صفوف جدول notifications الحقيقية، بنسخ
-                     #notificationCardTemplate تحت). سايبها هنا دلوقتي كمرجع
-                     بصري بس لمراجعة الشكل النهائي لكل نوع.
-                     =========================================================== -->
-
-                <!-- مثال 1: طلب صداقة (غير مقروء + أزرار قبول/رفض) - الصورة
-                     والاسم هنا نموذجيين بس للمعاينة البصرية؛ في الرسم
-                     الحقيقي (buildNotificationCard في notifications.js)
-                     الصورة بتيجي من data.sender_avatar_url والاسم من message -->
-                <article class="notif-card is-unread" data-notif-type="friend_request">
-                    <div class="notif-icon-wrap"><img src="data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%20100%20100%27%3E%3Ccircle%20cx%3D%2750%27%20cy%3D%2750%27%20r%3D%2750%27%20fill%3D%27%2314171F%27%2F%3E%3Ccircle%20cx%3D%2750%27%20cy%3D%2738%27%20r%3D%2716%27%20fill%3D%27none%27%20stroke%3D%27%239A96A0%27%20stroke-width%3D%277%27%2F%3E%3Cpath%20d%3D%27M20%2084c0-18%2013.5-30%2030-30s30%2012%2030%2030%27%20fill%3D%27none%27%20stroke%3D%27%239A96A0%27%20stroke-width%3D%277%27%20stroke-linecap%3D%27round%27%2F%3E%3C%2Fsvg%3E" alt="" class="notif-avatar-img"></div>
-                    <div class="notif-body">
-                        <div class="notif-body-top">
-                            <h3 class="notif-title">طلب صداقة جديد</h3>
-                            <span class="notif-unread-dot" aria-hidden="true"></span>
-                        </div>
-                        <p class="notif-message">مريم أحمد</p>
-                        <span class="notif-time">منذ 5 دقائق</span>
-                        <div class="notif-actions">
-                            <button type="button" class="notif-action-btn notif-action-accept" data-action="accept">قبول</button>
-                            <button type="button" class="notif-action-btn notif-action-reject" data-action="reject">رفض</button>
-                        </div>
-                    </div>
-                </article>
-
-                <!-- مثال 2: إنجاز/وسام جديد (غير مقروء، بدون أزرار تفاعل) - الميدالية
-                     هنا نموذجية للمعاينة البصرية بس؛ في الرسم الحقيقي
-                     (buildNotificationCard في notifications.js) نفس ACHIEVEMENT_BADGE_SVG
-                     بالظبط هي اللي بتتحقن -->
-                <article class="notif-card is-unread" data-notif-type="achievement">
-                    <div class="notif-icon-wrap">
-                        <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" class="notif-badge-icon" aria-hidden="true">
-                            <path d="M9 13.5 L6.5 21 L12 18 L9 13.5 Z" fill="#B8942A"/>
-                            <path d="M15 13.5 L17.5 21 L12 18 L15 13.5 Z" fill="#D4AF37"/>
-                            <circle cx="12" cy="9" r="7" fill="#D4AF37" stroke="#B8942A" stroke-width="1"/>
-                            <circle cx="12" cy="9" r="5.4" fill="#F2D77E"/>
-                            <path d="M12 5.6 L12.82 7.87 L15.23 7.95 L13.33 9.43 L14 11.75 L12 10.4 L10 11.75 L10.67 9.43 L8.77 7.95 L11.18 7.87 Z" fill="#B8942A"/>
-                        </svg>
-                    </div>
-                    <div class="notif-body">
-                        <div class="notif-body-top">
-                            <h3 class="notif-title">فتحت وسام جديد!</h3>
-                            <span class="notif-unread-dot" aria-hidden="true"></span>
-                        </div>
-                        <p class="notif-message">مبروك، وصلت لـ 10,000 خطوة في يوم واحد وفتحت وسام "الماراثوني"</p>
-                        <span class="notif-time">منذ ساعة</span>
-                    </div>
-                </article>
-
-                <!-- مثال 3: إعلان عام من النظام (مقروء بالفعل) -->
-                <article class="notif-card" data-notif-type="system_broadcast">
-                    <div class="notif-icon-wrap"><span></span></div>
-                    <div class="notif-body">
-                        <div class="notif-body-top">
-                            <h3 class="notif-title">تحديث جديد في التحدي</h3>
-                        </div>
-                        <p class="notif-message">التحدي الأسبوعي هيبدأ بكرة الساعة 6 المغرب، جهّز نفسك!</p>
-                        <span class="notif-time">أمس</span>
-                    </div>
-                </article>
 
                 <!-- Empty State - مخفية افتراضياً (كلاس "hidden")، JS هيظهرها
                      (بيشيل "hidden" ويضيف "flex") لو مفيش أي إشعارات خالص -->
