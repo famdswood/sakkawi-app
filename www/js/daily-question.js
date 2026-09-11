@@ -43,6 +43,7 @@
 import { supabaseClient } from './supabase-config.js';
 import { sendNotification } from './notifications.js';
 import { fetchWithCache } from './offline-cache.js';
+import { evaluateAndScheduleDailyQuestionReminder, cancelDailyQuestionReminder } from './smart-notifications.js';
 
 /** مدة السؤال بالثواني (شرط الميزة: 25 ثانية) - نفس القيمة لكل سؤال
  *  من السؤالين */
@@ -275,6 +276,17 @@ function getStoredDailyState() {
     }
 }
 
+/**
+ * التحقق مما إذا كان المستخدم قد أتم سؤالي اليوم (بالإجابة أو انتهاء الوقت أو الإلغاء)
+ * يُستخدم لحسم شرط إلغاء تذكير السؤال اليومي فوراً
+ * @returns {boolean}
+ */
+export function areTodaysQuestionsCompleted() {
+    const slots = getStoredDailyState();
+    const isDone = (s) => Boolean(s && (s.status === 'answered' || s.status === 'timeout' || s.status === 'forfeited'));
+    return isDone(slots[1]) && isDone(slots[2]);
+}
+
 /** تسجيل نتيجة Slot معيّن محلياً (فوري، من غير ما نستنى الشبكة) -
  *  بيحافظ على حالة الـ Slot التاني زي ما هي */
 function storeSlotStatus(slot, status, isCorrect) {
@@ -377,6 +389,11 @@ async function finalizeSlot(slot, status, extra = {}) {
 
     storeSlotStatus(slot, status, verifiedIsCorrect);
 
+    // إلغاء تذكير السؤال اليومي فوراً بمجرد اكتمال سؤالي اليوم
+    if (areTodaysQuestionsCompleted()) {
+        cancelDailyQuestionReminder();
+    }
+
     if (status === 'answered' && serverResult && !serverResult.alreadyRecorded) {
         document.dispatchEvent(new CustomEvent('dailyQuestion:answered', {
             detail: {
@@ -432,6 +449,11 @@ function applyTodayStatusRows(data) {
     const slots = getStoredDailyState();
     applyLockedUIForSlot(1, slots[1]);
     applyLockedUIForSlot(2, slots[2]);
+
+    // تقييم وجدولة أو إلغاء تذكير السؤال اليومي بناءً على حالة اليوم الحقيقية
+    evaluateAndScheduleDailyQuestionReminder({
+        areAllQuestionsDone: areTodaysQuestionsCompleted(),
+    });
 }
 
 /**
@@ -1110,6 +1132,11 @@ export function initDailyQuestionCard() {
         document.addEventListener('visibilitychange', handleVisibilityChange);
     }
 
+    // تقييم أولي لتذكير السؤال اليومي بناءً على الكاش المحلي
+    evaluateAndScheduleDailyQuestionReminder({
+        areAllQuestionsDone: areTodaysQuestionsCompleted(),
+    });
+
     // معرفة هوية المستخدم بنفس فلسفة js/notifications.js (الاستماع
     // لحدث 'auth:login' بدل استيراد getCurrentUser مباشرة) - وبمجرد ما
     // نعرف المستخدم، نراجع Supabase (مصدر الحقيقة) للتأكد إن حالة
@@ -1122,6 +1149,9 @@ export function initDailyQuestionCard() {
         // الشاشة لحظياً. بعد كده reconcileTodayStatusFromSupabase بتجيب
         // نتيجة الحساب الجديد الحقيقية لو فعلاً جاوب قبل كده من جهاز تاني
         applyLockedUIForAllSlots();
+        evaluateAndScheduleDailyQuestionReminder({
+            areAllQuestionsDone: areTodaysQuestionsCompleted(),
+        });
         reconcileTodayStatusFromSupabase();
     });
     document.addEventListener('auth:signed-out', () => {

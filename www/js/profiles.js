@@ -74,6 +74,7 @@ import { showAuthGate } from './onboarding.js';
 import { presenceDotHtml, loadAndApplyPresence } from './presence.js';
 // (جديد - كاش الأوفلاين) شوف js/offline-cache.js للتفاصيل الكاملة
 import { fetchWithCache } from './offline-cache.js';
+import { evaluateAndScheduleStreakSaver } from './smart-notifications.js';
 
 /**
  * أيقونة "مفيش صورة" العامة الموحّدة - Data URI جاهزة تتحط مباشرة كـ src
@@ -1340,6 +1341,12 @@ export function updateProfileStats(newStats = {}) {
     if (dailyWinsEl) dailyWinsEl.textContent = profileStats.dailyChampionshipWins;
     if (weeklyWinsEl) weeklyWinsEl.textContent = profileStats.weeklyChampionshipWins;
     if (monthlyWinsEl) monthlyWinsEl.textContent = profileStats.monthlyChampionshipWins;
+
+    // تقييم تنبيه إنقاذ الستريك (إذا كان الستريك مهدداً بالانقطاع قبل منتصف الليل)
+    evaluateAndScheduleStreakSaver({
+        streakCount: profileStats.streakCount,
+        isSecuredToday: currentProfileRow?.last_active_date === getLocalDateString(),
+    });
 }
 
 /** تنسيق رقم كبير بصيغة مختصرة (142500 -> 142.5K) */
@@ -2162,6 +2169,19 @@ const LEADERBOARD_PASS_NOTIFY_LIMIT = 5;
  * متمنعش حفظ النقاط نفسه من إنه يتم (اتحفظ بالفعل قبل ما الدالة دي
  * تتنادى، شوف patchProfileRow/flushPendingStepsBatch).
  * @param {'points'|'total_steps'} metric
+/** مدة الكولد داون (ساعتان) لمنع إزعاج نفس المنافس بتكرار الإشعار في وقت قصير */
+const LEADERBOARD_PASS_COOLDOWN_MS = 2 * 60 * 60 * 1000;
+
+/**
+ * بعد أي زيادة في points أو total_steps للمستخدم الحالي، بنشوف هل
+ * الزيادة دي خلته يتخطى حد كان لسه فوقه (بين قيمته القديمة والجديدة)
+ * في الترتيب - لو آه، بنبعت لكل واحد منهم إشعار "leaderboard_pass".
+ * يتميز النظام بـ:
+ * 1) كولد داون (Anti-spam cooldown) ساعتين لكل منافس.
+ * 2) تمييز الأصدقاء عن باقي المنافسين في صياغة الإشعار.
+ * 3) حساب الفارق الدقيق في الخطوات أو النقاط.
+ * 4) بدون أي إيموجي (Zero Emojis).
+ * @param {'points'|'total_steps'} metric
  * @param {number} oldValue - قيمة المستخدم قبل التحديث
  * @param {number} newValue - قيمة المستخدم بعد التحديث
  */
@@ -2169,17 +2189,9 @@ async function notifyLeaderboardPassIfNeeded(metric, oldValue, newValue) {
     if (!currentAuthUser || !(newValue > oldValue)) return;
 
     try {
-        // أي مستخدم قيمته وقعت بين القديمة والجديدة (استبعاداً للقديمة
-        // نفسها، وشاملة الجديدة) يبقى فعلياً اتخطى دلوقتي - مرتبين
-        // بالأقرب أولاً (الأقل فرق) عشان لو في حد أكتر من الحد الأقصى
-        // المسموح بيهم نبلغ الأقرب/الأكثر إثارة للتنافس بس
-        // (إصلاح - باج حقيقي): نفس سبب fetchCurrentUserRank فوق - profiles
-        // مباشرة كانت بترجع فاضية دايماً لغير صفك انت (وبما إن الشرط هنا
-        // أصلاً بيستبعد صفك بـ neq، كانت النتيجة صفر نهائي دايماً ومفيش
-        // إشعار "leaderboard_pass" بيتبعت لحد خالص).
         const { data: passedUsers, error } = await supabaseClient
             .from('public_profiles')
-            .select('id')
+            .select('id, full_name, points, total_steps, avatar_url')
             .gt(metric, oldValue)
             .lte(metric, newValue)
             .neq('id', currentAuthUser.id)
@@ -2192,20 +2204,106 @@ async function notifyLeaderboardPassIfNeeded(metric, oldValue, newValue) {
         }
         if (!passedUsers || passedUsers.length === 0) return;
 
+        // إدارة الكولد داون (Anti-spam)
+        const cooldownStorageKey = `skawy_lb_cooldown_${currentAuthUser.id}`;
+        let cooldownMap = {};
+        try {
+            const rawCooldown = window.localStorage.getItem(cooldownStorageKey);
+            if (rawCooldown) cooldownMap = JSON.parse(rawCooldown) || {};
+        } catch (e) {
+            cooldownMap = {};
+        }
+
+        const now = Date.now();
+        const eligibleUsers = passedUsers.filter((u) => {
+            const lastNotified = cooldownMap[u.id];
+            return !lastNotified || (now - lastNotified) >= LEADERBOARD_PASS_COOLDOWN_MS;
+        });
+
+        if (eligibleUsers.length === 0) return;
+
+        // فحص علاقة الصداقة مع المنافسين المؤهلين
+        const candidateIds = eligibleUsers.map((u) => u.id);
+        const friendIds = new Set();
+        try {
+            const { data: friendRows } = await supabaseClient
+                .from('friends')
+                .select('requester_id, addressee_id')
+                .eq('status', 'accepted')
+                .or(`requester_id.eq.${currentAuthUser.id},addressee_id.eq.${currentAuthUser.id}`);
+
+            if (friendRows) {
+                friendRows.forEach((r) => {
+                    const fid = r.requester_id === currentAuthUser.id ? r.addressee_id : r.requester_id;
+                    if (candidateIds.includes(fid)) {
+                        friendIds.add(fid);
+                    }
+                });
+            }
+        } catch (err) {
+            console.warn('تعذر التحقق من علاقات الصداقة للمنافسين:', err);
+        }
+
         const myName = currentProfileRow?.full_name || 'مستخدم';
         const { sendNotification } = await import('./notifications.js');
 
-        await Promise.all(passedUsers.map((row) => sendNotification({
-            userId: row.id,
-            type: 'leaderboard_pass',
-            title: 'حد تخطاك في الترتيب!',
-            message: `${myName} تخطاك في لوحة الصدارة`,
-            data: {
-                sender_id: currentAuthUser.id,
-                sender_avatar_url: currentProfileRow?.avatar_url || null,
-                metric,
-            },
-        })));
+        await Promise.all(eligibleUsers.map((row) => {
+            const isFriend = friendIds.has(row.id);
+            const rivalVal = row[metric] ?? oldValue;
+            const gap = Math.max(1, newValue - rivalVal);
+
+            let title = '';
+            let message = '';
+
+            if (metric === 'total_steps') {
+                if (isFriend) {
+                    title = 'منافسة الأصدقاء: تخطاك صديقك!';
+                    message = `صديقك ${myName} تجاوزك بفارق ${gap.toLocaleString('ar-EG')} خطوة في لوحة الصدارة. شد حيلك واستعد صدارتك!`;
+                } else {
+                    title = 'تحدي لوحة الصدارة: تخطاك منافس!';
+                    message = `${myName} تقدم عليك بفارق ${gap.toLocaleString('ar-EG')} خطوة في لوحة الصدارة. لا تدع الترتيب يفوتك!`;
+                }
+            } else {
+                // points
+                if (isFriend) {
+                    title = 'منافسة الأصدقاء: تفوق صديقك بالنقاط!';
+                    message = `صديقك ${myName} تفوق عليك بفارق ${gap.toLocaleString('ar-EG')} نقطة في لوحة الصدارة. أجب على الأسئلة أو امشِ لتستعيد مركزك!`;
+                } else {
+                    title = 'تحدي لوحة الصدارة: تخطاك منافس بالنقاط!';
+                    message = `${myName} تقدم عليك في ترتيب النقاط بفارق ${gap.toLocaleString('ar-EG')} نقطة.`;
+                }
+            }
+
+            // تحديث الكولد داون لهذا المستخدم
+            cooldownMap[row.id] = now;
+
+            return sendNotification({
+                userId: row.id,
+                type: 'leaderboard_pass',
+                title,
+                message,
+                data: {
+                    sender_id: currentAuthUser.id,
+                    sender_name: myName,
+                    sender_avatar_url: currentProfileRow?.avatar_url || null,
+                    metric,
+                    gap,
+                    is_friend: isFriend,
+                },
+            });
+        }));
+
+        // تنظيف الكولد داون القديم وحفظه
+        try {
+            const cleanedMap = {};
+            const oneDayAgo = now - 24 * 60 * 60 * 1000;
+            Object.entries(cooldownMap).forEach(([k, timestamp]) => {
+                if (timestamp > oneDayAgo) cleanedMap[k] = timestamp;
+            });
+            window.localStorage.setItem(cooldownStorageKey, JSON.stringify(cleanedMap));
+        } catch (e) {
+            // تجاهل أخطاء التخزين
+        }
     } catch (err) {
         console.error('استثناء غير متوقع أثناء التحقق من تخطي الترتيب:', err);
     }

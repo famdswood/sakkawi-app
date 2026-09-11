@@ -50,6 +50,10 @@ import { supabaseClient } from './supabase-config.js';
 // (خطة الأوفلاين - القسم 5) مراقبة رجوع النت + إطلاق حدث app:online
 // عالمي لأي ملف محتاج يعرف - شوف initApp() تحت
 import { initNetworkStatusWatcher } from './network-status.js';
+import {
+    initSmartNotifications,
+    evaluateAndScheduleDailyTargetReminder,
+} from './smart-notifications.js';
 
 /* ------------------------------------------------------------------
    0) نظام مراحل الخطوات (بدل هدف ثابت 10,000)
@@ -466,6 +470,12 @@ function handleStepsIncrease(delta) {
     updateStepsUI();
     playSound('step');
 
+    // تقييم/إلغاء تذكير الهدف اليومي فوراً بناءً على عدد الخطوات الجديد
+    evaluateAndScheduleDailyTargetReminder({
+        currentSteps: appState.steps,
+        targetSteps: 10000,
+    });
+
     // بنبلّغ js/profiles.js بالتقدم الحقيقي ده عن طريق حدث مخصص (بدل
     // استيراد مباشر) عشان يحفظه في Supabase (total_steps/daily_steps/
     // points) ويحسب الستريك - نفس فلسفة الأحداث المستخدمة في باقي
@@ -540,6 +550,12 @@ function applySilentStepsResync(newSteps) {
     appState.hitHardCapToday = appState.steps >= HARD_DAILY_STEPS_CAP;
 
     updateStepsUI();
+
+    // تقييم/إلغاء تذكير الهدف اليومي بناءً على الخطوات المزامنة من السيرفر
+    evaluateAndScheduleDailyTargetReminder({
+        currentSteps: appState.steps,
+        targetSteps: 10000,
+    });
 }
 
 /**
@@ -595,6 +611,12 @@ function handleDayReset() {
 function initStepsCounter() {
     renderStageDotsSkeleton(); // (جديد) بناء نقط المراحل مرة واحدة بس
     updateStepsUI();
+
+    // تقييم تذكير الهدف اليومي بناءً على الخطوات المتراكمة الحالية
+    evaluateAndScheduleDailyTargetReminder({
+        currentSteps: appState.steps,
+        targetSteps: 10000,
+    });
 
     // (إصلاح ثغرة منتصف الليل) الاستماع لإعادة التعيين اليومية
     document.addEventListener('sensors:day-reset', () => {
@@ -1160,6 +1182,9 @@ function initApp() {
         // (المرحلة 8) بعد initNotificationsUI() مباشرة - نفس منطق
         // "مودال مستقل، بيتهيأ مرة واحدة، بيستمع لأحداث auth بنفسه"
         initSupportChat();
+
+        // تهيئة نظام التنبيهات المجدولة الذكية (الهدف اليومي، السؤال، إنقاذ الستريك)
+        initSmartNotifications();
 
         // checkExistingSession() (اللي بتفتح authModal كمودال منبثق فعلياً
         // لو مفيش جلسة محفوظة) لازم تتنادى *بعد* ما شاشة الترحيب تخلّص -
