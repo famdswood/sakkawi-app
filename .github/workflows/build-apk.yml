@@ -7,9 +7,13 @@ on:
 
 jobs:
   build:
+    name: Build Sekkawy APK
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Set up JDK 21
@@ -17,28 +21,42 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '21'
+          cache: 'gradle'
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '22'
+          cache: 'npm'
 
       - name: Install dependencies
         run: |
           npm install
-          npm install -D typescript
 
-      - name: Sync Capacitor
-        run: npx cap sync android
+      - name: Sync Capacitor Android
+        run: |
+          npx cap sync android
 
-      - name: Grant execute permission for gradlew
+      - name: Make Gradlew executable
         run: chmod +x android/gradlew
 
-      - name: Build Debug APK
-        run: cd android && ./gradlew assembleDebug
+      - name: Build Android APK
+        run: |
+          cd android
+          ./gradlew assembleDebug --stacktrace
 
-      - name: Upload APK artifact
+      - name: Ensure APK naming
+        run: |
+          cd android/app/build/outputs/apk/debug
+          if [ -f app-debug.apk ] && [ ! -f Sekkawy.apk ]; then
+            cp app-debug.apk Sekkawy.apk
+          fi
+          ls -la
+
+      - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: sakkawi-debug-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          name: Sekkawy-APK
+          path: android/app/build/outputs/apk/debug/Sekkawy.apk
+          if-no-files-found: error
+          retention-days: 30
