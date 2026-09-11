@@ -286,6 +286,110 @@ export async function sendNotification({ userId, type, title, message, data = {}
     }
 }
 
+/**
+ * إزالة إشعار أو أكثر من الذاكرة المحلية (notificationsCache) والواجهة فوراً.
+ * تُستدعى محلياً أو عبر حدث 'app:notification-dismiss' عندما يتم قبول/إلغاء
+ * فعل من أي مكان آخر بالتطبيق (مثل قبول صداقة من البروفايل أو شاشة الطلبات).
+ *
+ * @param {object} matcher
+ * @param {string} [matcher.type] - نوع الإشعار (مثل 'friend_request', 'comment_like', 'story_reaction')
+ * @param {string} [matcher.requestId] - معرف الطلب (data.request_id)
+ * @param {string} [matcher.storyId] - معرف الاستوري (data.story_id)
+ * @param {string} [matcher.commentId] - معرف التعليق (data.comment_id)
+ * @param {string} [matcher.senderId] - معرف المرسل (data.sender_id)
+ * @param {string} [matcher.notifId] - معرف الإشعار نفسه (notification.id)
+ */
+export function dismissNotificationLocally(matcher = {}) {
+    if (!matcher || typeof matcher !== 'object') return;
+
+    const { type, requestId, storyId, commentId, senderId, notifId } = matcher;
+
+    const matches = (n) => {
+        if (notifId && String(n.id) === String(notifId)) return true;
+        if (type && n.type !== type) return false;
+
+        const data = n.data || {};
+        if (requestId && String(data.request_id) === String(requestId)) return true;
+        if (storyId && String(data.story_id) === String(storyId)) {
+            if (senderId && String(data.sender_id) !== String(senderId)) return false;
+            return true;
+        }
+        if (commentId && String(data.comment_id) === String(commentId)) {
+            if (senderId && String(data.sender_id) !== String(senderId)) return false;
+            return true;
+        }
+        if (senderId && !requestId && !storyId && !commentId && String(data.sender_id) === String(senderId)) {
+            return true;
+        }
+        if (type && !requestId && !storyId && !commentId && !senderId && !notifId) {
+            return true;
+        }
+        return false;
+    };
+
+    const removedItems = notificationsCache.filter(matches);
+    if (removedItems.length === 0) return;
+
+    notificationsCache = notificationsCache.filter((n) => !matches(n));
+    updateUnreadBadges();
+
+    // إزالة الكروت من الـ DOM مع أنيميشن ناعم
+    removedItems.forEach((item) => {
+        const card = document.querySelector(`.notif-card[data-notif-id="${item.id}"]`);
+        if (card) {
+            card.classList.add('is-removing');
+            setTimeout(() => card.remove(), 350);
+        }
+    });
+
+    if (notificationsCache.length === 0) {
+        const emptyState = document.getElementById('notificationsEmptyState');
+        if (emptyState) {
+            emptyState.classList.remove('hidden');
+            emptyState.classList.add('flex');
+        }
+    }
+}
+
+/**
+ * حذف إشعار نهائياً من قاعدة البيانات (Supabase) ومن الذاكرة والواجهة معاً
+ * @param {object} matcher
+ */
+export async function purgeNotificationRecord(matcher = {}) {
+    dismissNotificationLocally(matcher);
+
+    if (!currentUser) return;
+
+    try {
+        let query = supabaseClient.from('notifications').delete().eq('user_id', currentUser.id);
+
+        if (matcher.notifId) {
+            query = query.eq('id', matcher.notifId);
+        } else if (matcher.type) {
+            query = query.eq('type', matcher.type);
+            if (matcher.requestId) {
+                query = query.filter('data->>request_id', 'eq', String(matcher.requestId));
+            }
+            if (matcher.storyId) {
+                query = query.filter('data->>story_id', 'eq', String(matcher.storyId));
+            }
+            if (matcher.commentId) {
+                query = query.filter('data->>comment_id', 'eq', String(matcher.commentId));
+            }
+            if (matcher.senderId) {
+                query = query.filter('data->>sender_id', 'eq', String(matcher.senderId));
+            }
+        }
+
+        const { error } = await query;
+        if (error) {
+            console.error('[notifications.js] خطأ أثناء حذف الإشعار من الداتابيز:', error.message);
+        }
+    } catch (err) {
+        console.error('[notifications.js] استثناء أثناء purgeNotificationRecord:', err);
+    }
+}
+
 
 /* ------------------------------------------------------------------
    2) نقطة الدخول العامة - initNotificationsUI()
@@ -442,6 +546,13 @@ function bindStaticListeners() {
         listContainer.addEventListener('pointerup', handleNotifCardPointerUp);
         listContainer.addEventListener('pointercancel', handleNotifCardPointerUp);
     }
+
+    // الاستماع لحدث تفريغ الإشعار من أي مكان في التطبيق (قبول صداقة، إلغاء لايك، إلخ)
+    window.addEventListener('app:notification-dismiss', (event) => {
+        if (event.detail) {
+            dismissNotificationLocally(event.detail);
+        }
+    });
 }
 
 
@@ -631,6 +742,42 @@ async function fetchAndRenderNotifications() {
     }
 
     notificationsCache = data || [];
+
+    // 🧠 فحص ذاتي ذكي وتنظيف تلقائي (Self-Healing / Auto-Purge):
+    // فحص إشعارات طلبات الصداقة المعلقة للتأكد من أنها ما زالت صالحة ولم تُقبل أو تُلغى في الخلفية
+    const pendingFriendNotifs = notificationsCache.filter((n) => n.type === 'friend_request' && n.data?.request_id);
+    if (pendingFriendNotifs.length > 0) {
+        const requestIds = pendingFriendNotifs.map((n) => n.data.request_id);
+        try {
+            const { data: activeFriends } = await supabaseClient
+                .from('friends')
+                .select('id, status')
+                .in('id', requestIds);
+
+            const validPendingIds = new Set(
+                (activeFriends || [])
+                    .filter((f) => f.status === 'pending')
+                    .map((f) => String(f.id))
+            );
+
+            const deadNotifs = pendingFriendNotifs.filter(
+                (n) => !validPendingIds.has(String(n.data.request_id))
+            );
+
+            if (deadNotifs.length > 0) {
+                const deadIds = deadNotifs.map((n) => n.id);
+                notificationsCache = notificationsCache.filter((n) => !deadIds.includes(n.id));
+                supabaseClient
+                    .from('notifications')
+                    .delete()
+                    .in('id', deadIds)
+                    .then(() => {});
+            }
+        } catch (sweepErr) {
+            console.warn('[notifications.js] فحص التحقق الذاتي للطلبات المعلقة:', sweepErr);
+        }
+    }
+
     hasFetchedOnce = true;
 
     renderNotificationsList();
@@ -1518,27 +1665,7 @@ function bindNotificationsRealtimeSubscription() {
  */
 function handleRealtimeNotificationDeleted(deletedRow) {
     if (!deletedRow || deletedRow.id === undefined) return;
-
-    const notifId = deletedRow.id;
-    const wasInCache = notificationsCache.some((n) => String(n.id) === String(notifId));
-    if (!wasInCache) return;
-
-    notificationsCache = notificationsCache.filter((n) => String(n.id) !== String(notifId));
-    updateUnreadBadges();
-
-    const card = document.querySelector(`.notif-card[data-notif-id="${notifId}"]`);
-    if (card) {
-        card.classList.add('is-removing');
-        setTimeout(() => card.remove(), 350);
-    }
-
-    if (notificationsCache.length === 0) {
-        const emptyState = document.getElementById('notificationsEmptyState');
-        if (emptyState) {
-            emptyState.classList.remove('hidden');
-            emptyState.classList.add('flex');
-        }
-    }
+    dismissNotificationLocally({ notifId: deletedRow.id });
 }
 
 /**

@@ -1169,6 +1169,20 @@ async function toggleStoryLike() {
         } catch (notifyErr) {
             console.error('خطأ غير متوقع أثناء إرسال إشعار التفاعل على الاستوري:', notifyErr);
         }
+    } else {
+        // حذف إشعار التفاعل عند إلغاء الإعجاب بالاستوري
+        try {
+            if (currentUserId && story.userId) {
+                supabaseClient
+                    .from('notifications')
+                    .delete()
+                    .eq('user_id', story.userId)
+                    .eq('type', 'story_reaction')
+                    .filter('data->>story_id', 'eq', String(story.id))
+                    .filter('data->>sender_id', 'eq', String(currentUserId))
+                    .then(() => {});
+            }
+        } catch (_) {}
     }
 }
 
@@ -1275,6 +1289,14 @@ async function performDeleteCurrentStory() {
     try {
         const { error } = await supabaseClient.from('text_stories').delete().eq('id', story.id);
         if (error) throw error;
+
+        // حذف أي إشعارات مرتبطة بهذه الاستوري تلقائياً
+        supabaseClient
+            .from('notifications')
+            .delete()
+            .eq('type', 'story_reaction')
+            .filter('data->>story_id', 'eq', String(story.id))
+            .then(() => {});
 
         // شيل الاستوري من الشريط المحلي، وأعد حساب مجموعة استوريهات نفس
         // الشخص من الصفر على المصفوفة الجديدة (بدل ما نحاول نعدّل الفهارس

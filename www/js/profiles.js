@@ -2884,24 +2884,17 @@ export async function acceptFriendRequest(requestId) {
     // واجهته هو هتعكسه أول ما يفتح تبويب الأوسمة أو يعمل أي نشاط تاني
     checkAndUnlockBadges();
 
-    // حذف إشعار "طلب صداقة جديد" بتاعي أنا (المستقبِل) بعد ما اتقبل -
-    // مهم نعمل الخطوة دي هنا (مركزياً جوه acceptFriendRequest نفسها)
-    // مش بس من جوه كارت الإشعار (notifications.js)، عشان الدالة دي هي
-    // نفسها اللي بتتنادى لو المستخدم قبل الطلب من أي مكان تاني في
-    // التطبيق (قائمة "الطلبات الواردة" في تبويب البروفايل، أو زرار
-    // "قبول الطلب" في صفحة البروفايل العام لصاحب الطلب) - في الحالتين
-    // دول الإشعار كان فاضل عالق في لوحة الإشعارات من غير أي داعي بعد
-    // ما الطلب اتعالج فعلياً. الحذف هنا "Fire and forget" (منستناهوش
-    // ولا بنوقف نجاح القبول لو فشل) بنفس فلسفة sendNotification، وبما
-    // إن notifications.js بتستمع لحدث DELETE على الجدول ده عبر
-    // Realtime أصلاً (لحالة إلغاء/رفض الطلب)، لوحة الإشعارات المفتوحة
-    // هتتزامن معاها فوراً من غير أي كود إضافي هناك
+    // حذف إشعار "طلب صداقة جديد" بتاعي أنا (المستقبِل) بعد ما اتقبل فوراً
+    window.dispatchEvent(new CustomEvent('app:notification-dismiss', {
+        detail: { type: 'friend_request', requestId },
+    }));
+
     supabaseClient
         .from('notifications')
         .delete()
         .eq('user_id', currentAuthUser.id)
         .eq('type', 'friend_request')
-        .eq('data->>request_id', requestId)
+        .filter('data->>request_id', 'eq', String(requestId))
         .then(({ error: deleteError }) => {
             if (deleteError) {
                 console.error('خطأ في حذف إشعار طلب الصداقة بعد قبوله:', deleteError.message);
@@ -2946,6 +2939,11 @@ export async function rejectFriendRequest(requestId) {
     }
     if (!currentAuthUser) return { error: new Error('لا يوجد مستخدم مسجل دخول') };
 
+    // حذف إشعار "طلب صداقة جديد" من كاش الواجهة فوراً
+    window.dispatchEvent(new CustomEvent('app:notification-dismiss', {
+        detail: { type: 'friend_request', requestId },
+    }));
+
     const { error } = await supabaseClient
         .from('friends')
         .delete()
@@ -2956,18 +2954,13 @@ export async function rejectFriendRequest(requestId) {
         return { error };
     }
 
-    // حذف إشعار "طلب صداقة جديد" بتاعي بعد رفضه - بنفس فلسفة الحذف في
-    // acceptFriendRequest فوق (Fire and forget، ومتزامن أوتوماتيك مع
-    // أي لوحة إشعارات مفتوحة عبر Realtime). صف friends نفسه اتحذف
-    // بالفعل فوق، فمن المفروض ده يحصل تلقائياً أصلاً لو فيه trigger على
-    // مستوى القاعدة بيسمع لحذف friends، لكن بنعملها هنا صراحة كمان
-    // عشان نضمن سلوك موحّد ومتوقع أياً كان شكل الـ trigger الفعلي
+    // حذف إشعار "طلب صداقة جديد" بتاعي بعد رفضه من قاعدة البيانات
     supabaseClient
         .from('notifications')
         .delete()
         .eq('user_id', currentAuthUser.id)
         .eq('type', 'friend_request')
-        .eq('data->>request_id', requestId)
+        .filter('data->>request_id', 'eq', String(requestId))
         .then(({ error: deleteError }) => {
             if (deleteError) {
                 console.error('خطأ في حذف إشعار طلب الصداقة بعد رفضه:', deleteError.message);
@@ -2991,6 +2984,19 @@ export async function removeFriend(friendRelationId) {
         return;
     }
     if (!currentAuthUser) return;
+
+    // تفريغ أي إشعار طلب صداقة محلي إذا كان هذا إلغاءً أو حذفاً لطلب
+    window.dispatchEvent(new CustomEvent('app:notification-dismiss', {
+        detail: { type: 'friend_request', requestId: friendRelationId },
+    }));
+
+    // حذف إشعار طلب الصداقة لدى الطرف الآخر إذا كان هذا إلغاءً لطلب معلق
+    supabaseClient
+        .from('notifications')
+        .delete()
+        .eq('type', 'friend_request')
+        .filter('data->>request_id', 'eq', String(friendRelationId))
+        .then(() => {});
 
     const { error } = await supabaseClient
         .from('friends')

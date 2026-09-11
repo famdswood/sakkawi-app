@@ -826,6 +826,13 @@ async function handleCommentDelete(card, post, commentId) {
         return;
     }
 
+    // حذف أي إشعارات مرتبطة بهذا الكومنت (لايك أو رد) تلقائياً
+    supabaseClient
+        .from('notifications')
+        .delete()
+        .or(`data->>comment_id.eq.${commentId},data->>reply_id.eq.${commentId}`)
+        .then(() => {});
+
     const removedIds = new Set([commentId]);
     (post.comments || []).forEach((c) => {
         if (c.parentCommentId === commentId) removedIds.add(c.id);
@@ -901,6 +908,16 @@ async function handleCommentLikeToggle(likeBtn, comment, post) {
                 sender_avatar_url: (currentUserProfile && currentUserProfile.avatar_url) || null,
             },
         });
+    } else if (!newLiked && comment.user_id && comment.user_id !== currentUserId) {
+        // حذف إشعار اللايك عند إلغاء الإعجاب
+        supabaseClient
+            .from('notifications')
+            .delete()
+            .eq('user_id', comment.user_id)
+            .eq('type', 'comment_like')
+            .filter('data->>comment_id', 'eq', String(comment.id))
+            .filter('data->>sender_id', 'eq', String(currentUserId))
+            .then(() => {});
     }
 }
 
