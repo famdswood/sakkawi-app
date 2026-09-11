@@ -852,6 +852,7 @@ input,
    من عمل Scroll/Zoom افتراضي على الكبسولة وقت اللمس، عشان يسيب التحكم
    بالكامل للـ JS (راجع bindStickerDragAndResize في stories.js) */
 #storyPreviewSticker {
+    z-index: 30;
     pointer-events: auto;
     cursor: grab;
     touch-action: none;

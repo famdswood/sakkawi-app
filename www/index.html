@@ -3633,13 +3633,13 @@
              class="absolute inset-0 w-full h-full flex flex-col items-center justify-center p-6 transition-all duration-300">
             
             <!-- خانة الكتابة المباشرة في قلب الشاشة الحرة -->
-            <div class="w-full max-w-md relative z-10 flex flex-col items-center justify-center my-auto px-4">
+            <div class="w-full max-w-md relative z-10 flex flex-col items-center justify-center my-auto px-4 pointer-events-none">
                 <textarea id="createStoryTextarea" maxlength="120" rows="3"
                           placeholder="اكتب نص هنا.."
-                          class="w-full bg-transparent border-none text-center text-white text-2xl sm:text-3xl font-cairo font-black leading-relaxed placeholder:text-white/35 focus:outline-none resize-none overflow-hidden drop-shadow-md transition-all"></textarea>
+                          class="w-full bg-transparent border-none text-center text-white text-2xl sm:text-3xl font-cairo font-black leading-relaxed placeholder:text-white/35 focus:outline-none resize-none overflow-hidden drop-shadow-md transition-all pointer-events-auto"></textarea>
                 
                 <!-- عداد الحروف خفيف وصغير أسفل النص مباشرة -->
-                <span id="createStoryCharCount" class="text-[10px] text-white/60 font-bold mt-2 bg-black/30 px-2.5 py-0.5 rounded-full backdrop-blur-sm shadow-sm">0 / 120</span>
+                <span id="createStoryCharCount" class="text-[10px] text-white/60 font-bold mt-2 bg-black/30 px-2.5 py-0.5 rounded-full backdrop-blur-sm shadow-sm pointer-events-none">0 / 120</span>
             </div>
 
             <!-- كبسولة ملصق الإنجاز الحي القابلة للسحب والتحريك على كامل أبعاد الشاشة -->

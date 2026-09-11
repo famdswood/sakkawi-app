@@ -2876,12 +2876,16 @@ function bindStickerDragAndResize() {
         sticker.setPointerCapture(event.pointerId);
         activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
 
+        // إخفاء التركيز ولوحة المفاتيح فوراً عند بدء سحب الملصق لضمان سلاسة الحركة ورؤية الشاشة كاملة
+        document.getElementById('createStoryTextarea')?.blur();
+
         if (activePointers.size === 2) {
             const [p1, p2] = [...activePointers.values()];
             pinchStartDistance = distanceBetween(p1, p2);
             pinchStartScale = createStoryState.stickerPosition.scale;
         }
         event.preventDefault();
+        event.stopPropagation();
     });
 
     sticker.addEventListener('pointermove', (event) => {
@@ -2910,9 +2914,11 @@ function bindStickerDragAndResize() {
             applyStickerTransform(sticker, createStoryState.stickerPosition);
         }
         event.preventDefault();
+        event.stopPropagation();
     });
 
     function releasePointer(event) {
+        event.stopPropagation();
         activePointers.delete(event.pointerId);
         // لو رجعنا لإصبع واحد أو أقل، لازم نصفّر بداية الـ Pinch عشان لو
         // المستخدم ضم إصبع جديد تاني، الحساب يبدأ من الصفر مش من قيمة قديمة

@@ -286,6 +286,45 @@ export async function sendNotification({ userId, type, title, message, data = {}
     }
 }
 
+const DISMISSED_STORAGE_PREFIX = 'sekkawy_dismissed_notif_ids_';
+
+/**
+ * الحصول على معرفات الإشعارات المحذوفة محلياً للمستخدم الحالي لمنع ظهورها مجدداً
+ * @returns {Set<string>}
+ */
+function getDismissedNotificationIds() {
+    if (!currentUser?.id) return new Set();
+    try {
+        const raw = localStorage.getItem(`${DISMISSED_STORAGE_PREFIX}${currentUser.id}`);
+        if (!raw) return new Set();
+        const arr = JSON.parse(raw);
+        return new Set(Array.isArray(arr) ? arr.map(String) : []);
+    } catch (e) {
+        return new Set();
+    }
+}
+
+/**
+ * حفظ معرفات إشعارات تم حذفها أو مشاهدتها في التخزين المحلي الدائم
+ * @param {string|number|(string|number)[]} ids
+ */
+function recordDismissedNotificationIds(ids) {
+    if (!currentUser?.id) return;
+    const rawList = Array.isArray(ids) ? ids : [ids];
+    const cleanList = rawList.filter((id) => id !== null && id !== undefined).map(String);
+    if (cleanList.length === 0) return;
+
+    try {
+        const existing = getDismissedNotificationIds();
+        cleanList.forEach((id) => existing.add(id));
+        // الحد الأقصى للمعرفات المحفوظة لمنع تضخم localStorage (أحدث 500 معرف)
+        const arr = Array.from(existing).slice(-500);
+        localStorage.setItem(`${DISMISSED_STORAGE_PREFIX}${currentUser.id}`, JSON.stringify(arr));
+    } catch (e) {
+        console.warn('[notifications.js] تعذر حفظ معرفات الإشعارات المحذوفة في localStorage:', e);
+    }
+}
+
 /**
  * إزالة إشعار أو أكثر من الذاكرة المحلية (notificationsCache) والواجهة فوراً.
  * تُستدعى محلياً أو عبر حدث 'app:notification-dismiss' عندما يتم قبول/إلغاء
@@ -330,6 +369,8 @@ export function dismissNotificationLocally(matcher = {}) {
     const removedItems = notificationsCache.filter(matches);
     if (removedItems.length === 0) return;
 
+    recordDismissedNotificationIds(removedItems.map((n) => n.id));
+
     notificationsCache = notificationsCache.filter((n) => !matches(n));
     updateUnreadBadges();
 
@@ -356,6 +397,9 @@ export function dismissNotificationLocally(matcher = {}) {
  * @param {object} matcher
  */
 export async function purgeNotificationRecord(matcher = {}) {
+    if (matcher.notifId) {
+        recordDismissedNotificationIds(matcher.notifId);
+    }
     dismissNotificationLocally(matcher);
 
     if (!currentUser) return;
@@ -550,7 +594,7 @@ function bindStaticListeners() {
     // الاستماع لحدث تفريغ الإشعار من أي مكان في التطبيق (قبول صداقة، إلغاء لايك، إلخ)
     window.addEventListener('app:notification-dismiss', (event) => {
         if (event.detail) {
-            dismissNotificationLocally(event.detail);
+            purgeNotificationRecord(event.detail);
         }
     });
 }
@@ -741,7 +785,30 @@ async function fetchAndRenderNotifications() {
         return;
     }
 
-    notificationsCache = data || [];
+    const serverNotifications = data || [];
+    const dismissedIds = getDismissedNotificationIds();
+
+    // فلترة أي إشعارات قام المستخدم بحذفها/مشاهدتها مسبقاً لضمان عدم عودتها إطلاقاً عند إعادة فتح التطبيق
+    notificationsCache = serverNotifications.filter((n) => !dismissedIds.has(String(n.id)));
+
+    // في الخلفية: محاولة تنظيف وحذف هذه الإشعارات من Supabase لضمان مزامنة السيرفر
+    const lingeringDismissed = serverNotifications
+        .filter((n) => dismissedIds.has(String(n.id)))
+        .map((n) => n.id);
+
+    if (lingeringDismissed.length > 0) {
+        supabaseClient
+            .from('notifications')
+            .delete()
+            .eq('user_id', currentUser.id)
+            .in('id', lingeringDismissed)
+            .then(({ error: delErr }) => {
+                if (delErr) {
+                    console.warn('[notifications.js] تنظيف الإشعارات المحذوفة مسبقاً في السيرفر:', delErr.message);
+                }
+            })
+            .catch(() => {});
+    }
 
     // 🧠 فحص ذاتي ذكي وتنظيف تلقائي (Self-Healing / Auto-Purge):
     // فحص إشعارات طلبات الصداقة المعلقة للتأكد من أنها ما زالت صالحة ولم تُقبل أو تُلغى في الخلفية
@@ -1144,6 +1211,8 @@ function handleNotificationsListClick(event) {
         removeNotificationCard(card);
     } else if (card.dataset.notifId) {
         markNotificationAsRead(card.dataset.notifId);
+        // النقر على الإشعار يعتبر مشاهدة له وتتم إزالته من القائمة بسلاسة
+        removeNotificationCard(card);
     }
 }
 
@@ -1498,18 +1567,27 @@ async function removeNotificationCard(card) {
     card.classList.add('is-removing');
     setTimeout(() => card.remove(), 350);
 
+    if (notifId) {
+        recordDismissedNotificationIds(notifId);
+    }
+
     notificationsCache = notificationsCache.filter((n) => String(n.id) !== String(notifId));
     updateUnreadBadges();
 
-    if (!notifId) return;
+    if (!notifId || !currentUser) return;
 
-    const { error } = await supabaseClient
-        .from('notifications')
-        .delete()
-        .eq('id', notifId);
+    try {
+        const { error } = await supabaseClient
+            .from('notifications')
+            .delete()
+            .eq('user_id', currentUser.id)
+            .eq('id', notifId);
 
-    if (error) {
-        console.error('خطأ في حذف الإشعار:', error.message);
+        if (error) {
+            console.error('خطأ في حذف الإشعار من السيرفر:', error.message);
+        }
+    } catch (err) {
+        console.warn('استثناء أثناء حذف الإشعار:', err);
     }
 }
 
@@ -1665,6 +1743,7 @@ function bindNotificationsRealtimeSubscription() {
  */
 function handleRealtimeNotificationDeleted(deletedRow) {
     if (!deletedRow || deletedRow.id === undefined) return;
+    recordDismissedNotificationIds(deletedRow.id);
     dismissNotificationLocally({ notifId: deletedRow.id });
 }
 
