@@ -25,6 +25,7 @@
     background-color: #05060A;
     max-width: 420px;
     margin-inline: auto;
+    padding-top: max(3rem, calc(env(safe-area-inset-top, 0px) + 1.5rem)) !important;
 }
 
 /* (إضافة - المرحلة 2 من خطة الريسبونسف): نفس منطق توسيع appShell في
@@ -152,7 +153,7 @@ body.onb-scroll-lock #appShell {
     width: 100%;
     max-width: 420px;
     margin-inline: auto;
-    padding-top: max(1.25rem, env(safe-area-inset-top));
+    padding-top: max(3rem, calc(env(safe-area-inset-top, 0px) + 1.5rem));
     padding-bottom: max(1.25rem, env(safe-area-inset-bottom));
     box-sizing: border-box;
 
@@ -1016,6 +1017,7 @@ body.onb-scroll-lock #appShell {
     transition: opacity 0.22s cubic-bezier(0.22, 1, 0.36, 1),
                 transform 0.22s cubic-bezier(0.22, 1, 0.36, 1);
     pointer-events: none;
+    padding-top: max(3rem, calc(env(safe-area-inset-top, 0px) + 1.5rem)) !important;
 }
 
 #onboardingOverlay .onb-auth-page.onb-auth-page-visible {

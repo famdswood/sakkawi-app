@@ -1831,7 +1831,7 @@ html:not(.dark) .notif-card.is-unread .notif-card-inner {
     /* (إضافة - المرحلة 0): مساحة آمنة أعلى الشاشة (الحفرة/الكاميرا في
        الموبايلات الحديثة) - كان الشريط ده بيبدأ من top:0 مباشرة من غير
        أي تعويض، فكان ممكن ياخد جزء منه تحت الحفرة على بعض الأجهزة */
-    padding-top: env(safe-area-inset-top, 0px);
+    padding-top: max(0.5rem, env(safe-area-inset-top, 0px));
 
     /* الحالة الافتراضية: مخفي تماماً، مش موجود في تدفق التفاعل (Interaction) */
     visibility: hidden;

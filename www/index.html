@@ -267,7 +267,7 @@
     <!-- يشوفها قبل أي حاجة تانية خالص.                                  -->
     <!-- ============================================================= -->
     <div id="onboardingOverlay"
-         class="hidden fixed inset-0 z-[10050] flex flex-col items-center justify-between text-white overflow-hidden px-4 py-6 font-cairo"
+         class="hidden fixed inset-0 z-[10050] flex flex-col items-center justify-between text-white overflow-hidden px-4 pb-6 font-cairo"
          role="dialog" aria-modal="true" aria-label="شاشات الترحيب بسِكّاوي">
 
         <!-- إضاءة محيطة متحركة (بتتغيّر ألوانها مع كل سلايد عبر JS) -->
@@ -1257,7 +1257,7 @@
              تحت الهيدر (شوف #headerSpacer تحت). لو غيّرت أي حاجة بتأثر
              على ارتفاع الهيدر (بادينج، حجم الأفتار...) لازم تحدّث ارتفاع
              الـ Spacer معاها بنفس القيمة بالظبط. -->
-        <header class="fixed top-0 left-1/2 -translate-x-1/2 z-30 w-full max-w-md md:max-w-2xl lg:max-w-4xl bg-lux-900/90 backdrop-blur-md border-b border-gold-500/10 px-4 pt-[calc(0.75rem+env(safe-area-inset-top,0px))] pb-3 shadow-sm transition-all duration-300">
+        <header class="fixed top-0 left-1/2 -translate-x-1/2 z-30 w-full max-w-md md:max-w-2xl lg:max-w-4xl bg-lux-900/90 backdrop-blur-md border-b border-gold-500/10 px-4 pt-[max(1rem,calc(env(safe-area-inset-top,0px)+0.85rem))] pb-3.5 shadow-sm transition-all duration-300">
             <div class="flex items-center justify-between gap-3">
                 <!-- User Profile Info (الجانب الأيمن) - بقت كلها زرار واحد
                      قابل للضغط (الأفتار + الاسم + اللقب سوا) بيودّي
@@ -1339,7 +1339,7 @@
              الهيدر الفعلي: صورة البروفايل 44px (w-11/h-11) + بادينج
              12px من فوق وتحت (py-3) + حدود سفلية 1px. لو غيّرت مقاس
              الأفتار أو الـ padding لازم تعدّل الرقم ده معاهم بنفس القيمة. -->
-        <div id="headerSpacer" class="h-[calc(70px+env(safe-area-inset-top,0px))] shrink-0" aria-hidden="true"></div>
+        <div id="headerSpacer" class="h-[max(78px,calc(74px+env(safe-area-inset-top,0px)))] shrink-0" aria-hidden="true"></div>
 
         <!-- MAIN CONTENT AREA -->
         <main class="flex-1 p-4 space-y-5">
@@ -2839,7 +2839,7 @@
              خالص لحد ما يقفل المودال. z-[10100] دلوقتي: أعلى من أي حاجة
              تانية في المشروع (أعلى مودال حاليًا z-[10060])، عشان التوست
              يفضل ظاهر فوق أي مودال مفتوح، مهما كان -->
-        <div id="toastContainer" class="fixed top-[max(1.25rem,calc(env(safe-area-inset-top,0px)+0.75rem))] left-1/2 -translate-x-1/2 z-[10100] pointer-events-none flex flex-col gap-2.5 w-full max-w-sm px-4"></div>
+        <div id="toastContainer" class="fixed top-[max(2.5rem,calc(env(safe-area-inset-top,0px)+1.5rem))] left-1/2 -translate-x-1/2 z-[10100] pointer-events-none flex flex-col gap-2.5 w-full max-w-sm px-4"></div>
 
     </div>
 
@@ -3500,9 +3500,9 @@
              من غير أي تعديل إضافي هناك -->
         <div id="storyViewerCard" class="w-full h-full md:max-w-[420px] lg:max-w-[480px] md:mx-auto relative overflow-hidden bg-lux-900">
             <!-- أشرطة تقدم الستوريز - مع مراعاة شريط الحالة والنوتش بأمان -->
-            <div id="storyProgressBars" class="absolute top-[max(2.6rem,calc(env(safe-area-inset-top,0px)+0.75rem))] left-3 right-3 z-20 flex gap-1.5"></div>
+            <div id="storyProgressBars" class="absolute top-[max(2.75rem,calc(env(safe-area-inset-top,0px)+1rem))] left-3 right-3 z-20 flex gap-1.5"></div>
             <!-- رأس الستوري (اسم صاحبها + وقت النشر) - في أقصى اليمين وأسفل أشرطة التقدم مع مساحة آمنة لزر الإغلاق -->
-            <div id="storyHeader" class="absolute top-[max(3.85rem,calc(env(safe-area-inset-top,0px)+1.85rem))] right-3.5 z-20 flex items-center max-w-[calc(100%-5rem)]"></div>
+            <div id="storyHeader" class="absolute top-[max(4.25rem,calc(env(safe-area-inset-top,0px)+2.25rem))] right-3.5 z-20 flex items-center max-w-[calc(100%-5rem)]"></div>
             <!-- محتوى الستوري -->
             <div id="storyContent" class="w-full h-full flex items-center justify-center text-white relative"></div>
             <!-- منطقتا التنقل: يمين = السابقة، شمال = التالية (اتقلب الاتجاه
@@ -3542,7 +3542,7 @@
                     aria-label="حذف الاستوري"><svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"/><path d="M9 7V4h6v3"/><path d="M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13"/><path d="M10 11v6M14 11v6"/></svg></button>
             <!-- زر إغلاق الاستوري - متمركز على اليسار بمحاذاة صاحب الاستوري وبعيداً عن أشرطة النظام -->
             <button id="storyCloseBtn"
-                    class="absolute top-[max(3.85rem,calc(env(safe-area-inset-top,0px)+1.85rem))] left-3.5 z-30 w-8 h-8 flex items-center justify-center rounded-full bg-black/40 hover:bg-black/60 text-white/90 hover:text-white text-sm leading-none backdrop-blur-sm transition-colors"
+                    class="absolute top-[max(4.25rem,calc(env(safe-area-inset-top,0px)+2.25rem))] left-3.5 z-30 w-8 h-8 flex items-center justify-center rounded-full bg-black/40 hover:bg-black/60 text-white/90 hover:text-white text-sm leading-none backdrop-blur-sm transition-colors"
                     aria-label="إغلاق الاستوري">✕</button>
         </div>
     </div>
@@ -3771,7 +3771,7 @@
     <div id="avatarLightbox"
          class="hidden fixed inset-0 z-[95] bg-black/90 backdrop-blur-sm flex items-center justify-center p-6">
         <button type="button" id="btnCloseAvatarLightbox"
-                class="absolute top-5 left-1/2 -translate-x-1/2 z-10 w-9 h-9 flex items-center justify-center rounded-full bg-black/40 hover:bg-black/60 text-white/90 hover:text-white text-base leading-none transition-colors"
+                class="absolute top-[max(2.75rem,calc(env(safe-area-inset-top,0px)+1.5rem))] left-1/2 -translate-x-1/2 z-10 w-9 h-9 flex items-center justify-center rounded-full bg-black/40 hover:bg-black/60 text-white/90 hover:text-white text-base leading-none transition-colors"
                 aria-label="إغلاق">✕</button>
         <img id="avatarLightboxImage" src="" alt="صورة مكبّرة"
              class="max-w-full max-h-full rounded-2xl object-contain shadow-2xl">
@@ -3914,7 +3914,7 @@
                  support-chat.js): "→" لما يكون فيه "قائمة" ترجعله ليها
                  (الأدمن جوه محادثة)، أو "✕" لما يبقى المفروض يقفل الشاشة
                  كلها (قائمة المحادثات، أو ثريد المستخدم العادي). -->
-            <div class="flex items-center justify-between gap-3 px-4 pt-[calc(env(safe-area-inset-top)+0.9rem)] pb-3 shrink-0 border-b border-gold-500/10 bg-lux-900/95 backdrop-blur-xl">
+            <div class="flex items-center justify-between gap-3 px-4 pt-[max(1.5rem,calc(env(safe-area-inset-top,0px)+1rem))] pb-3.5 shrink-0 border-b border-gold-500/10 bg-lux-900/95 backdrop-blur-xl">
                 <div class="flex items-center gap-2 min-w-0">
                     <!-- (تعديل) هوية الطرف التاني في المحادثة (صورة + اسمه) - ظاهرة
                          بس جوه ثريد مفتوح (مستخدم عادي بيكلم الأدمن، أو الأدمن جوه
