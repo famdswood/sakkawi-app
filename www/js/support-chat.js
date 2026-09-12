@@ -32,7 +32,7 @@
    ================================================================== */
 
 import { supabaseClient } from './supabase-config.js';
-import { pushModalState, closeModal } from './modal-history.js';
+import { pushModalState, replaceModalState, closeModal } from './modal-history.js';
 // نقطة "أونلاين الآن" فوق صورة الطرف التاني في الشات - مقيّدة (نفسي/
 // صديق مقبول/أدمن بس) شوف الشرح الكامل في js/presence.js. استيراد
 // مسموح لأن presence.js ملف مستقل ومفيش فيه أي استيراد من support-chat.js
@@ -45,7 +45,7 @@ import { presenceDotHtml, loadAndApplyPresence } from './presence.js';
 // عدّل الاستدعاء في setPeerHeader بس.
 import { openPublicProfile } from './profiles.js';
 // (جديد - كاش الأوفلاين) شوف js/offline-cache.js للتفاصيل الكاملة
-import { fetchWithCache } from './offline-cache.js';
+import { fetchWithCache, setCached, getCached } from './offline-cache.js';
 
 /* ------------------------------------------------------------------
    1) حالة الموديول
@@ -75,6 +75,9 @@ let activeConversationMessages = [];
 
 /** true أثناء إرسال رسالة (منع الضغط المزدوج على زرار الإرسال) */
 let isSending = false;
+
+/** معرف المؤقت الدوري لتحديث حالة أونلاين الطرف الآخر داخل الشات */
+let peerPresenceIntervalId = null;
 
 /**
  * (تعديل) صورة بروفايل احتياطية - نفس أفاتار "الشخص المجهول" (سيلويت
@@ -384,11 +387,32 @@ function isMessageStillDeletable(msg) {
     return Date.now() - new Date(msg.created_at).getTime() < DELETE_WINDOW_MS;
 }
 
+function hideMessageInfoPopoverRaw() {
+    document.getElementById('supportMsgInfoOverlay')?.remove();
+}
+
+function hideMessageInfoPopover() {
+    if (document.getElementById('supportMsgInfoOverlay')) {
+        closeModal();
+    }
+}
+
+function hideDeleteConfirmDialogRaw() {
+    document.getElementById('supportMsgDeleteConfirmOverlay')?.remove();
+}
+
+function hideDeleteConfirmDialog() {
+    if (document.getElementById('supportMsgDeleteConfirmOverlay')) {
+        closeModal();
+    }
+}
+
 function showMessageInfoPopover(messageId) {
     const msg = activeConversationMessages.find((m) => m.id === messageId);
     if (!msg) return;
 
-    hideMessageInfoPopover();
+    hideMessageInfoPopoverRaw();
+    hideDeleteConfirmDialogRaw();
 
     const rows = [
         { label: 'اترسلت', time: msg.created_at, done: true },
@@ -403,10 +427,6 @@ function showMessageInfoPopover(messageId) {
         </div>
     `).join('<div class="h-px bg-lux-800"></div>');
 
-    // (جديد) بعد مرور ساعة من الإرسال، خيار الحذف بيختفي تماماً من غير
-    // أي نص بديل يوضّح السبب - القاعدة شغالة في الخلفية بس (DELETE_WINDOW_MS
-    // فوق + شرط الـ RLS المطابق له في الداتابيز)، من غير ما نلفت نظر
-    // المستخدم لوجود مهلة زمنية للحذف أصلاً
     const canStillDelete = isMessageStillDeletable(msg);
     const deleteSectionHtml = canStillDelete
         ? `<button type="button" id="supportMsgInfoDeleteBtn"
@@ -431,35 +451,24 @@ function showMessageInfoPopover(messageId) {
     `;
 
     overlay.addEventListener('click', (event) => {
-        if (event.target === overlay) hideMessageInfoPopover();
+        if (event.target === overlay) closeModal();
     });
 
     document.body.appendChild(overlay);
-    document.getElementById('supportMsgInfoCloseBtn')?.addEventListener('click', hideMessageInfoPopover);
+    pushModalState(hideMessageInfoPopoverRaw);
 
-    // (جديد) زرار "حذف الرسالة" - بيقفل كارت المعلومات ده ويفتح كارت
-    // تأكيد منفصل (showDeleteConfirmDialog تحت) بدل ما يحذف على طول،
-    // عشان محدش يحذف رسالة بالغلط من ضغطة واحدة. مش موجود أصلاً لو
-    // الرسالة عدّت عليها الساعة (شوف deleteSectionHtml فوق)
+    document.getElementById('supportMsgInfoCloseBtn')?.addEventListener('click', () => {
+        closeModal();
+    });
+
     document.getElementById('supportMsgInfoDeleteBtn')?.addEventListener('click', () => {
-        hideMessageInfoPopover();
-        showDeleteConfirmDialog(messageId);
+        hideMessageInfoPopoverRaw();
+        showDeleteConfirmDialog(messageId, { replaceHistory: true });
     });
 }
 
-function hideMessageInfoPopover() {
-    document.getElementById('supportMsgInfoOverlay')?.remove();
-}
-
-/**
- * (جديد) كارت تأكيد حذف رسالة - بنفس هوية باقي كروت الشات (bg-lux-900 +
- * حدود gold-500 خفيفة)، بيتفتح من زرار "حذف الرسالة" في كارت المعلومات
- * فوق. زرار "حذف" بيتعطّل وقت الطلب نفسه (منع ضغط مزدوج) وبيرجع لحالته
- * لو فشل الحذف عشان المستخدم يقدر يحاول تاني، وبيقفل الكارت لوحده لو نجح.
- * @param {string} messageId
- */
-function showDeleteConfirmDialog(messageId) {
-    hideDeleteConfirmDialog();
+function showDeleteConfirmDialog(messageId, { replaceHistory = false } = {}) {
+    hideDeleteConfirmDialogRaw();
 
     const overlay = document.createElement('div');
     overlay.id = 'supportMsgDeleteConfirmOverlay';
@@ -478,11 +487,20 @@ function showDeleteConfirmDialog(messageId) {
     `;
 
     overlay.addEventListener('click', (event) => {
-        if (event.target === overlay) hideDeleteConfirmDialog();
+        if (event.target === overlay) closeModal();
     });
 
     document.body.appendChild(overlay);
-    document.getElementById('supportMsgDeleteCancelBtn')?.addEventListener('click', hideDeleteConfirmDialog);
+
+    if (replaceHistory) {
+        replaceModalState(hideDeleteConfirmDialogRaw);
+    } else {
+        pushModalState(hideDeleteConfirmDialogRaw);
+    }
+
+    document.getElementById('supportMsgDeleteCancelBtn')?.addEventListener('click', () => {
+        closeModal();
+    });
 
     const confirmBtn = document.getElementById('supportMsgDeleteConfirmBtn');
     confirmBtn?.addEventListener('click', async () => {
@@ -492,38 +510,16 @@ function showDeleteConfirmDialog(messageId) {
         const success = await performDeleteMessage(messageId);
 
         if (!success) {
-            // (جديد) فشل الحذف (مشكلة نت/سيرفر مثلاً) - نرجّع الزرار لحالته
-            // الأصلية عشان المستخدم يقدر يحاول تاني من غير ما يقفل الكارت
             confirmBtn.disabled = false;
             confirmBtn.textContent = 'حاول تاني';
             return;
         }
 
-        hideDeleteConfirmDialog();
+        closeModal();
     });
 }
 
-function hideDeleteConfirmDialog() {
-    document.getElementById('supportMsgDeleteConfirmOverlay')?.remove();
-}
-
-/**
- * (جديد) حذف رسالة فعلياً من support_messages - RLS المفروض تسمح بس
- * لصاحب الرسالة (sender_id = auth.uid() بتاعه) إنه يحذف رسالته، فمفيش
- * داعي نتحقق من isMine تاني هنا (لو حد حاول يحذف رسالة مش بتاعته، قاعدة
- * البيانات هترفض العملية من نفسها). لو نجح الحذف، بنشيلها من النسخة
- * المحلية (activeConversationMessages) ونعيد الرسم على طول - الطرف
- * التاني هيشوفها بتتشال لوحدها لحظياً عن طريق DELETE listener في
- * subscribeToActiveConversation تحت.
- * @param {string} messageId
- * @returns {Promise<boolean>}
- */
 async function performDeleteMessage(messageId) {
-    // (جديد) .select() هنا مش عشان نستخدم الداتا الراجعة، لكن عشان نضمن
-    // إن الـ response بترجّع عدد الصفوف اللي اتحذفت فعلاً - من غيرها،
-    // رفض الـ RLS (زي لما تحاول تمسح رسالة عدّى عليها الساعة) بيرجع
-    // نجاح كاذب (data فاضية، من غير error) وكنا وقعنا في نفس المشكلة اللي
-    // اكتشفناها قبل كده: بتتشال محلياً بس من غير أي حذف حقيقي في الداتابيز
     const { data, error } = await supabaseClient
         .from('support_messages')
         .delete()
@@ -536,9 +532,6 @@ async function performDeleteMessage(messageId) {
     }
 
     if (!data || data.length === 0) {
-        // مفيش صف اتحذف فعلياً - غالباً الرسالة عدّى عليها وقت السماح
-        // بالحذف والـ RLS رفضت العملية بصمت. مبنقولش السبب صراحةً للمستخدم
-        // (القاعدة الزمنية شغالة في الخلفية بس) - رسالة عامة بس كفاية
         console.warn('[support-chat.js] الحذف اترفض (مفيش صف اتأثر)');
         document.dispatchEvent(new CustomEvent('app:toast', {
             detail: { message: 'تعذّر حذف الرسالة.', type: 'error' },
@@ -547,7 +540,10 @@ async function performDeleteMessage(messageId) {
     }
 
     activeConversationMessages = activeConversationMessages.filter((m) => m.id !== messageId);
-    renderConversationMessages();
+    if (activeConversationUserId) {
+        setCached(`cached_support_chat:${activeConversationUserId}`, activeConversationMessages).catch(() => {});
+    }
+    renderConversationMessages({ forceScrollBottom: false });
     return true;
 }
 
@@ -678,9 +674,15 @@ function showModal() {
 
 /** الإخفاء الخام فقط - استخدم closeModal() من أي مكان تاني عشان يتزامن مع تاريخ المتصفح */
 function hideSupportChatModal() {
-    hideMessageInfoPopover();
-    hideDeleteConfirmDialog();
+    hideMessageInfoPopoverRaw();
+    hideDeleteConfirmDialogRaw();
     unbindKeyboardAwareness();
+
+    const inputEl = document.getElementById('supportChatInput');
+    if (inputEl) {
+        inputEl.value = '';
+        inputEl.style.height = 'auto';
+    }
 
     const modalEl = document.getElementById('supportChatModal');
     if (modalEl) {
@@ -692,6 +694,17 @@ function hideSupportChatModal() {
     // بعينها - قناة الأدمن العامة (adminGlobalChannel) بتفضل شغالة
     // لوحدها عشان شارة العداد تفضل محدّثة حتى والمودال مقفول
     unsubscribeFromActiveConversation();
+
+    if (peerPresenceIntervalId) {
+        clearInterval(peerPresenceIntervalId);
+        peerPresenceIntervalId = null;
+    }
+
+    const presenceEl = document.getElementById('supportChatPeerPresenceDot');
+    if (presenceEl) {
+        presenceEl.removeAttribute('data-presence-avatar');
+        presenceEl.classList.remove('is-online');
+    }
 
     activeConversationUserId = null;
     activeConversationMessages = [];
@@ -765,19 +778,40 @@ async function setPeerHeader(peerId) {
     const presenceEl = document.getElementById('supportChatPeerPresenceDot');
     if (!peerBtn || !avatarEl || !nameEl) return;
 
+    const defaultName = (peerId === ADMIN_USER_ID) ? 'الدعم الفني (إدارة سِكّاوي)' : 'مستخدم';
+
     // نعرض هوية الطرف التاني بدل العنوان الثابت على طول، مع صورة/اسم
     // احتياطيين لحد ما يوصل رد Supabase تحت
     titleEl?.classList.add('hidden');
     peerBtn.classList.remove('hidden');
     peerBtn.classList.add('flex');
     avatarEl.src = FALLBACK_AVATAR;
-    nameEl.textContent = '...';
+    nameEl.textContent = defaultName;
+
+    // استرجاع فوري من الكاش المحلي لو محفوظ سابقاً
+    try {
+        const cachedProfile = await getCached(`cached_public_profile:${peerId}`);
+        if (cachedProfile) {
+            if (cachedProfile.full_name) nameEl.textContent = cachedProfile.full_name;
+            if (cachedProfile.avatar_url) avatarEl.src = cachedProfile.avatar_url;
+        }
+    } catch (_) {}
 
     // نقطة الأونلاين بتتفعّل/تتخفي حسب صلاحية الرؤية الفعلية على السيرفر
-    // (شوف js/presence.js) - مش بس تجميل واجهة
+    // (شوف js/presence.js) - بنشيل is-online فوراً لمنع الوميض الوهمي
     if (presenceEl) {
+        presenceEl.classList.remove('is-online');
         presenceEl.setAttribute('data-presence-avatar', peerId);
         loadAndApplyPresence([peerId]);
+
+        // تحديث دوري كل دقيقة طالما المودال مفتوح
+        if (peerPresenceIntervalId) clearInterval(peerPresenceIntervalId);
+        peerPresenceIntervalId = setInterval(() => {
+            if (activeConversationUserId) {
+                const targetPeerId = isCurrentUserAdmin ? activeConversationUserId : ADMIN_USER_ID;
+                loadAndApplyPresence([targetPeerId]);
+            }
+        }, 60 * 1000);
     }
 
     peerBtn.onclick = () => {
@@ -816,12 +850,17 @@ async function setPeerHeader(peerId) {
 
     if (error) {
         console.error('[support-chat.js] فشل تحميل بيانات الطرف التاني في المحادثة:', error);
-        nameEl.textContent = 'مستخدم';
+        if (!nameEl.textContent || nameEl.textContent === '...') {
+            nameEl.textContent = defaultName;
+        }
         return;
     }
 
-    nameEl.textContent = data?.full_name || 'مستخدم';
-    avatarEl.src = data?.avatar_url || FALLBACK_AVATAR;
+    if (data) {
+        nameEl.textContent = data.full_name || defaultName;
+        avatarEl.src = data.avatar_url || FALLBACK_AVATAR;
+        setCached(`cached_public_profile:${peerId}`, data).catch(() => {});
+    }
 }
 
 /** رجوع لعرض العنوان الثابت #supportChatTitle بدل هوية الطرف التاني - مستخدمة في وضع "قائمة المحادثات" اللي مفيش فيه طرف واحد بعينه */
@@ -843,6 +882,12 @@ function showConversationsList() {
 
     currentViewMode = 'admin_list';
     activeConversationUserId = null;
+
+    const inputEl = document.getElementById('supportChatInput');
+    if (inputEl) {
+        inputEl.value = '';
+        inputEl.style.height = 'auto';
+    }
 
     clearPeerHeader();
     setTitle('صندوق رسائل الدعم');
@@ -866,6 +911,7 @@ async function loadAndRenderConversationsList() {
     const conversations = await fetchConversationsListFromServer();
     // فشل حقيقي - منلمسش المعروض حالياً (زي فلسفة fetchWithCache بالظبط)
     if (conversations === null) return;
+    setCached('cached_support_conversations_list', conversations).catch(() => {});
     renderConversationsList(conversations);
 }
 
@@ -991,7 +1037,7 @@ function setThreadLoading() {
     if (messagesEl) messagesEl.innerHTML = `<p class="text-center text-xs text-lux-500 font-bold py-6">جاري التحميل…</p>`;
 }
 
-async function loadAndRenderConversation(userId) {
+async function loadAndRenderConversation(userId, { forceScrollBottom = false } = {}) {
     const { data, error } = await supabaseClient
         .from('support_messages')
         .select('id, is_from_admin, content, created_at, delivered_at, read_at')
@@ -1006,7 +1052,8 @@ async function loadAndRenderConversation(userId) {
     }
 
     activeConversationMessages = data || [];
-    renderConversationMessages();
+    setCached(`cached_support_chat:${userId}`, activeConversationMessages).catch(() => {});
+    renderConversationMessages({ forceScrollBottom });
 }
 
 /**
@@ -1046,12 +1093,12 @@ async function fetchConversationFromServer(userId) {
  */
 async function loadAndRenderConversationCached(userId) {
     await fetchWithCache(`cached_support_chat:${userId}`, () => fetchConversationFromServer(userId), (data) => {
-        activeConversationMessages = data;
-        renderConversationMessages();
+        activeConversationMessages = data || [];
+        renderConversationMessages({ forceScrollBottom: true });
     });
 }
 
-function renderConversationMessages() {
+function renderConversationMessages({ forceScrollBottom = false } = {}) {
     const messagesEl = document.getElementById('supportChatMessagesList');
     if (!messagesEl) return;
 
@@ -1062,6 +1109,9 @@ function renderConversationMessages() {
     }
 
     document.getElementById('supportChatEmptyState')?.classList.add('hidden');
+
+    const isNearBottom = (messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight) < 120;
+    const previousScrollTop = messagesEl.scrollTop;
 
     // (تعديل) فاصل تاريخ زي واتساب قبل أول رسالة في كل يوم مختلف
     // ("اليوم"/"أمس"/اسم اليوم لو الأسبوع ده/التاريخ الكامل لو أقدم -
@@ -1083,7 +1133,12 @@ function renderConversationMessages() {
     });
 
     messagesEl.innerHTML = html;
-    messagesEl.scrollTop = messagesEl.scrollHeight;
+
+    if (forceScrollBottom || isNearBottom) {
+        messagesEl.scrollTop = messagesEl.scrollHeight;
+    } else {
+        messagesEl.scrollTop = previousScrollTop;
+    }
 }
 
 /**
@@ -1178,9 +1233,14 @@ const TYPING_INDICATOR_AUTO_HIDE_MS = 6000;
  * يكتب" التلقائي مع كل حرف جديد.
  */
 function handleTypingInput() {
+    const inputEl = document.getElementById('supportChatInput');
+    if (inputEl) {
+        inputEl.style.height = 'auto';
+        inputEl.style.height = Math.min(inputEl.scrollHeight, 96) + 'px';
+    }
+
     if (!activeConversationChannel || !activeConversationUserId) return;
 
-    const inputEl = document.getElementById('supportChatInput');
     const hasContent = Boolean(inputEl && inputEl.value.trim());
 
     clearTimeout(typingStopTimer);
@@ -1292,7 +1352,8 @@ async function handleSendClick() {
     }
 
     inputEl.value = '';
-    await loadAndRenderConversation(activeConversationUserId);
+    inputEl.style.height = 'auto';
+    await loadAndRenderConversation(activeConversationUserId, { forceScrollBottom: true });
 
     // لو الأدمن هو اللي رد، شارة عدد الرسايل غير المقروءة (عنده هو) ماتتأثرش -
     // هي أصلاً عن رسايل المستخدمين اللي لسه مردود عليهاش. مفيش داعي نحدّثها هنا
@@ -1445,7 +1506,15 @@ function subscribeToActiveConversation(userId) {
             // العرض المحلي اتحدّث أصلاً فور الإرسال في handleSendClick
             if (activeConversationMessages.some((m) => m.id === payload.new.id)) return;
 
-            await loadAndRenderConversation(userId);
+            // إذا كانت الرسالة واردة من الطرف الآخر، نشغل صوت الإشعار الهادئ وننعش حالة أونلاين
+            const isFromPeer = Boolean(payload.new.is_from_admin) !== isCurrentUserAdmin;
+            if (isFromPeer) {
+                document.dispatchEvent(new CustomEvent('app:sound', { detail: { type: 'notify' } }));
+                const targetPeerId = isCurrentUserAdmin ? userId : ADMIN_USER_ID;
+                loadAndApplyPresence([targetPeerId]);
+            }
+
+            await loadAndRenderConversation(userId, { forceScrollBottom: false });
 
             // لو الرسالة الجديدة من الأدمن ومستخدم عادي فاتح شاته دلوقتي،
             // نعلّمها مقروءة على طول بما إنه شايفها فعلاً على الشاشة
@@ -1471,7 +1540,7 @@ function subscribeToActiveConversation(userId) {
             table: 'support_messages',
             filter: `sender_id=eq.${userId}`,
         }, async () => {
-            await loadAndRenderConversation(userId);
+            await loadAndRenderConversation(userId, { forceScrollBottom: false });
         })
         // (جديد) حذف رسالة (من عندي أو من عند الطرف التاني، أي جهاز) -
         // بنشيلها من النسخة المحلية بس من غير إعادة تحميل كاملة (أسرع، ومفيش
@@ -1490,7 +1559,10 @@ function subscribeToActiveConversation(userId) {
             if (!activeConversationMessages.some((m) => m.id === deletedId)) return;
 
             activeConversationMessages = activeConversationMessages.filter((m) => m.id !== deletedId);
-            renderConversationMessages();
+            if (userId) {
+                setCached(`cached_support_chat:${userId}`, activeConversationMessages).catch(() => {});
+            }
+            renderConversationMessages({ forceScrollBottom: false });
         })
         // (جديد) إشارة "بيكتب…" اللحظية بتاعة الطرف التاني - Broadcast بس،
         // مالهاش أي علاقة بجدول support_messages (شوف sendTypingState فوق).
@@ -1501,6 +1573,8 @@ function subscribeToActiveConversation(userId) {
 
             if (payload.isTyping) {
                 showTypingIndicator();
+                const targetPeerId = isCurrentUserAdmin ? userId : ADMIN_USER_ID;
+                loadAndApplyPresence([targetPeerId]);
             } else {
                 hideTypingIndicator();
             }

@@ -28,7 +28,8 @@ import { sendNotification } from './notifications.js';
 import { openPublicProfile } from './profiles.js';
 import { showGuestLockedToast } from './geofence.js';
 // (جديد - كاش الأوفلاين) شوف js/offline-cache.js للتفاصيل الكاملة
-import { fetchWithCache } from './offline-cache.js';
+import { fetchWithCache, getCached, setCached } from './offline-cache.js';
+import { pushModalState, closeModal, hasOpenModal } from './modal-history.js';
 
 /* ------------------------------------------------------------------
    0) حالة محلية
@@ -101,7 +102,10 @@ function pluralizeArabicTimeUnit(count, forms) {
 }
 
 function formatRelativeArabicTime(isoDateString) {
-    const elapsedMs = Date.now() - new Date(isoDateString).getTime();
+    if (!isoDateString) return '';
+    const timestamp = new Date(isoDateString).getTime();
+    if (isNaN(timestamp)) return '';
+    const elapsedMs = Math.max(0, Date.now() - timestamp);
     const elapsedMinutes = Math.floor(elapsedMs / (60 * 1000));
 
     if (elapsedMinutes < 1) return 'دلوقتي';
@@ -261,27 +265,35 @@ async function fetchPosts() {
  * مرة واحدة بس من initPostsUI() قبل أول رسم للمنشورات
  */
 async function fetchAppIdentity() {
-    const { data, error } = await supabaseClient
-        .from('app_identity')
-        .select('display_name, avatar_url')
-        .eq('id', true)
-        .single();
-
-    if (error || !data) {
-        console.error('[posts.js] فشل تحميل app_identity:', error);
-        return; // بنسيب القيم الافتراضية (سِكّاوي / بلا أفاتار) - مش خطأ قاتل
+    // قراءة فورية لهوية التطبيق من كاش الأوفلاين
+    const cached = await getCached('cached_app_identity');
+    if (cached && typeof cached === 'object') {
+        appIdentityName = cached.display_name || 'سِكّاوي';
+        appIdentityAvatarUrl = cached.avatar_url || null;
     }
 
-    appIdentityName = data.display_name || 'سِكّاوي';
-    appIdentityAvatarUrl = data.avatar_url || null;
+    try {
+        const { data, error } = await supabaseClient
+            .from('app_identity')
+            .select('display_name, avatar_url')
+            .eq('id', true)
+            .single();
+
+        if (error || !data) {
+            return;
+        }
+
+        appIdentityName = data.display_name || 'سِكّاوي';
+        appIdentityAvatarUrl = data.avatar_url || null;
+        setCached('cached_app_identity', { display_name: appIdentityName, avatar_url: appIdentityAvatarUrl });
+    } catch (err) {
+        console.warn('[posts.js] استثناء أثناء جلب app_identity:', err);
+    }
 }
 
 /**
  * تجيب بروفايل المستخدم الحالي (username/full_name/avatar_url) من صفه
- * هو بس في profiles (RLS بيسمح بده - auth.uid() = id)، ومتخزّنه في
- * currentUserProfile. بتتنادى مرة واحدة بس من initPostsUI() لو المستخدم
- * مسجّل دخول - محتاجينها عشان نعرف اسم/صورة اللي عمل لايك على كومنت
- * وقت إرسال إشعار comment_like (شوف handleCommentLikeToggle)
+ * هو بس في profiles (مع دعم كاش الأوفلاين)
  */
 async function fetchCurrentUserProfile() {
     if (!currentUserId) {
@@ -289,19 +301,31 @@ async function fetchCurrentUserProfile() {
         return;
     }
 
-    const { data, error } = await supabaseClient
-        .from('profiles')
-        .select('username, full_name, avatar_url')
-        .eq('id', currentUserId)
-        .single();
-
-    if (error || !data) {
-        console.error('[posts.js] فشل تحميل بروفايل المستخدم الحالي:', error);
-        currentUserProfile = null;
-        return;
+    // استرجاع فوري من كاش البروفايل المحفوظ
+    const cachedProfileData = await getCached(`cached_profile:${currentUserId}`);
+    if (cachedProfileData?.profile) {
+        currentUserProfile = {
+            username: cachedProfileData.profile.username,
+            full_name: cachedProfileData.profile.full_name,
+            avatar_url: cachedProfileData.profile.avatar_url,
+        };
     }
 
-    currentUserProfile = data;
+    try {
+        const { data, error } = await supabaseClient
+            .from('profiles')
+            .select('username, full_name, avatar_url')
+            .eq('id', currentUserId)
+            .single();
+
+        if (error || !data) {
+            return;
+        }
+
+        currentUserProfile = data;
+    } catch (err) {
+        // يتم الاعتماد على كاش الأوفلاين بهدوء
+    }
 }
 
 /** @param {Array<{post_id: string}>|null} rows @returns {Map<string, number>} */
@@ -336,6 +360,55 @@ function renderPosts() {
 }
 
 /**
+ * إدارة مودال معاينة الصورة بالشاشة الكاملة (#postImageViewerModal)
+ */
+function openPostImageViewer(imageUrl) {
+    if (!imageUrl) return;
+    const modal = document.getElementById('postImageViewerModal');
+    const img = document.getElementById('postImageViewerImg');
+    if (!modal || !img) return;
+
+    img.src = imageUrl;
+    pushModalState(hidePostImageViewer);
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+}
+
+function hidePostImageViewer() {
+    const modal = document.getElementById('postImageViewerModal');
+    const img = document.getElementById('postImageViewerImg');
+    if (modal) {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+    }
+    if (img) img.src = '';
+}
+
+function closePostImageViewer() {
+    if (hasOpenModal()) {
+        closeModal();
+    } else {
+        hidePostImageViewer();
+    }
+}
+
+/**
+ * تحديث نصوص التوقيت النسبي لجميع الكروت والتعليقات المعروضة تلقائياً
+ */
+let relativeTimeIntervalId = null;
+
+function refreshAllRelativeTimes() {
+    document.querySelectorAll('.post-card-time[data-created-at]').forEach((el) => {
+        const iso = el.dataset.createdAt;
+        if (iso) el.textContent = formatRelativeArabicTime(iso);
+    });
+    document.querySelectorAll('.post-comment-time[data-created-at]').forEach((el) => {
+        const iso = el.dataset.createdAt;
+        if (iso) el.textContent = formatRelativeArabicTime(iso);
+    });
+}
+
+/**
  * تبني كارت منشور واحد كامل (هيدر باسم التطبيق + المحتوى + الصورة لو
  * موجودة + شريط لايك/كومنت + قسم الكومنتات لو مفتوح)
  * @param {object} post
@@ -351,7 +424,7 @@ function buildPostCardElement(post) {
         ? `<p class="post-card-content">${escapeHtml(post.content).replace(/\n/g, '<br>')}</p>`
         : '';
     const imageHtml = post.image_url
-        ? `<img class="post-card-image" src="${escapeHtml(post.image_url)}" alt="" loading="lazy">`
+        ? `<img class="post-card-image" src="${escapeHtml(post.image_url)}" alt="" loading="lazy" onerror="this.style.display='none'">`
         : '';
     const commentsOpen = openCommentSections.has(post.id);
 
@@ -371,7 +444,7 @@ function buildPostCardElement(post) {
             ${appAvatarHtml}
             <div class="post-card-header-text">
                 <span class="post-card-app-name">${appName}</span>
-                <span class="post-card-time">${timeText}</span>
+                <span class="post-card-time" data-created-at="${post.created_at || ''}">${timeText}</span>
             </div>
         </div>
         ${contentHtml}
@@ -476,6 +549,11 @@ function bindPostCardEvents(card, post) {
             handleCommentSubmit(card, post, commentForm);
         });
     }
+
+    const postImg = card.querySelector('.post-card-image');
+    if (postImg && post.image_url) {
+        postImg.addEventListener('click', () => openPostImageViewer(post.image_url));
+    }
 }
 
 
@@ -490,32 +568,38 @@ function bindPostCardEvents(card, post) {
  */
 async function handleLikeToggle(likeBtn, post) {
     if (!currentUserId) return; // زائر مش مسجّل دخول - الزرار مش المفروض يبقى شغال أصلاً بدون حساب
+    if (post._likeInProgress) return;
+    post._likeInProgress = true;
 
-    const wasLiked = post.likedByMe;
-    const newLiked = !wasLiked;
+    try {
+        const wasLiked = post.likedByMe;
+        const newLiked = !wasLiked;
 
-    post.likedByMe = newLiked;
-    post.likesCount += newLiked ? 1 : -1;
-    updateLikeButtonUI(likeBtn, post);
-
-    const { error } = newLiked
-        ? await supabaseClient.from('post_likes').insert({ post_id: post.id, user_id: currentUserId })
-        : await supabaseClient.from('post_likes').delete().eq('post_id', post.id).eq('user_id', currentUserId);
-
-    if (error) {
-        console.error('[posts.js] فشل تحديث اللايك:', error);
-        // Rollback
-        post.likedByMe = wasLiked;
-        post.likesCount += wasLiked ? 1 : -1;
+        post.likedByMe = newLiked;
+        post.likesCount += newLiked ? 1 : -1;
         updateLikeButtonUI(likeBtn, post);
-    }
 
-    // (كاش الأوفلاين) لازم نحدّث التوقيع المحفوظ هنا كمان (نجاح أو
-    // Rollback، في الحالتين postsList اتغيّرت فعلياً) - وإلا أول Sync في
-    // الخلفية بعد اللايك ده هيلاقي السيرفر راجع بنفس الحالة المعروضة
-    // بالظبط، بس السيغنتشر القديمة (من قبل اللايك) مش متطابقة معاها،
-    // فهيعمل renderPosts() كاملة من غير داعي ويرجّع سكرول المستخدم لفوق
-    lastRenderedPostsSignature = computePostsSignature(postsList);
+        const { error } = newLiked
+            ? await supabaseClient.from('post_likes').insert({ post_id: post.id, user_id: currentUserId })
+            : await supabaseClient.from('post_likes').delete().eq('post_id', post.id).eq('user_id', currentUserId);
+
+        if (error) {
+            console.error('[posts.js] فشل تحديث اللايك:', error);
+            // Rollback
+            post.likedByMe = wasLiked;
+            post.likesCount += wasLiked ? 1 : -1;
+            updateLikeButtonUI(likeBtn, post);
+        }
+
+        // (كاش الأوفلاين) لازم نحدّث التوقيع المحفوظ هنا كمان (نجاح أو
+        // Rollback، في الحالتين postsList اتغيّرت فعلياً) - وإلا أول Sync في
+        // الخلفية بعد اللايك ده هيلاقي السيرفر راجع بنفس الحالة المعروضة
+        // بالظبط، بس السيغنتشر القديمة (من قبل اللايك) مش متطابقة معاها،
+        // فهيعمل renderPosts() كاملة من غير داعي ويرجّع سكرول المستخدم لفوق
+        lastRenderedPostsSignature = computePostsSignature(postsList);
+    } finally {
+        post._likeInProgress = false;
+    }
 }
 
 function updateLikeButtonUI(likeBtn, post) {
@@ -622,7 +706,7 @@ function buildCommentElement(card, post, comment, isReply) {
                 <span class="post-comment-text">${escapeHtml(comment.content)}</span>
             </div>
             <div class="post-comment-meta">
-                <span class="post-comment-time">${comment.created_at ? escapeHtml(formatRelativeArabicTime(comment.created_at)) : ''}</span>
+                <span class="post-comment-time" data-created-at="${comment.created_at || ''}">${comment.created_at ? escapeHtml(formatRelativeArabicTime(comment.created_at)) : ''}</span>
                 <button type="button" class="post-comment-like-btn ${comment.likedByMe ? 'is-liked' : ''}" aria-pressed="${comment.likedByMe}" ${currentUserId ? '' : 'disabled'}>
                     <svg viewBox="0 0 24 24" fill="${comment.likedByMe ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                         <path d="M12 20.5s-7.5-4.6-10-9.3C.5 8 2 4.5 5.5 4c2-.3 3.8.7 6.5 3.2C14.7 4.7 16.5 3.7 18.5 4c3.5.5 5 4 3.5 7.2-2.5 4.7-10 9.3-10 9.3z"></path>
@@ -630,7 +714,7 @@ function buildCommentElement(card, post, comment, isReply) {
                     <span class="post-comment-like-count">${likeCountText}</span>
                 </button>
                 ${canReply ? '<button type="button" class="post-comment-reply-btn">رد</button>' : ''}
-                ${isOwnComment ? '<button type="button" class="post-comment-delete-btn" aria-label="حذف الكومنت">✕</button>' : ''}
+                ${isOwnComment ? '<button type="button" class="post-comment-delete-btn" aria-label="حذف الكومنت"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3.5 h-3.5 pointer-events-none" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>' : ''}
             </div>
             ${canReply ? `
             <form class="post-comment-reply-form hidden">
@@ -665,7 +749,7 @@ function buildCommentElement(card, post, comment, isReply) {
 
     const deleteBtn = li.querySelector('.post-comment-delete-btn');
     if (deleteBtn) {
-        deleteBtn.addEventListener('click', () => handleCommentDelete(card, post, comment.id));
+        deleteBtn.addEventListener('click', () => openCommentDeleteModal(card, post, comment.id));
     }
 
     const replyBtn = li.querySelector('.post-comment-reply-btn');
@@ -685,7 +769,7 @@ function buildCommentElement(card, post, comment, isReply) {
     }
 
     // [الجزء هـ] الردود (مستوى واحد بس - comment هنا دايماً كومنت
-    // أساسي وصل هنا بـ isReply=false، فمينفعش الردود اللي جوّاها يكون
+    // أساسي وصل هنا بisReply=false، فمينفعش الردود اللي جوّاها يكون
     // ليها ردود تانية أصلاً - لا الواجهة ولا الـ trigger بيسمحوا بده)
     if (!isReply) {
         const repliesEl = li.querySelector('.post-comment-replies');
@@ -701,13 +785,51 @@ function buildCommentElement(card, post, comment, isReply) {
 }
 
 function buildFallbackAvatarUrl(seedText) {
-    const initial = (seedText.trim()[0] || '؟').toUpperCase();
+    const safeText = typeof seedText === 'string' ? seedText.trim() : '';
+    const initial = (safeText[0] || '؟').toUpperCase();
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><rect width="40" height="40" rx="20" fill="#14171F"/><text x="20" y="26" font-size="16" font-family="Cairo,sans-serif" text-anchor="middle" fill="#D4AF37">${initial}</text></svg>`;
-    // encodeURIComponent على الـ SVG كامل (مش تعليمات يدوية جزئية زي
-    // %22 اللي كانت ناسية علامات التنصيص التانية) - عشان مايبقاش فيه أي
-    // " أو < خام جوه الـ data URI، ده اللي كان بيكسر src="..." في <img>
-    // ويخلي الـ HTML يبان كنص عادي في الصفحة
     return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+}
+
+/**
+ * إدارة مودال تأكيد حذف التعليق (#commentDeleteConfirmModal)
+ * متكامل مع نظام التاريخ وزر الرجوع بالهاتف
+ */
+let pendingDeleteCommentInfo = null;
+
+function openCommentDeleteModal(card, post, commentId) {
+    pendingDeleteCommentInfo = { card, post, commentId };
+    const modal = document.getElementById('commentDeleteConfirmModal');
+    if (!modal) {
+        executeCommentDelete(card, post, commentId);
+        return;
+    }
+    pushModalState(hideCommentDeleteModal);
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+}
+
+function hideCommentDeleteModal() {
+    pendingDeleteCommentInfo = null;
+    const modal = document.getElementById('commentDeleteConfirmModal');
+    if (!modal) return;
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+}
+
+function closeCommentDeleteModal() {
+    if (hasOpenModal()) {
+        closeModal();
+    } else {
+        hideCommentDeleteModal();
+    }
+}
+
+function handleConfirmDeleteCommentClick() {
+    const info = pendingDeleteCommentInfo;
+    closeCommentDeleteModal();
+    if (!info) return;
+    executeCommentDelete(info.card, info.post, info.commentId);
 }
 
 /**
@@ -720,131 +842,158 @@ function buildFallbackAvatarUrl(seedText) {
  */
 async function handleCommentSubmit(card, post, formEl, parentCommentId = null) {
     if (!currentUserId) return;
+    if (formEl.dataset.submitting === 'true') return;
 
     const inputEl = formEl.querySelector(parentCommentId ? '.post-comment-reply-input' : '.post-comment-input');
     const submitBtn = formEl.querySelector(parentCommentId ? '.post-comment-reply-submit-btn' : '.post-comment-submit-btn');
     const content = inputEl ? inputEl.value.trim() : '';
     if (!content) return;
 
-    if (submitBtn) submitBtn.disabled = true;
-
-    // INSERT عادي من غير join على profiles (post_comments نفسها مسموح
-    // بالـ insert للمستخدم على صفه هو - RLS الحالي مش مشكلة هنا).
-    // parent_comment_id بيتضاف بس لو ده رد - الـ trigger على الجدول
-    // (enforce_single_level_comment_reply) بيرفض أي محاولة رد على رد
-    // من غير ما يعتمد على الواجهة بس (زرار "رد" أصلاً مش بيبان تحت أي
-    // رد - شوف canReply في buildCommentElement)
-    const insertPayload = { post_id: post.id, user_id: currentUserId, content };
-    if (parentCommentId) insertPayload.parent_comment_id = parentCommentId;
-
-    const { data: insertedRow, error } = await supabaseClient
-        .from('post_comments')
-        .insert(insertPayload)
-        .select('id')
-        .single();
-
-    if (error) {
-        if (submitBtn) submitBtn.disabled = false;
-        console.error('[posts.js] فشل إرسال الكومنت:', error);
+    if (window.currentMasterSettings?.feature_comments_enabled === false) {
+        document.dispatchEvent(new CustomEvent('app:toast', {
+            detail: { message: 'التعليقات متوقفة مؤقتاً بقرار إداري', type: 'error' },
+        }));
         return;
     }
 
-    // بعد نجاح الـ insert بنجيب بيانات الكومنت + الكاتب عن طريق نفس RPC
-    // اللي بيتخطى RLS على profiles (get_comment_with_author)
-    const { data: authoredRow, error: fetchError } = await supabaseClient
-        .rpc('get_comment_with_author', { p_comment_id: insertedRow.id })
-        .single();
-
-    if (submitBtn) submitBtn.disabled = false;
-
-    if (fetchError || !authoredRow) {
-        console.error('[posts.js] فشل جلب بيانات الكومنت بعد الإرسال:', fetchError);
-        return;
-    }
-
-    const data = mapCommentRowToAuthoredComment(authoredRow);
-
-    // لو ده رد (مش كومنت أساسي)، ببعت إشعار لصاحب الكومنت الأساسي اللي
-    // اترد عليه - "Fire and forget" زي فلسفة sendNotification نفسها (شوف
-    // notifications.js)، فمش بنستنى نتيجتها ولا بنوقف تحديث الواجهة
-    // عشانها. بندوّر على صاحب الكومنت الأساسي في post.comments المحمّلة
-    // فعلاً (لازم تكون محمّلة أصلاً عشان زرار "رد" يبان تحتها من الأول)
-    // بدل ما نعمل استعلام إضافي للسيرفر بس عشان معرّف المستقبِل. ومنبعتش
-    // الإشعار لو المستخدم رد على كومنت نفسه (رد على نفسه مش محتاج إشعار)
-    if (parentCommentId) {
-        const parentComment = (post.comments || []).find((c) => c.id === parentCommentId);
-        if (parentComment && parentComment.user_id && parentComment.user_id !== currentUserId) {
-            const replierName = data.profiles.full_name || data.profiles.username || 'مستخدم';
-            sendNotification({
-                userId: parentComment.user_id,
-                type: 'comment_reply',
-                title: `${replierName} رد على تعليقك`,
-                message: content.length > 120 ? `${content.slice(0, 120)}…` : content,
-                data: {
-                    post_id: post.id,
-                    comment_id: parentCommentId,
-                    reply_id: data.id,
-                    sender_id: currentUserId,
-                    sender_avatar_url: data.profiles.avatar_url || null,
-                },
-            });
+    if (window.checkProfanity) {
+        const { hasProfanity } = window.checkProfanity(content);
+        if (hasProfanity) {
+            document.dispatchEvent(new CustomEvent('app:toast', {
+                detail: { message: 'التعليق يحتوي على كلمات غير مسموح بنشرها', type: 'error' },
+            }));
+            return;
         }
     }
 
-    if (inputEl) inputEl.value = '';
-    // فورم الرد بيتقفل تاني بعد الإرسال الناجح (الفورم الرئيسي بيفضل ظاهر دايماً)
-    if (parentCommentId) formEl.classList.add('hidden');
+    formEl.dataset.submitting = 'true';
+    if (submitBtn) submitBtn.disabled = true;
 
-    if (post.comments === null) post.comments = [];
-    // ممكن نفس الكومنت يوصل تاني عن طريق Realtime (handleCommentInserted) -
-    // بنتأكد منه مش موجود قبل ما نضيفه هنا يدوياً
-    if (!post.comments.some((c) => c.id === data.id)) {
-        post.comments.push(data);
+    try {
+        const insertPayload = { post_id: post.id, user_id: currentUserId, content };
+        if (parentCommentId) insertPayload.parent_comment_id = parentCommentId;
+
+        const { data: insertedRow, error } = await supabaseClient
+            .from('post_comments')
+            .insert(insertPayload)
+            .select('id')
+            .single();
+
+        if (error) {
+            console.error('[posts.js] فشل إرسال الكومنت:', error);
+            document.dispatchEvent(new CustomEvent('app:toast', {
+                detail: { message: 'تعذر إرسال التعليق، تأكد من الاتصال', type: 'error' },
+            }));
+            return;
+        }
+
+        // بعد نجاح الـ insert بنجيب بيانات الكومنت + الكاتب عن طريق RPC
+        const { data: authoredRow, error: fetchError } = await supabaseClient
+            .rpc('get_comment_with_author', { p_comment_id: insertedRow.id })
+            .single();
+
+        const data = (!fetchError && authoredRow)
+            ? mapCommentRowToAuthoredComment(authoredRow)
+            : {
+                id: insertedRow.id,
+                content,
+                created_at: new Date().toISOString(),
+                user_id: currentUserId,
+                parentCommentId,
+                likesCount: 0,
+                likedByMe: false,
+                profiles: {
+                    username: currentUserProfile?.username || '',
+                    full_name: currentUserProfile?.full_name || '',
+                    avatar_url: currentUserProfile?.avatar_url || null,
+                },
+            };
+
+        // إشعار صاحب الكومنت الأصلي عند الرد عليه
+        if (parentCommentId) {
+            const parentComment = (post.comments || []).find((c) => c.id === parentCommentId);
+            if (parentComment && parentComment.user_id && parentComment.user_id !== currentUserId) {
+                const replierName = data.profiles.full_name || data.profiles.username || 'مستخدم';
+                sendNotification({
+                    userId: parentComment.user_id,
+                    type: 'comment_reply',
+                    title: `${replierName} رد على تعليقك`,
+                    message: content.length > 120 ? `${content.slice(0, 120)}…` : content,
+                    data: {
+                        post_id: post.id,
+                        comment_id: parentCommentId,
+                        reply_id: data.id,
+                        sender_id: currentUserId,
+                        sender_avatar_url: data.profiles.avatar_url || null,
+                    },
+                });
+            }
+        }
+
+        if (inputEl) inputEl.value = '';
+        if (parentCommentId) formEl.classList.add('hidden');
+
+        if (post.comments === null) post.comments = [];
+        if (!post.comments.some((c) => c.id === data.id)) {
+            post.comments.push(data);
+        }
+        post.commentsCount += 1;
+        lastRenderedPostsSignature = computePostsSignature(postsList);
+
+        renderCommentsList(card, post);
+        updateCommentCountUI(card, post);
+    } finally {
+        delete formEl.dataset.submitting;
+        if (submitBtn) submitBtn.disabled = false;
     }
-    post.commentsCount += 1;
-    // (كاش الأوفلاين) شوف نفس التعليق في handleLikeToggle - نفس السبب
-    // بالظبط، بس هنا لعدد الكومنتات بدل اللايكات
-    lastRenderedPostsSignature = computePostsSignature(postsList);
-
-    renderCommentsList(card, post);
-    updateCommentCountUI(card, post);
 }
 
+/** سجل بالمعرفات التي تم حذفها محلياً لمنع الخصم المزدوج عند استقبال حدث Realtime */
+const recentlyDeletedCommentIds = new Set();
+
 /**
- * الحذف بيتكسّح تلقائياً في قاعدة البيانات لأي ردود تحت الكومنت ده
- * (on delete cascade على parent_comment_id)، فبنشيلهم من النسخة
- * المحلية كمان مش بس الكومنت نفسه - عشان كده بنعيد رسم القائمة كاملة
- * بدل ما نشيل عنصر واحد بس زي قبل كده
+ * الحذف الفعلي للتعليق بعد التأكيد
  */
-async function handleCommentDelete(card, post, commentId) {
-    if (!window.confirm('تأكيد حذف الكومنت؟')) return;
+async function executeCommentDelete(card, post, commentId) {
+    recentlyDeletedCommentIds.add(commentId);
 
     const { error } = await supabaseClient.from('post_comments').delete().eq('id', commentId);
 
     if (error) {
+        recentlyDeletedCommentIds.delete(commentId);
         console.error('[posts.js] فشل حذف الكومنت:', error);
+        document.dispatchEvent(new CustomEvent('app:toast', {
+            detail: { message: 'تعذر حذف التعليق، حاول مرة أخرى', type: 'error' },
+        }));
         return;
     }
 
-    // حذف أي إشعارات مرتبطة بهذا الكومنت (لايك أو رد) تلقائياً
+    // حذف أي إشعارات مرتبطة بهذا الكومنت
     supabaseClient
         .from('notifications')
         .delete()
         .or(`data->>comment_id.eq.${commentId},data->>reply_id.eq.${commentId}`)
-        .then(() => {});
+        .then(() => {})
+        .catch(() => {});
 
     const removedIds = new Set([commentId]);
     (post.comments || []).forEach((c) => {
-        if (c.parentCommentId === commentId) removedIds.add(c.id);
+        if (c.parentCommentId === commentId) {
+            removedIds.add(c.id);
+            recentlyDeletedCommentIds.add(c.id);
+        }
     });
 
     post.comments = (post.comments || []).filter((c) => !removedIds.has(c.id));
     post.commentsCount = Math.max(0, post.commentsCount - removedIds.size);
-    // (كاش الأوفلاين) نفس السبب في handleLikeToggle/handleCommentSubmit
     lastRenderedPostsSignature = computePostsSignature(postsList);
 
     renderCommentsList(card, post);
     updateCommentCountUI(card, post);
+
+    document.dispatchEvent(new CustomEvent('app:toast', {
+        detail: { message: 'تم حذف التعليق', type: 'info' },
+    }));
 }
 
 function updateCommentCountUI(card, post) {
@@ -869,55 +1018,59 @@ function updateCommentCountUI(card, post) {
  */
 async function handleCommentLikeToggle(likeBtn, comment, post) {
     if (!currentUserId) return;
+    if (comment._likeInProgress) return;
+    comment._likeInProgress = true;
 
-    const wasLiked = comment.likedByMe;
-    const newLiked = !wasLiked;
+    try {
+        const wasLiked = comment.likedByMe;
+        const newLiked = !wasLiked;
 
-    comment.likedByMe = newLiked;
-    comment.likesCount = Math.max(0, comment.likesCount + (newLiked ? 1 : -1));
-    updateCommentLikeButtonUI(likeBtn, comment);
-
-    const { error } = newLiked
-        ? await supabaseClient.from('comment_likes').insert({ comment_id: comment.id, user_id: currentUserId })
-        : await supabaseClient.from('comment_likes').delete().eq('comment_id', comment.id).eq('user_id', currentUserId);
-
-    if (error) {
-        console.error('[posts.js] فشل تحديث لايك الكومنت:', error);
-        // Rollback
-        comment.likedByMe = wasLiked;
-        comment.likesCount = Math.max(0, comment.likesCount + (wasLiked ? 1 : -1));
+        comment.likedByMe = newLiked;
+        comment.likesCount = Math.max(0, comment.likesCount + (newLiked ? 1 : -1));
         updateCommentLikeButtonUI(likeBtn, comment);
-        return;
-    }
 
-    // ببعت إشعار لصاحب الكومنت بس لما يكون "لايك جديد" (مش إلغاء لايك -
-    // مفيش داعي نزعج حد بإشعار "شال لايكه")، ومش بنبعته لو المستخدم عمل
-    // لايك لكومنت نفسه. "Fire and forget" زي comment_reply بالظبط - شوف
-    // handleCommentSubmit فوق لنفس الفلسفة
-    if (newLiked && comment.user_id && comment.user_id !== currentUserId) {
-        const likerName = (currentUserProfile && (currentUserProfile.full_name || currentUserProfile.username)) || 'مستخدم';
-        sendNotification({
-            userId: comment.user_id,
-            type: 'comment_like',
-            title: `${likerName} عمل لايك على تعليقك`,
-            message: comment.content.length > 120 ? `${comment.content.slice(0, 120)}…` : comment.content,
-            data: {
-                post_id: post.id,
-                comment_id: comment.id,
-                sender_id: currentUserId,
-                sender_avatar_url: (currentUserProfile && currentUserProfile.avatar_url) || null,
-            },
-        });
-    } else if (!newLiked && comment.user_id && comment.user_id !== currentUserId) {
-        // حذف إشعار اللايك عند إلغاء الإعجاب
-        supabaseClient
-            .from('notifications')
-            .delete()
-            .eq('user_id', comment.user_id)
-            .eq('type', 'comment_like')
-            .filter('data->>comment_id', 'eq', String(comment.id))
-            .filter('data->>sender_id', 'eq', String(currentUserId))
-            .then(() => {});
+        const { error } = newLiked
+            ? await supabaseClient.from('comment_likes').insert({ comment_id: comment.id, user_id: currentUserId })
+            : await supabaseClient.from('comment_likes').delete().eq('comment_id', comment.id).eq('user_id', currentUserId);
+
+        if (error) {
+            console.error('[posts.js] فشل تحديث لايك الكومنت:', error);
+            // Rollback
+            comment.likedByMe = wasLiked;
+            comment.likesCount = Math.max(0, comment.likesCount + (wasLiked ? 1 : -1));
+            updateCommentLikeButtonUI(likeBtn, comment);
+            return;
+        }
+
+        // ببعت إشعار لصاحب الكومنت بس لما يكون "لايك جديد" (مش إلغاء لايك)
+        if (newLiked && comment.user_id && comment.user_id !== currentUserId) {
+            const likerName = (currentUserProfile && (currentUserProfile.full_name || currentUserProfile.username)) || 'مستخدم';
+            sendNotification({
+                userId: comment.user_id,
+                type: 'comment_like',
+                title: `${likerName} عمل لايك على تعليقك`,
+                message: comment.content.length > 120 ? `${comment.content.slice(0, 120)}…` : comment.content,
+                data: {
+                    post_id: post.id,
+                    comment_id: comment.id,
+                    sender_id: currentUserId,
+                    sender_avatar_url: (currentUserProfile && currentUserProfile.avatar_url) || null,
+                },
+            });
+        } else if (!newLiked && comment.user_id && comment.user_id !== currentUserId) {
+            // حذف إشعار اللايك عند إلغاء الإعجاب
+            supabaseClient
+                .from('notifications')
+                .delete()
+                .eq('user_id', comment.user_id)
+                .eq('type', 'comment_like')
+                .filter('data->>comment_id', 'eq', String(comment.id))
+                .filter('data->>sender_id', 'eq', String(currentUserId))
+                .then(() => {})
+                .catch(() => {});
+        }
+    } finally {
+        comment._likeInProgress = false;
     }
 }
 
@@ -991,27 +1144,48 @@ function unbindPostsRealtimeSubscription() {
 }
 
 function handlePostInserted(newPostRow) {
-    if (postsList.some((p) => p.id === newPostRow.id)) return;
+    if (!newPostRow || postsList.some((p) => p.id === newPostRow.id)) return;
 
-    postsList.unshift({
+    const newPost = {
         ...newPostRow,
         likesCount: 0,
         commentsCount: 0,
         likedByMe: false,
         comments: null,
-    });
-    renderPosts();
-    // (كاش الأوفلاين) نحدّث التوقيع المحفوظ عشان مقارنة fetchPosts()
-    // الجاية تفضل دقيقة على أساس آخر حالة معروضة فعلياً على الشاشة،
-    // مش نسخة قديمة من قبل التغيير الـ Realtime ده
+    };
+    postsList.unshift(newPost);
     lastRenderedPostsSignature = computePostsSignature(postsList);
+
+    const feedEl = document.getElementById('postsFeed');
+    const statusEl = document.getElementById('postsFeedStatus');
+    if (!feedEl) return;
+
+    if (postsList.length === 1) {
+        renderPosts();
+    } else {
+        const newCard = buildPostCardElement(newPost);
+        feedEl.prepend(newCard);
+    }
+    setStatusText(statusEl, '', null);
 }
 
 function handlePostDeleted(oldPostRow) {
+    if (!oldPostRow || !oldPostRow.id) return;
     postsList = postsList.filter((p) => p.id !== oldPostRow.id);
     openCommentSections.delete(oldPostRow.id);
-    renderPosts();
     lastRenderedPostsSignature = computePostsSignature(postsList);
+
+    const card = document.querySelector(`.post-card[data-post-id="${oldPostRow.id}"]`);
+    if (card) {
+        card.remove();
+    }
+
+    if (postsList.length === 0) {
+        const feedEl = document.getElementById('postsFeed');
+        const statusEl = document.getElementById('postsFeedStatus');
+        if (feedEl) feedEl.innerHTML = '';
+        setStatusText(statusEl, 'مفيش منشورات دلوقتي.', 'empty');
+    }
 }
 
 function handleLikeRealtimeChange(postId, delta, byUserId) {
@@ -1035,45 +1209,57 @@ function handleLikeRealtimeChange(postId, delta, byUserId) {
 }
 
 function handleCommentInsertedRealtime(newCommentRow) {
+    if (!newCommentRow) return;
     const post = postsList.find((p) => p.id === newCommentRow.post_id);
     if (!post) return;
+
+    // إذا كان التعليق أضيف من المستخدم الحالي أو موجود مسبقاً في القائمة، نتجاهل الزيادة لمنع التضخم
+    if (newCommentRow.user_id === currentUserId) return;
+    if (post.comments !== null && post.comments.some((c) => c.id === newCommentRow.id)) return;
 
     post.commentsCount += 1;
     const card = document.querySelector(`.post-card[data-post-id="${post.id}"]`);
     if (card) updateCommentCountUI(card, post);
-    // (كاش الأوفلاين) نفس منطق handleLikeRealtimeChange فوق
     lastRenderedPostsSignature = computePostsSignature(postsList);
 
     // لو قسم الكومنتات مفتوح دلوقتي وقاعدين محمّلين الكومنتات، نضيف
-    // الصف الجديد فعلياً (لو مش موجود بالفعل - زي كومنت المستخدم الحالي
-    // نفسه اللي اتضاف يدوياً في handleCommentSubmit)
-    if (post.comments !== null && !post.comments.some((c) => c.id === newCommentRow.id)) {
-        // Realtime payload مفيهوش join على profiles - بنجيب بيانات الكاتب
-        // بشكل منفصل بس لو القسم فعلاً مفتوح وظاهر للمستخدم دلوقتي
-        if (openCommentSections.has(post.id) && card) {
-            supabaseClient
-                .rpc('get_comment_with_author', { p_comment_id: newCommentRow.id })
-                .single()
-                .then(({ data: row }) => {
-                    if (!row || post.comments.some((c) => c.id === row.id)) return;
-                    post.comments.push(mapCommentRowToAuthoredComment(row));
-                    renderCommentsList(card, post);
-                });
-        }
+    // الصف الجديد فعلياً
+    if (post.comments !== null && openCommentSections.has(post.id) && card) {
+        supabaseClient
+            .rpc('get_comment_with_author', { p_comment_id: newCommentRow.id })
+            .single()
+            .then(({ data: row }) => {
+                if (!row || post.comments.some((c) => c.id === row.id)) return;
+                post.comments.push(mapCommentRowToAuthoredComment(row));
+                renderCommentsList(card, post);
+            });
     }
 }
 
 function handleCommentDeletedRealtime(oldCommentRow) {
-    const post = postsList.find((p) => p.id === oldCommentRow.post_id);
+    if (!oldCommentRow || !oldCommentRow.id) return;
+    const commentId = oldCommentRow.id;
+
+    // إذا كان هذا التعليق حُذف بالفعل محلياً بواسطة المستخدم الحالي، نتجاهل الخصم المزدوج
+    if (recentlyDeletedCommentIds.has(commentId)) {
+        recentlyDeletedCommentIds.delete(commentId);
+        return;
+    }
+
+    // البحث عن المنشور إما بـ post_id أو بالبحث داخل كوليكشن الكومنتات المحمّلة
+    let post = oldCommentRow.post_id
+        ? postsList.find((p) => p.id === oldCommentRow.post_id)
+        : null;
+
+    if (!post) {
+        post = postsList.find((p) => p.comments && p.comments.some((c) => c.id === commentId));
+    }
     if (!post) return;
 
     post.commentsCount = Math.max(0, post.commentsCount - 1);
     if (post.comments) {
-        post.comments = post.comments.filter((c) => c.id !== oldCommentRow.id);
+        post.comments = post.comments.filter((c) => c.id !== commentId && c.parentCommentId !== commentId);
     }
-    // (كاش الأوفلاين) نفس منطق handleCommentInsertedRealtime فوق - كان
-    // ناقص هنا، وده كان بيخلّي أي Sync في الخلفية بعد حذف كومنت (من
-    // مستخدم تاني) يعمل إعادة رسم كاملة من غير داعي
     lastRenderedPostsSignature = computePostsSignature(postsList);
 
     const card = document.querySelector(`.post-card[data-post-id="${post.id}"]`);
@@ -1151,6 +1337,42 @@ export async function initPostsUI() {
         if (postId) handleOpenCommentFromNotification(postId, commentId);
     });
 
+    // ربط أزرار مودال تأكيد حذف التعليق
+    const cancelDeleteBtn = document.getElementById('btnCancelDeleteComment');
+    const confirmDeleteBtn = document.getElementById('btnConfirmDeleteComment');
+    const commentDeleteModal = document.getElementById('commentDeleteConfirmModal');
+
+    if (cancelDeleteBtn) {
+        cancelDeleteBtn.addEventListener('click', closeCommentDeleteModal);
+    }
+    if (confirmDeleteBtn) {
+        confirmDeleteBtn.addEventListener('click', handleConfirmDeleteCommentClick);
+    }
+    if (commentDeleteModal) {
+        commentDeleteModal.addEventListener('click', (event) => {
+            if (event.target === commentDeleteModal) closeCommentDeleteModal();
+        });
+    }
+
+    // ربط مودال معاينة صورة المنشور بالشاشة الكاملة
+    const imageViewerModal = document.getElementById('postImageViewerModal');
+    const imageViewerCloseBtn = document.getElementById('postImageViewerCloseBtn');
+    if (imageViewerCloseBtn) {
+        imageViewerCloseBtn.addEventListener('click', closePostImageViewer);
+    }
+    if (imageViewerModal) {
+        imageViewerModal.addEventListener('click', (event) => {
+            if (event.target === imageViewerModal || event.target.id === 'postImageViewerImg') {
+                closePostImageViewer();
+            }
+        });
+    }
+
+    // بدء التحديث التلقائي للتوقيت النسبي كل دقيقة
+    if (!relativeTimeIntervalId) {
+        relativeTimeIntervalId = window.setInterval(refreshAllRelativeTimes, 60000);
+    }
+
     // بنسمع لنفس حدثي تسجيل الدخول/الخروج اللي notifications.js بتسمعلهم
     // (شوف تعليق initNotificationsUI في notifications.js لتفسير امتى
     // 'auth:login' بتتطلق بالظبط) - من غير الاستماع ده، currentUserId/
@@ -1164,6 +1386,12 @@ export async function initPostsUI() {
 
     document.addEventListener('auth:signed-out', () => {
         handleUserSignedOut();
+    });
+
+    document.addEventListener('profile:updated', (event) => {
+        if (event.detail?.profile) {
+            currentUserProfile = { ...currentUserProfile, ...event.detail.profile };
+        }
     });
 }
 

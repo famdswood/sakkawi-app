@@ -64,8 +64,11 @@ export const ONLINE_FRESHNESS_THRESHOLD_MS = 5 * 60 * 1000; // 5 دقايق
  */
 export function isPresenceOnline(row) {
     if (!row || !row.is_online || !row.last_seen_at) return false;
-    const elapsedMs = Date.now() - new Date(row.last_seen_at).getTime();
-    return elapsedMs < ONLINE_FRESHNESS_THRESHOLD_MS;
+    const lastSeenTime = new Date(row.last_seen_at).getTime();
+    if (isNaN(lastSeenTime)) return false;
+    const elapsedMs = Date.now() - lastSeenTime;
+    // التحقق من الحداثة وحماية تفاوت التوقيت (ساعة الجهاز متأخرة أو متقدمة)
+    return elapsedMs > -2 * 60 * 60 * 1000 && elapsedMs < ONLINE_FRESHNESS_THRESHOLD_MS;
 }
 
 /**
@@ -79,7 +82,8 @@ export function isPresenceOnline(row) {
  */
 export function presenceDotHtml(userId, sizeClass = '') {
     if (!userId) return '';
-    return `<span class="presence-dot ${sizeClass}" data-presence-avatar="${userId}" aria-hidden="true"></span>`;
+    const cleanSize = sizeClass ? ` ${sizeClass.trim()}` : '';
+    return `<span class="presence-dot${cleanSize}" data-presence-avatar="${userId}" aria-hidden="true"></span>`;
 }
 
 /**
@@ -125,14 +129,14 @@ export async function fetchPresenceMap(userIds) {
  * الحل: كل نداء بيقتصر تأثيره بس على الـ IDs اللي هو طلبها (scopeIds)،
  * وبيسيب أي عنصر تاني (متطلوب من نداء موازي تاني) زي ما هو تماماً.
  * @param {Map<string, object>} presenceMap
- * @param {string[]} scopeIds - الـ IDs اللي المفروض النداء ده يحدّثها بس
+ * @param {string[]} [scopeIds] - الـ IDs اللي المفروض النداء ده يحدّثها بس
  */
 export function applyPresenceMapToDom(presenceMap, scopeIds) {
-    const scopeSet = new Set(scopeIds || []);
+    const scopeSet = scopeIds ? new Set(scopeIds) : (presenceMap ? new Set(presenceMap.keys()) : new Set());
     document.querySelectorAll('[data-presence-avatar]').forEach((el) => {
         const userId = el.getAttribute('data-presence-avatar');
         if (!scopeSet.has(userId)) return; // مش من ضمن الـ IDs اللي النداء ده مسؤول عنها - سيبه زي ما هو
-        el.classList.toggle('is-online', isPresenceOnline(presenceMap.get(userId)));
+        el.classList.toggle('is-online', isPresenceOnline(presenceMap?.get(userId)));
     });
 }
 
@@ -152,5 +156,25 @@ export async function loadAndApplyPresence(userIds) {
         applyPresenceMapToDom(presenceMap, userIds);
     } catch (err) {
         console.error('خطأ غير متوقع في نظام نقطة الأونلاين:', err?.message || err);
+    }
+}
+
+/**
+ * تحديث فوري لكافة شارات الأونلاين المعروضة حالياً في الـ DOM.
+ * مفيدة عند العودة للتطبيق من الخلفية أو استعادة الاتصال بالإنترنت.
+ */
+export async function refreshCurrentPresence() {
+    try {
+        const visibleDots = document.querySelectorAll('[data-presence-avatar]');
+        const ids = [];
+        visibleDots.forEach((el) => {
+            const id = el.getAttribute('data-presence-avatar');
+            if (id) ids.push(id);
+        });
+        if (ids.length > 0) {
+            await loadAndApplyPresence(ids);
+        }
+    } catch (err) {
+        console.error('خطأ في إنعاش شارات الأونلاين:', err?.message || err);
     }
 }

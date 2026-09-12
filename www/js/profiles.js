@@ -57,7 +57,7 @@ import { supabaseClient } from './supabase-config.js';
 // (إصلاح - باج حقيقي) عشان نزبط عداد الخطوات المحلي مع daily_steps
 // الحقيقية القادمة من Supabase وقت تحميل البروفايل - شوف
 // reconcileWithServerSteps تحت في loadAndRenderRealProfile
-import { reconcileWithServerSteps, reconcileServerBestSteps, syncActiveUser } from './sensors.js';
+import { reconcileWithServerSteps, reconcileServerBestSteps, syncActiveUser, getStepsCount, getStepsHistory, syncFromNativeStepCounter } from './sensors.js';
 import { pushModalState, closeModal, replaceModalState } from './modal-history.js';
 import { signOut, validateAvatarFile } from './auth.js';
 import { initChampionshipTabs, refreshActiveLeaderboard, getActiveMetric } from './leaderboard.js';
@@ -73,7 +73,7 @@ import { showAuthGate } from './onboarding.js';
 // مقبول/أدمن بس - شوف الشرح الكامل في js/presence.js)
 import { presenceDotHtml, loadAndApplyPresence } from './presence.js';
 // (جديد - كاش الأوفلاين) شوف js/offline-cache.js للتفاصيل الكاملة
-import { fetchWithCache } from './offline-cache.js';
+import { fetchWithCache, getCached, setCached } from './offline-cache.js';
 import { evaluateAndScheduleStreakSaver } from './smart-notifications.js';
 
 /**
@@ -231,6 +231,18 @@ let publicProfileEventsBound = false;
 /** معرّف صاحب صفحة "بروفايل عام" المفتوحة دلوقتي - لازم نحتفظ بيه عشان لو فتحنا بروفايل وبعدين بروفايل تاني بسرعة، آخر نتيجة توصل هي اللي تتعرض فعلياً */
 let currentPublicProfileTargetId = null;
 
+/** بيانات صف البروفايل العام المعروض حالياً - لازمة للمشاركة */
+let currentPublicProfileData = null;
+
+/** خيار الاستوري المعلق للمستخدم صاحب البروفايل العام */
+let pendingStoryChoice = null;
+
+/** علم ربط أحداث مودال تفاصيل الوسام */
+let badgeDetailsModalBound = false;
+
+/** علم ربط أزرار مشاركة البروفايل */
+let shareProfileEventsBound = false;
+
 /** التبويب (home/leaderboard/profile) اللي كان مفتوح قبل ما ندخل على صفحة "بروفايل عام" - لازم عشان زرار "رجوع" يرجع بالظبط للمكان اللي جينا منه */
 let previousTabIdBeforePublicProfile = null;
 
@@ -276,10 +288,10 @@ let publicProfileBadgesData = [];
  */
 const BADGE_TIER_ORDER = ['normal', 'medium', 'hard', 'legendary'];
 const BADGE_TIER_LABELS = {
-    normal: '🟢 عادية',
-    medium: '🟡 متوسطة',
-    hard: '🔴 صعبة',
-    legendary: '⚡ أسطورية',
+    normal: 'عادية',
+    medium: 'متوسطة',
+    hard: 'صعبة',
+    legendary: 'أسطورية',
 };
 
 /**
@@ -341,6 +353,10 @@ let incomingFriendRequests = [];
  */
 let profileStats = {
     totalSteps: 0,
+    bestDailySteps: 0,
+    burnedCalories: 0,
+    totalPodiums: 0,
+    quizAccuracy: null,
     correctAnswers: 0,
     bestStreakDays: 0,
     points: 0,
@@ -401,6 +417,17 @@ async function fetchUserProfileFromServer(userId) {
 }
 
 /**
+ * مزامنة كاش البروفايل المحلي مع أحدث نسخة صف بعد أي تحديث ناجح
+ * يضمن تحديث كاش البروفايل الشخصي والبروفايل العام فوراً للأوفلاين
+ * @param {object|null} profileRow
+ */
+function syncProfileToCache(profileRow) {
+    if (!currentAuthUser?.id || !profileRow) return;
+    setCached(`cached_profile:${currentAuthUser.id}`, { profile: profileRow }).catch(() => {});
+    setCached(`cached_public_profile:${currentAuthUser.id}`, profileRow).catch(() => {});
+}
+
+/**
  * تحديث جزئي (Partial UPDATE) لصف profiles بتاع المستخدم الحالي،
  * وإرجاع الصف بعد التحديث. مسؤولة عن نفس الحماية اللي كانت مكررة في
  * handleEditProfileSubmit: بنستخدم maybeSingle() بدل single() عشان
@@ -446,9 +473,11 @@ async function patchProfileRow(updates) {
 
     if (finalRow) {
         currentProfileRow = finalRow;
+        syncProfileToCache(finalRow);
         renderProfileHeader(finalRow, currentAuthUser);
         updateProfileStats({
             totalSteps: finalRow.total_steps ?? 0,
+            bestDailySteps: finalRow.best_daily_steps ?? 0,
             correctAnswers: finalRow.correct_answers ?? 0,
             bestStreakDays: finalRow.best_streak_days ?? 0,
             points: finalRow.points ?? 0,
@@ -457,6 +486,7 @@ async function patchProfileRow(updates) {
             weeklyChampionshipWins: finalRow.weekly_championship_wins ?? 0,
             monthlyChampionshipWins: finalRow.monthly_championship_wins ?? 0,
         });
+        loadMyQuizAccuracy(finalRow.id);
     }
 
     return finalRow;
@@ -621,9 +651,11 @@ async function applyStepsProgressServerSide(addedSteps) {
 
     if (updatedRow) {
         currentProfileRow = updatedRow;
+        syncProfileToCache(updatedRow);
         renderProfileHeader(updatedRow, currentAuthUser);
         updateProfileStats({
             totalSteps: updatedRow.total_steps ?? 0,
+            bestDailySteps: updatedRow.best_daily_steps ?? 0,
             correctAnswers: updatedRow.correct_answers ?? 0,
             bestStreakDays: updatedRow.best_streak_days ?? 0,
             points: updatedRow.points ?? 0,
@@ -756,6 +788,72 @@ async function flushPendingStepsBatch() {
     }
 }
 
+let isSyncingOfflineSteps = false;
+
+/**
+ * مزامنة خطوات اليوم المقطوعة أثناء انقطاع الإنترنت أو إغلاق التطبيق.
+ * تقارن بين عدد الخطوات المسجل محلياً في حساس الجهاز لليوم الحالي،
+ * وبين daily_steps المسجل في السيرفر لليوم الحالي.
+ * إذا كان المحلي أكبر من السيرفر، يتم إرسال الفارق بدقة على دفعات آمنة لـ apply_steps_progress،
+ * مما يضمن تحديث النقاط وخطوات البطولات اليومية والأسبوعية والشهرية والبروفايل والليدربورد فوراً.
+ */
+export async function syncOfflineStepsToServerIfNeeded() {
+    if (isSyncingOfflineSteps || !currentAuthUser || !currentProfileRow) return;
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
+
+    try {
+        isSyncingOfflineSteps = true;
+
+        // مزامنة العداد مع حساس الموبايل الأصلي أولاً إن وجد
+        if (typeof syncFromNativeStepCounter === 'function') {
+            await syncFromNativeStepCounter();
+        }
+
+        const localSteps = typeof getStepsCount === 'function' ? getStepsCount() : 0;
+        const todayStr = getLocalDateString();
+        const isRowFromToday = currentProfileRow.last_active_date === todayStr;
+        const serverDailySteps = isRowFromToday ? (currentProfileRow.daily_steps ?? 0) : 0;
+
+        const missingSteps = localSteps - serverDailySteps;
+
+        if (missingSteps > 0) {
+            console.log(`[profiles.js] مزامنة خطوات الأوفلاين: محلي = ${localSteps}، سيرفر = ${serverDailySteps}، المفقود = ${missingSteps}`);
+
+            // تصفير أي تراكم مؤقت لمنع التكرار لأننا سنرسل الفارق كاملاً
+            pendingStepsDelta = 0;
+            pendingStepsPointsDelta = 0;
+            if (stepsBatchFlushTimer) {
+                clearTimeout(stepsBatchFlushTimer);
+                stepsBatchFlushTimer = null;
+            }
+            try {
+                window.localStorage.removeItem(PENDING_STEPS_STORAGE_KEY);
+            } catch (_) {}
+
+            // نرسل الخطوات المتبقية على دفعات لا تتجاوز 10,000 خطوة لكل استدعاء
+            let remaining = missingSteps;
+            while (remaining > 0) {
+                const chunk = Math.min(remaining, 10000);
+                await applyStepsProgressServerSide(chunk);
+                remaining -= chunk;
+            }
+
+            // تحديث الليدربورد والبطولات فوراً بعد المزامنة
+            if (typeof refreshActiveLeaderboard === 'function') {
+                await refreshActiveLeaderboard();
+            }
+        }
+    } catch (err) {
+        console.warn('[profiles.js] تعذر مزامنة خطوات الأوفلاين:', err);
+    } finally {
+        isSyncingOfflineSteps = false;
+    }
+}
+
+if (typeof window !== 'undefined') {
+    window.syncOfflineStepsToServerIfNeeded = syncOfflineStepsToServerIfNeeded;
+}
+
 /**
  * (إصلاح أمني) قيمة نقاط الإجابة الصحيحة على السؤال اليومي (5 نقاط)
  * بقت معرّفة *في السيرفر بس* جوه دالة record_daily_question_result في
@@ -792,9 +890,11 @@ async function refreshProfileAfterDailyQuestion() {
         if (!freshRow) return;
 
         currentProfileRow = freshRow;
+        syncProfileToCache(freshRow);
         renderProfileHeader(freshRow, currentAuthUser);
         updateProfileStats({
             totalSteps: freshRow.total_steps ?? 0,
+            bestDailySteps: freshRow.best_daily_steps ?? 0,
             correctAnswers: freshRow.correct_answers ?? 0,
             bestStreakDays: freshRow.best_streak_days ?? 0,
             points: freshRow.points ?? 0,
@@ -803,6 +903,7 @@ async function refreshProfileAfterDailyQuestion() {
             weeklyChampionshipWins: freshRow.weekly_championship_wins ?? 0,
             monthlyChampionshipWins: freshRow.monthly_championship_wins ?? 0,
         });
+        loadMyQuizAccuracy(currentAuthUser.id);
 
         // (المرحلة 9) إجابة صح على السؤال اليومي ممكن تفتح وسام (بداية
         // موفقة/دماغ حديد/قناص) أو حتى تكمل ستريك يفتح وسام
@@ -907,6 +1008,14 @@ document.addEventListener('steps:progress', (event) => {
     recordStepsProgress(event.detail?.addedSteps ?? 0, event.detail?.pointsEarned ?? 0);
 });
 
+// الاستماع لتحديث الرقم القياسي من السيرفر/المحلي لمزامنة كارت "الرقم القياسي" فوراً
+document.addEventListener('sensors:best-steps-resynced', (event) => {
+    const serverBest = event.detail?.bestSteps;
+    if (typeof serverBest === 'number' && serverBest > (profileStats.bestDailySteps || 0)) {
+        updateProfileStats({ bestDailySteps: serverBest });
+    }
+});
+
 // (خطة الأوفلاين) عند عودة الاتصال بالإنترنت، نرسل الخطوات المحفوظة ونحدّث بيانات البروفايل فوراً
 document.addEventListener('app:online', async () => {
     if (pendingStepsDelta > 0) {
@@ -915,6 +1024,7 @@ document.addEventListener('app:online', async () => {
     if (currentAuthUser) {
         await loadAndRenderRealProfile(currentAuthUser);
     }
+    await syncOfflineStepsToServerIfNeeded();
 });
 
 // نسترجع فورًا عند تحميل الملف أي رصيد خطوات فضل محفوظ في localStorage
@@ -1037,6 +1147,7 @@ function bindStepsFlushLifecycleEvents() {
         // يستنى خطوة جديدة تتسجل أو الـ Flush الدوري يجيله دوره
         if (navigator.onLine) {
             flushPendingStepsBatch();
+            syncOfflineStepsToServerIfNeeded();
         }
     });
 
@@ -1054,6 +1165,7 @@ function bindStepsFlushLifecycleEvents() {
     // تستنى معاد الـ Flush الدوري
     window.addEventListener('online', () => {
         flushPendingStepsBatch();
+        syncOfflineStepsToServerIfNeeded();
     });
 }
 
@@ -1190,6 +1302,9 @@ export function renderProfileHeader(profile, user) {
     }
 
     if (isGuestHeader) {
+        const adminPanelBtn = document.getElementById('btnOpenAdminPanel');
+        if (adminPanelBtn) adminPanelBtn.classList.add('hidden');
+
         if (headerNameEl) {
             headerNameEl.classList.remove('header-name-skeleton');
             headerNameEl.textContent = 'زائر';
@@ -1221,7 +1336,7 @@ export function renderProfileHeader(profile, user) {
 
     const displayName = profile ? (profile.full_name || null) : cachedName;
     const displayTitle = profile ? (profile.title || null) : (cachedTitle || null);
-    const joinedDateText = formatJoinedDateArabic(profile?.created_at);
+    const joinedDateText = formatJoinedDateArabic(profile?.created_at || user?.created_at);
 
     // بمجرد ما نوصل لبيانات حقيقية فعلاً (مش كاش) من صف profiles،
     // بنحدّث الكاش المحلي عشان يبقى جاهز لأول رسمة في زيارة/Refresh
@@ -1309,6 +1424,19 @@ export function renderProfileHeader(profile, user) {
         renderFeaturedBadgeInline(nameEl, profile?.featured_badge_id);
         renderFeaturedBadgeInline(headerNameEl, profile?.featured_badge_id);
     });
+
+    // إظهار زرار لوحة تحكم الأدمن لو المستخدم الحالي يحمل دور admin
+    const adminPanelBtn = document.getElementById('btnOpenAdminPanel');
+    if (adminPanelBtn) {
+        const isAdmin = profile?.role === 'admin';
+        adminPanelBtn.classList.toggle('hidden', !isAdmin);
+        if (isAdmin && !adminPanelBtn.dataset.bound) {
+            adminPanelBtn.dataset.bound = 'true';
+            adminPanelBtn.addEventListener('click', () => {
+                window.location.href = 'admin.html';
+            });
+        }
+    }
 }
 
 /**
@@ -1321,26 +1449,79 @@ export function updateProfileStats(newStats = {}) {
     profileStats = { ...profileStats, ...newStats };
 
     const totalStepsEl = document.getElementById('statTotalSteps');
-    const correctAnswersEl = document.getElementById('statCorrectAnswers');
+    const bestDailyStepsEl = document.getElementById('statBestDailySteps');
+    const burnedCaloriesEl = document.getElementById('statBurnedCalories');
     const bestStreakEl = document.getElementById('statBestStreak');
+    const correctAnswersEl = document.getElementById('statCorrectAnswers');
+    const quizAccuracyEl = document.getElementById('statQuizAccuracy');
     const headerPointsEl = document.getElementById('userPoints');
     const headerStreakEl = document.getElementById('headerStreakCount');
     const dailyWinsEl = document.getElementById('statDailyWins');
     const weeklyWinsEl = document.getElementById('statWeeklyWins');
     const monthlyWinsEl = document.getElementById('statMonthlyWins');
+    const totalPodiumsEl = document.getElementById('statTotalPodiums');
 
-    if (totalStepsEl) totalStepsEl.textContent = formatCompactNumber(profileStats.totalSteps);
+    const totalSteps = Number(profileStats.totalSteps) || 0;
+    if (totalStepsEl) totalStepsEl.textContent = formatCompactNumber(totalSteps);
+
+    // الرقم القياسي اليومي (أعلى عدد خطوات في يوم واحد - ديناميكي ومباشر)
+    if (bestDailyStepsEl) {
+        let localHistoryBest = 0;
+        try {
+            const hist = getStepsHistory?.();
+            if (hist && typeof hist === 'object') {
+                localHistoryBest = Object.values(hist).reduce((max, val) => Math.max(max, Number(val) || 0), 0);
+            }
+        } catch (e) {
+            // تجاهل
+        }
+        let todaySteps = 0;
+        try {
+            todaySteps = getStepsCount?.() || 0;
+        } catch (e) {
+            // تجاهل
+        }
+        const currentBest = Math.max(
+            Number(profileStats.bestDailySteps) || 0,
+            Number(currentProfileRow?.best_daily_steps) || 0,
+            localHistoryBest,
+            todaySteps
+        );
+        bestDailyStepsEl.textContent = formatCompactNumber(currentBest);
+    }
+
+    // السعرات المحروقة التقديرية (0.04 سعرة لكل خطوة)
+    if (burnedCaloriesEl) {
+        const burned = Math.round(totalSteps * 0.04);
+        burnedCaloriesEl.textContent = `${formatCompactNumber(burned)} سعرة`;
+    }
+
     if (correctAnswersEl) correctAnswersEl.textContent = profileStats.correctAnswers;
+
+    // معدل دقة الأسئلة اليومية
+    if (quizAccuracyEl) {
+        if (profileStats.quizAccuracy !== null && typeof profileStats.quizAccuracy !== 'undefined') {
+            quizAccuracyEl.textContent = `${profileStats.quizAccuracy}%`;
+        } else {
+            quizAccuracyEl.textContent = '—%';
+        }
+    }
+
     if (bestStreakEl) bestStreakEl.textContent = `${profileStats.bestStreakDays} أيام`;
     if (headerPointsEl) headerPointsEl.textContent = profileStats.points.toLocaleString();
     if (headerStreakEl) headerStreakEl.textContent = `${profileStats.streakCount} أيام`;
-    // (جديد) عدد مرات الفوز بكل بطولة - القيم دي مصدرها الوحيد هو
-    // process_leaderboard_period_resets() على Supabase (بتتزود تلقائياً
-    // وقت تصفير كل فترة لو المستخدم كان البطل)، مفيش أي منطق تاني في
-    // الفرونت إند بيغيّرها
+
     if (dailyWinsEl) dailyWinsEl.textContent = profileStats.dailyChampionshipWins;
     if (weeklyWinsEl) weeklyWinsEl.textContent = profileStats.weeklyChampionshipWins;
     if (monthlyWinsEl) monthlyWinsEl.textContent = profileStats.monthlyChampionshipWins;
+
+    // إجمالي كؤوس / منصات التتويج
+    if (totalPodiumsEl) {
+        const totalPodiums = (Number(profileStats.dailyChampionshipWins) || 0) +
+            (Number(profileStats.weeklyChampionshipWins) || 0) +
+            (Number(profileStats.monthlyChampionshipWins) || 0);
+        totalPodiumsEl.textContent = `${totalPodiums} بطولة`;
+    }
 
     // تقييم تنبيه إنقاذ الستريك (إذا كان الستريك مهدداً بالانقطاع قبل منتصف الليل)
     evaluateAndScheduleStreakSaver({
@@ -1351,8 +1532,97 @@ export function updateProfileStats(newStats = {}) {
 
 /** تنسيق رقم كبير بصيغة مختصرة (142500 -> 142.5K) */
 function formatCompactNumber(num) {
-    if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
+    if (typeof num !== 'number') num = Number(num) || 0;
+    if (num >= 1000) return `${(num / 1000).toFixed(1).replace(/\.0$/, '')}K`;
     return String(num);
+}
+
+/**
+ * حساب نسبة دقة الأسئلة اليومية للمستخدم الحالي وتحديث الواجهة
+ * @param {string} userId
+ */
+async function loadMyQuizAccuracy(userId) {
+    if (!userId) return;
+    try {
+        const { data: rpcData, error: rpcError } = await supabaseClient.rpc('get_user_quiz_accuracy', { p_user_id: userId });
+        if (!rpcError && rpcData && typeof rpcData.percentage !== 'undefined') {
+            const pct = rpcData.percentage !== null ? rpcData.percentage : (rpcData.total === 0 ? null : 0);
+            updateProfileStats({ quizAccuracy: pct });
+            return;
+        }
+
+        // استعلام بديل مباشر من جدول daily_question_status
+        const { data: rows, error } = await supabaseClient
+            .from('daily_question_status')
+            .select('is_correct, status')
+            .eq('user_id', userId);
+
+        if (!error && Array.isArray(rows) && rows.length > 0) {
+            const validRows = rows.filter((r) => ['answered', 'timeout', 'forfeited'].includes(r.status));
+            if (validRows.length > 0) {
+                const correctCount = validRows.filter((r) => r.is_correct === true).length;
+                const pct = Math.round((correctCount / validRows.length) * 100);
+                updateProfileStats({ quizAccuracy: pct });
+                return;
+            }
+        }
+
+        const correct = currentProfileRow?.correct_answers ?? profileStats.correctAnswers ?? 0;
+        if (correct > 0) {
+            updateProfileStats({ quizAccuracy: 100 });
+        } else {
+            updateProfileStats({ quizAccuracy: null });
+        }
+    } catch (e) {
+        console.warn('تعذر حساب دقة الأسئلة للمستخدم الحالي:', e);
+    }
+}
+
+/**
+ * جلب معدل دقة الأسئلة لصاحب البروفايل العام
+ * @param {string} targetUserId
+ * @param {number} fallbackCorrectAnswers
+ */
+async function loadPublicUserQuizAccuracy(targetUserId, fallbackCorrectAnswers = 0) {
+    const publicQuizAccuracyEl = document.getElementById('publicProfileQuizAccuracy');
+    if (!targetUserId || !publicQuizAccuracyEl) return;
+
+    try {
+        const { data: rpcData, error: rpcError } = await supabaseClient.rpc('get_user_quiz_accuracy', { p_user_id: targetUserId });
+        if (!rpcError && rpcData && typeof rpcData.percentage !== 'undefined') {
+            if (currentPublicProfileTargetId === targetUserId && publicQuizAccuracyEl) {
+                publicQuizAccuracyEl.textContent = rpcData.percentage !== null ? `${rpcData.percentage}%` : (rpcData.total === 0 ? '—%' : '0%');
+            }
+            return;
+        }
+
+        const { data: rows, error } = await supabaseClient
+            .from('daily_question_status')
+            .select('is_correct, status')
+            .eq('user_id', targetUserId);
+
+        if (!error && Array.isArray(rows) && rows.length > 0) {
+            const validRows = rows.filter((r) => ['answered', 'timeout', 'forfeited'].includes(r.status));
+            if (validRows.length > 0) {
+                const correctCount = validRows.filter((r) => r.is_correct === true).length;
+                const pct = Math.round((correctCount / validRows.length) * 100);
+                if (currentPublicProfileTargetId === targetUserId && publicQuizAccuracyEl) {
+                    publicQuizAccuracyEl.textContent = `${pct}%`;
+                }
+                return;
+            }
+        }
+
+        const correct = Number(fallbackCorrectAnswers) || 0;
+        if (currentPublicProfileTargetId === targetUserId && publicQuizAccuracyEl) {
+            publicQuizAccuracyEl.textContent = correct > 0 ? '100%' : '—%';
+        }
+    } catch (e) {
+        if (currentPublicProfileTargetId === targetUserId && publicQuizAccuracyEl) {
+            const correct = Number(fallbackCorrectAnswers) || 0;
+            publicQuizAccuracyEl.textContent = correct > 0 ? '100%' : '—%';
+        }
+    }
 }
 
 /* ==================================================================
@@ -1421,40 +1691,69 @@ function formatCompactNumber(num) {
  * جلب كتالوج كل الأوسمة الممكنة في اللعبة (مفتوحة كانت أو مقفولة لأي حد)
  * @returns {Promise<Array<object>>}
  */
-async function fetchBadgesCatalog() {
+/** جلب كتالوج الأوسمة من السيرفر مباشرة (يرجع null عند فشل الاتصال) */
+async function fetchBadgesCatalogFromServer() {
     const { data, error } = await supabaseClient
         .from('badges')
         .select('id, icon, title, description, tier, sort_order')
         .order('sort_order', { ascending: true });
 
     if (error) {
-        console.error('خطأ في جلب كتالوج الأوسمة:', error.message);
-        return [];
+        console.warn('[profiles.js] خطأ في جلب كتالوج الأوسمة من السيرفر:', error.message || error);
+        return null;
     }
 
     return data || [];
 }
 
-/**
- * جلب أوسمة المستخدم الحالي المفتوحة فعلاً + وقت فتح كل واحدة منها
- * (unlocked_at) + وقت انتهاءها لو وسام مؤقت (expires_at) - محتاجين
- * الوقت عشان نرتّب الوسام الأحدث فتحًا في بداية تصنيفه (شوف
- * sortBadgesForDisplay تحت)
- * @param {string} userId
- * @returns {Promise<Map<string, {unlockedAt: string, expiresAt: string|null}>>} badge_id -> بيانات الفتح
- */
-async function fetchUnlockedBadgesMap(userId) {
+/** جلب أوسمة المستخدم المفتوحة من السيرفر مباشرة (يرجع null عند فشل الاتصال) */
+async function fetchUserBadgesListFromServer(userId) {
     const { data, error } = await supabaseClient
         .from('user_badges')
         .select('badge_id, unlocked_at, expires_at')
         .eq('user_id', userId);
 
     if (error) {
-        console.error('خطأ في جلب أوسمة المستخدم:', error.message);
-        return new Map();
+        console.warn('[profiles.js] خطأ في جلب أوسمة المستخدم من السيرفر:', error.message || error);
+        return null;
     }
 
-    return new Map((data || []).map((row) => [row.badge_id, { unlockedAt: row.unlocked_at, expiresAt: row.expires_at }]));
+    return data || [];
+}
+
+/**
+ * جلب كتالوج كل الأوسمة الممكنة في اللعبة (مع دعم كاش الأوفلاين)
+ * @returns {Promise<Array<object>>}
+ */
+async function fetchBadgesCatalog() {
+    const cached = await getCached('cached_badges_catalog');
+    if (cached && Array.isArray(cached) && cached.length > 0) {
+        return cached;
+    }
+    const fresh = await fetchBadgesCatalogFromServer();
+    if (fresh && fresh.length > 0) {
+        setCached('cached_badges_catalog', fresh);
+        return fresh;
+    }
+    return [];
+}
+
+/**
+ * جلب أوسمة المستخدم الحالي المفتوحة فعلاً مع دعم كاش الأوفلاين
+ * @param {string} userId
+ * @returns {Promise<Map<string, {unlockedAt: string, expiresAt: string|null}>>} badge_id -> بيانات الفتح
+ */
+async function fetchUnlockedBadgesMap(userId) {
+    const fresh = await fetchUserBadgesListFromServer(userId);
+    if (fresh !== null) {
+        setCached(`cached_user_badges:${userId}`, fresh);
+        return new Map(fresh.map((row) => [row.badge_id, { unlockedAt: row.unlocked_at, expiresAt: row.expires_at }]));
+    }
+    const cached = await getCached(`cached_user_badges:${userId}`);
+    if (cached && Array.isArray(cached)) {
+        return new Map(cached.map((row) => [row.badge_id, { unlockedAt: row.unlocked_at, expiresAt: row.expires_at }]));
+    }
+    return new Map();
 }
 
 /**
@@ -1485,14 +1784,22 @@ function isBadgeCurrentlyUnlocked(entry) {
  */
 function formatBadgeTimeRemaining(expiresAtIso) {
     const remainingMs = new Date(expiresAtIso).getTime() - Date.now();
-    if (remainingMs <= 0) return 'بينتهي دلوقتي';
+    if (remainingMs <= 0) return 'ينتهي الآن';
 
     const hours = Math.round(remainingMs / 3_600_000);
-    if (hours < 1) return 'بيفضل أقل من ساعة';
-    if (hours < 24) return `بيفضل ${hours} ${hours === 1 ? 'ساعة' : 'ساعات'}`;
+    if (hours < 1) return 'متبقي أقل من ساعة';
+    if (hours < 24) {
+        if (hours === 1) return 'متبقي ساعة واحدة';
+        if (hours === 2) return 'متبقي ساعتان';
+        if (hours >= 3 && hours <= 10) return `متبقي ${hours} ساعات`;
+        return `متبقي ${hours} ساعة`;
+    }
 
     const days = Math.round(hours / 24);
-    return `بيفضل ${days} ${days === 1 ? 'يوم' : 'أيام'}`;
+    if (days === 1) return 'متبقي يوم واحد';
+    if (days === 2) return 'متبقي يومان';
+    if (days >= 3 && days <= 10) return `متبقي ${days} أيام`;
+    return `متبقي ${days} يوماً`;
 }
 
 /**
@@ -1506,7 +1813,11 @@ function formatBadgeTimeRemaining(expiresAtIso) {
  */
 function sortBadgesForDisplay(list) {
     return [...list].sort((a, b) => {
-        const tierDiff = BADGE_TIER_ORDER.indexOf(a.tier) - BADGE_TIER_ORDER.indexOf(b.tier);
+        const indexA = BADGE_TIER_ORDER.indexOf(a.tier);
+        const indexB = BADGE_TIER_ORDER.indexOf(b.tier);
+        const safeTierA = indexA === -1 ? 999 : indexA;
+        const safeTierB = indexB === -1 ? 999 : indexB;
+        const tierDiff = safeTierA - safeTierB;
         if (tierDiff !== 0) return tierDiff;
 
         if (a.unlocked !== b.unlocked) return a.unlocked ? -1 : 1;
@@ -1520,73 +1831,141 @@ function sortBadgesForDisplay(list) {
 }
 
 /**
- * جلب كتالوج الأوسمة كامل + دمجه مع أوسمة المستخدم الحالي المفتوحة،
- * وتحديث badgesData ورسمها في الشبكة. تُستدعى من initProfileUI وكمان
- * بعد أي unlockBadge ناجحة.
+ * جلب كتالوج الأوسمة كامل + دمجه مع أوسمة المستخدم الحالي المفتوحة بنمط Stale-While-Revalidate،
+ * وتحديث badgesData ورسمها في الشبكة حتى بدون اتصال بالإنترنت.
  * @param {string} userId
  */
 async function loadAndRenderBadges(userId) {
-    const [catalog, unlockedMap] = await Promise.all([
-        fetchBadgesCatalog(),
-        fetchUnlockedBadgesMap(userId),
+    let currentCatalog = [];
+    let currentUserBadges = [];
+
+    const applyBadgesIfReady = () => {
+        if (!currentCatalog || currentCatalog.length === 0) {
+            if (badgesData.length === 0) {
+                renderBadges();
+            }
+            return;
+        }
+        const unlockedMap = new Map((currentUserBadges || []).map((row) => [row.badge_id, { unlockedAt: row.unlocked_at, expiresAt: row.expires_at }]));
+
+        const rawBadges = currentCatalog.map((badge) => {
+            const entry = unlockedMap.get(badge.id);
+            return {
+                id: badge.id,
+                icon: badge.icon,
+                title: badge.title,
+                desc: badge.description,
+                tier: badge.tier,
+                sortOrder: badge.sort_order,
+                unlocked: isBadgeCurrentlyUnlocked(entry),
+                unlockedAt: entry?.unlockedAt ?? null,
+                expiresAt: entry?.expiresAt ?? null,
+            };
+        });
+
+        badgesData = sortBadgesForDisplay(rawBadges);
+        badgesCatalogCache = new Map(currentCatalog.map((badge) => [badge.id, { icon: badge.icon, title: badge.title }]));
+        badgesLoadedOnce = true;
+        renderBadges();
+
+        const badgesPage = document.getElementById('tab-badges-page');
+        if (badgesPage && badgesPage.classList.contains('active')) {
+            renderBadgesPage();
+        }
+
+        const accountSettingsPage = document.getElementById('accountSettingsPage');
+        if (accountSettingsPage && !accountSettingsPage.classList.contains('hidden')) {
+            populateEditTitleSelectOptions();
+        }
+    };
+
+    await Promise.all([
+        fetchWithCache('cached_badges_catalog', fetchBadgesCatalogFromServer, (catalog) => {
+            currentCatalog = catalog || [];
+            applyBadgesIfReady();
+        }),
+        fetchWithCache(`cached_user_badges:${userId}`, () => fetchUserBadgesListFromServer(userId), (userBadges) => {
+            currentUserBadges = userBadges || [];
+            applyBadgesIfReady();
+        }),
     ]);
-
-    const rawBadges = catalog.map((badge) => {
-        const entry = unlockedMap.get(badge.id);
-        return {
-            id: badge.id,
-            icon: badge.icon,
-            title: badge.title,
-            desc: badge.description,
-            tier: badge.tier,
-            sortOrder: badge.sort_order,
-            // (إصلاح - أوسمة البطولات المؤقتة) "مفتوح" لازم يمر على
-            // isBadgeCurrentlyUnlocked مش مجرد وجود الصف - وإلا وسام بطولة
-            // انتهى expires_at بتاعه (والمستخدم مجدّدهوش بفوز جديد) هيفضل
-            // ظاهر "مفتوح" هنا للأبد وهيفضل خيار متاح في قايمة اللقب
-            unlocked: isBadgeCurrentlyUnlocked(entry),
-            unlockedAt: entry?.unlockedAt ?? null,
-            expiresAt: entry?.expiresAt ?? null,
-        };
-    });
-
-    badgesData = sortBadgesForDisplay(rawBadges);
-
-    // (المرحلة 7) نبني/نحدّث كاش الأيقونات هنا كمان من نفس الكتالوج اللي
-    // جبناه فوق بالظبط - من غير أي نداء شبكة إضافي (شوف ensureBadgesCatalogCache تحت)
-    badgesCatalogCache = new Map(catalog.map((badge) => [badge.id, { icon: badge.icon, title: badge.title }]));
-
-    renderBadges();
-
-    // لو صفحة "الأوسمة والشارات" الكاملة مفتوحة فعلاً دلوقتي (نادرة، بس
-    // ممكن لو Trigger فتح وسام جديد أثناء ما المستخدم فاتحها)، حدّثها
-    // كمان فوراً بدل ما تفضل عارضة بيانات قديمة لحد ما يقفلها ويفتحها تاني
-    const badgesPage = document.getElementById('tab-badges-page');
-    if (badgesPage && badgesPage.classList.contains('active')) {
-        renderBadgesPage();
-    }
 }
 
 /**
- * بترجع كاش كتالوج الأوسمة (id -> {icon, title})، وتجيبه من Supabase
- * أول مرة بس لو لسه مش محمّل (مثلاً حد فتح بروفايل عام مباشرة من غير
- * ما loadAndRenderBadges تتنادى الأول لبروفايله هو). كل الأماكن اللي
- * محتاجة تعرض أيقونة الشارة المميزة (renderProfileHeader،
- * renderPublicProfileContent) بتمر من هنا.
+ * بترجع كاش كتالوج الأوسمة (id -> {icon, title})، مع قراءة سريعة من كاش الأوفلاين أولاً
  * @returns {Promise<Map<string, {icon: string, title: string}>>}
  */
 async function ensureBadgesCatalogCache() {
     if (badgesCatalogCache) return badgesCatalogCache;
 
+    const cachedCatalog = await getCached('cached_badges_catalog');
+    if (cachedCatalog && Array.isArray(cachedCatalog) && cachedCatalog.length > 0) {
+        badgesCatalogCache = new Map(cachedCatalog.map((badge) => [badge.id, { icon: badge.icon, title: badge.title }]));
+        return badgesCatalogCache;
+    }
+
     if (!badgesCatalogLoadPromise) {
-        badgesCatalogLoadPromise = fetchBadgesCatalog().then((catalog) => {
-            badgesCatalogCache = new Map(catalog.map((badge) => [badge.id, { icon: badge.icon, title: badge.title }]));
+        badgesCatalogLoadPromise = fetchBadgesCatalogFromServer().then((catalog) => {
+            if (catalog && catalog.length > 0) {
+                badgesCatalogCache = new Map(catalog.map((badge) => [badge.id, { icon: badge.icon, title: badge.title }]));
+                setCached('cached_badges_catalog', catalog);
+            } else if (!badgesCatalogCache) {
+                badgesCatalogCache = new Map();
+            }
+            badgesCatalogLoadPromise = null;
+            return badgesCatalogCache;
+        }).catch((err) => {
+            console.warn('[profiles.js] خطأ في جلب كتالوج الأوسمة:', err);
+            if (!badgesCatalogCache) badgesCatalogCache = new Map();
             badgesCatalogLoadPromise = null;
             return badgesCatalogCache;
         });
     }
 
     return badgesCatalogLoadPromise;
+}
+
+/** قائمة معرّفات الأوسمة التي تتوفر لها رسومات ثلاثية الأبعاد مخصصة بدون دوائر */
+const BADGE_CUSTOM_3D_ASSETS = new Set([
+    'first_steps',
+    'first_correct',
+    'streak_3',
+    'first_friend',
+    'committed',
+    'steps_50k',
+    'genius',
+    'streak_7',
+    'daily_champion',
+    'friends_10',
+    'runner',
+    'steps_250k',
+    'correct_200',
+    'blaze',
+    'weekly_champion',
+    'monthly_champion',
+    'legend_10_wins',
+    'streak_100',
+    'million_steps',
+    'top3_leaderboard',
+    'champion',
+    'veteran_1_year',
+    'champion_daily',
+    'champion_weekly',
+    'champion_monthly',
+]);
+
+/**
+ * تجهيز وسم عرض أيقونة الوسام كصورة ثلاثية الأبعاد إن توفرت، أو كنص إيموجي احتياطي
+ * @param {{id: string, icon: string, title?: string}} badge
+ * @param {string} [sizeClasses='w-8 h-8']
+ * @returns {string}
+ */
+function renderBadgeIconHtml(badge, sizeClasses = 'w-8 h-8') {
+    if (!badge) return '';
+    if (BADGE_CUSTOM_3D_ASSETS.has(badge.id)) {
+        return `<img src="images/badges/${escapeHtml(badge.id)}.png" alt="${escapeHtml(badge.title || '')}" class="${sizeClasses} object-contain select-none pointer-events-none drop-shadow-sm inline-block" loading="lazy">`;
+    }
+    return `<span class="text-2xl">${badge.icon || ''}</span>`;
 }
 
 /**
@@ -1619,7 +1998,11 @@ function renderFeaturedBadgeInline(nameEl, featuredBadgeId) {
         nameEl.insertAdjacentElement('afterend', badgeEl);
     }
 
-    badgeEl.textContent = badge.icon;
+    if (BADGE_CUSTOM_3D_ASSETS.has(featuredBadgeId)) {
+        badgeEl.innerHTML = `<img src="images/badges/${escapeHtml(featuredBadgeId)}.png" alt="" class="w-4 h-4 inline-block object-contain align-middle">`;
+    } else {
+        badgeEl.textContent = badge.icon;
+    }
     badgeEl.title = badge.title;
 }
 
@@ -1631,24 +2014,19 @@ function renderFeaturedBadgeInline(nameEl, featuredBadgeId) {
  * @returns {string}
  */
 function badgeCardHtml(badge) {
-    // (جديد - أوسمة البطولات المؤقتة) لو الوسام ساري دلوقتي وله expiresAt
-    // (يعني بطل يومي/أسبوعي/شهري حالي)، بنعرض تحت وصفه "بيفضل X" بدل
-    // الوصف التاني - عشان المستخدم يعرف إن اللقب ده مؤقت ومحتاج يفوز
-    // تاني عشان يفضل شايله (شوف formatBadgeTimeRemaining فوق)
-    const subtitle = (badge.unlocked && badge.expiresAt)
-        ? formatBadgeTimeRemaining(badge.expiresAt)
-        : badge.desc;
-
     return `
-        <div class="${badge.unlocked
+        <button type="button" class="badge-card-btn ${badge.unlocked
             ? 'bg-gold-500/10 border border-gold-500/30 badge-glow'
             : 'bg-lux-800/50 border border-gold-500/15 grayscale opacity-60 relative'}
-            p-3 rounded-2xl text-center flex flex-col items-center justify-center space-y-1 shadow-xs">
+            p-2.5 rounded-2xl text-center flex flex-col items-center justify-between shadow-xs cursor-pointer w-full active:scale-95 transition-transform min-h-[5.75rem]"
+            data-badge-id="${escapeHtml(badge.id)}"
+            aria-label="تفاصيل وسام ${escapeHtml(badge.title)}">
             ${!badge.unlocked ? '<span class="absolute top-1 right-1 text-lux-400"><svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>' : ''}
-            <span class="text-2xl">${badge.icon}</span>
-            <span class="font-extrabold text-lux-100 text-xs">${badge.title}</span>
-            <span class="text-[9px] ${badge.unlocked ? 'text-gold-400' : 'text-lux-400'} font-bold">${subtitle}</span>
-        </div>
+            <div class="h-10 flex items-center justify-center my-auto">
+                ${renderBadgeIconHtml(badge, 'w-9 h-9 max-h-9')}
+            </div>
+            <span class="font-extrabold text-lux-100 text-[11px] leading-snug text-center break-words max-w-full min-h-[2.2rem] flex items-center justify-center">${escapeHtml(badge.title)}</span>
+        </button>
     `;
 }
 
@@ -1779,6 +2157,224 @@ function bindBadgesPageEvents() {
 
     const backBtn = document.getElementById('btnBackFromBadgesPage');
     if (backBtn) backBtn.addEventListener('click', () => closeBadgesPage());
+}
+
+/** فئات تنسيق شارات الرتب في مودال تفاصيل الوسام */
+const BADGE_TIER_CLASSES = {
+    normal: 'bg-lux-700/60 text-lux-200 border border-lux-600/40',
+    medium: 'bg-blue-500/20 text-blue-300 border border-blue-500/30',
+    hard: 'bg-purple-500/20 text-purple-300 border border-purple-500/30',
+    legendary: 'bg-gold-500/20 text-gold-400 border border-gold-500/40 shadow-glow-amber',
+};
+
+/** إخفاء مودال تفاصيل الوسام والشارة */
+function hideBadgeDetailsModal() {
+    const modal = document.getElementById('badgeDetailsModal');
+    if (modal) {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+    }
+}
+
+/** إغلاق مودال تفاصيل الوسام والشارة عبر إدارة السجل */
+function closeBadgeDetailsModal() {
+    closeModal();
+}
+
+/**
+ * فتح مودال تفاصيل الوسام والشارة وعرض بياناته بدقة
+ * @param {object} badge
+ * @param {boolean} [isPublic=false]
+ */
+function openBadgeDetailsModal(badge, isPublic = false) {
+    if (!badge) return;
+
+    const modal = document.getElementById('badgeDetailsModal');
+    const iconWrapper = document.getElementById('badgeDetailsIconWrapper');
+    const iconEl = document.getElementById('badgeDetailsIcon');
+    const titleEl = document.getElementById('badgeDetailsTitle');
+    const tierBadgeEl = document.getElementById('badgeDetailsTierBadge');
+    const descEl = document.getElementById('badgeDetailsDescription');
+    const statusIconEl = document.getElementById('badgeDetailsStatusIcon');
+    const statusTextEl = document.getElementById('badgeDetailsStatusText');
+    const extraInfoEl = document.getElementById('badgeDetailsExtraInfo');
+
+    if (iconEl) {
+        if (BADGE_CUSTOM_3D_ASSETS.has(badge.id)) {
+            iconEl.innerHTML = `<img src="images/badges/${escapeHtml(badge.id)}.png" alt="${escapeHtml(badge.title || '')}" class="w-14 h-14 object-contain select-none pointer-events-none drop-shadow-md inline-block">`;
+        } else {
+            iconEl.textContent = badge.icon || '';
+        }
+    }
+    if (iconWrapper) {
+        if (badge.unlocked) {
+            iconWrapper.className = 'w-20 h-20 mx-auto rounded-3xl flex items-center justify-center text-4xl shadow-inner border bg-gold-500/15 border-gold-500/40 badge-glow';
+        } else {
+            iconWrapper.className = 'w-20 h-20 mx-auto rounded-3xl flex items-center justify-center text-4xl shadow-inner border bg-lux-800/80 border-lux-700/40 grayscale opacity-60';
+        }
+    }
+
+    if (titleEl) titleEl.textContent = badge.title || '';
+
+    if (tierBadgeEl) {
+        const tierKey = badge.tier || 'normal';
+        tierBadgeEl.textContent = BADGE_TIER_LABELS[tierKey] || tierKey;
+        tierBadgeEl.className = `text-[10px] font-bold px-2.5 py-0.5 rounded-full ${BADGE_TIER_CLASSES[tierKey] || BADGE_TIER_CLASSES.normal}`;
+    }
+
+    if (descEl) descEl.textContent = badge.desc || '';
+
+    if (statusIconEl && statusTextEl && extraInfoEl) {
+        if (badge.unlocked) {
+            statusIconEl.innerHTML = '<svg class="w-4 h-4 text-gold-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>';
+            statusTextEl.textContent = isPublic ? 'حصل عليه هذا البطل' : 'تم فتح الوسام بنجاح';
+            statusTextEl.className = 'text-gold-400 font-bold';
+
+            if (badge.expiresAt) {
+                extraInfoEl.textContent = formatBadgeTimeRemaining(badge.expiresAt);
+                extraInfoEl.classList.remove('hidden');
+            } else if (badge.unlockedAt) {
+                const formattedDate = formatJoinedDateArabic(badge.unlockedAt);
+                const suffix = isPublic ? 'في سجله' : 'في سجلك';
+                extraInfoEl.textContent = formattedDate ? `تم الحصول عليه في ${formattedDate}` : `وسام دائم ${suffix}`;
+                extraInfoEl.classList.remove('hidden');
+            } else {
+                extraInfoEl.textContent = isPublic ? 'وسام دائم في سجله' : 'وسام دائم في سجلك';
+                extraInfoEl.classList.remove('hidden');
+            }
+        } else {
+            statusIconEl.innerHTML = '<svg class="w-4 h-4 text-lux-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>';
+            statusTextEl.textContent = isPublic ? 'وسام مغلق لدى هذا البطل' : 'وسام مغلق حالياً';
+            statusTextEl.className = 'text-lux-400 font-bold';
+            extraInfoEl.textContent = isPublic ? 'لم يكمل متطلبات التحدي بعد' : 'أكمل متطلبات التحدي لفتح هذا الوسام';
+            extraInfoEl.classList.remove('hidden');
+        }
+    }
+
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+    pushModalState(hideBadgeDetailsModal);
+}
+
+/** ربط أحداث مودال تفاصيل الوسام والشارة عبر تفويض النقرات */
+function bindBadgeDetailsModalEvents() {
+    if (badgeDetailsModalBound) return;
+    badgeDetailsModalBound = true;
+
+    const modal = document.getElementById('badgeDetailsModal');
+    const closeBtn = document.getElementById('btnCloseBadgeDetailsModal');
+
+    if (closeBtn) {
+        closeBtn.addEventListener('click', closeBadgeDetailsModal);
+    }
+
+    if (modal) {
+        modal.addEventListener('click', (event) => {
+            if (event.target === modal) {
+                closeBadgeDetailsModal();
+            }
+        });
+    }
+
+    // تفويض نقرات كروت الأوسمة في جميع الشاشات
+    document.addEventListener('click', (event) => {
+        const badgeBtn = event.target.closest('.badge-card-btn');
+        if (!badgeBtn) return;
+
+        const badgeId = badgeBtn.dataset.badgeId;
+        if (!badgeId) return;
+
+        const isPublic = Boolean(badgeBtn.closest('#tab-public-profile, #tab-public-badges-page'));
+        let badge = isPublic
+            ? publicProfileBadgesData.find((b) => b.id === badgeId)
+            : badgesData.find((b) => b.id === badgeId);
+
+        if (!badge && isPublic && badgesData.length > 0) {
+            const catalogBadge = badgesData.find((b) => b.id === badgeId);
+            if (catalogBadge) {
+                badge = { ...catalogBadge, unlocked: false, unlockedAt: null, expiresAt: null };
+            }
+        }
+
+        if (badge) {
+            openBadgeDetailsModal(badge, isPublic);
+        }
+    });
+}
+
+/**
+ * مشاركة بيانات البروفايل عبر Web Share API مع دعم النسخ التلقائي
+ * @param {object|null} profileData
+ * @param {boolean} isPublic
+ */
+async function shareUserProfile(profileData, isPublic = false) {
+    if (!profileData) return;
+
+    const name = profileData.full_name || (isPublic ? 'بطل من أبطال الصكاوية' : 'ملفي الشخصي في الصكاوية');
+    const titlePart = profileData.title ? ` | ${profileData.title}` : '';
+    const stepsFormatted = (profileData.total_steps ?? 0).toLocaleString('ar-EG');
+    const streakDays = (profileData.streak_count ?? 0).toLocaleString('ar-EG');
+    const pointsFormatted = (profileData.points ?? 0).toLocaleString('ar-EG');
+
+    const shareText = [
+        `بروفايل البطل: ${name}${titlePart}`,
+        `إجمالي الخطوات: ${stepsFormatted} خطوة`,
+        `أيام الستريك: ${streakDays} يوم`,
+        `النقاط: ${pointsFormatted} نقطة`,
+        `تطبيق الصكاوية - مجتمع المشي والنشاط`
+    ].join('\n');
+
+    const shareData = {
+        title: `بروفايل ${name} في الصكاوية`,
+        text: shareText,
+    };
+
+    if (navigator.share) {
+        try {
+            await navigator.share(shareData);
+            return;
+        } catch (err) {
+            if (err && err.name === 'AbortError') return;
+        }
+    }
+
+    try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(shareText);
+            document.dispatchEvent(new CustomEvent('app:toast', {
+                detail: { message: 'تم نسخ بيانات البروفايل إلى الحافظة', type: 'success' }
+            }));
+        } else {
+            document.dispatchEvent(new CustomEvent('app:toast', {
+                detail: { message: 'المشاركة غير مدعومة على هذا المتصفح', type: 'info' }
+            }));
+        }
+    } catch (clipErr) {
+        console.error('تعذر نسخ بيانات البروفايل:', clipErr);
+        document.dispatchEvent(new CustomEvent('app:toast', {
+            detail: { message: 'تعذر نسخ البيانات', type: 'error' }
+        }));
+    }
+}
+
+/** ربط أزرار مشاركة البروفايل في بروفايلي والبروفايل العام */
+function bindShareProfileEvents() {
+    if (shareProfileEventsBound) return;
+    shareProfileEventsBound = true;
+
+    const shareMyProfileBtn = document.getElementById('btnShareMyProfile');
+    if (shareMyProfileBtn) {
+        shareMyProfileBtn.addEventListener('click', () => {
+            shareUserProfile(currentProfileRow, false);
+        });
+    }
+
+    const sharePublicProfileBtn = document.getElementById('btnSharePublicProfile');
+    if (sharePublicProfileBtn) {
+        sharePublicProfileBtn.addEventListener('click', () => {
+            shareUserProfile(currentPublicProfileData, true);
+        });
+    }
 }
 
 /**
@@ -2024,66 +2620,10 @@ function markBadgesAsNotified(userId, badgeIds) {
 export async function unlockBadge(badgeId) {
     if (!currentAuthUser) return;
 
-    const badge = badgesData.find((b) => b.id === badgeId);
-    if (badge && badge.unlocked) return; // مفتوح بالفعل، مفيش داعي لنداء شبكة
-
-    let inserted;
-
-    if (badgeId === 'top3_leaderboard') {
-        // (إصلاح باج أمان حقيقي): كان في upsert مباشر من هنا لأي badgeId
-        // بيوصله - يعني أي حد يعرف يفتح Console المتصفح كان يقدر يكتب
-        // unlockBadge('champion') أو أي معرّف تاني ويفتح لنفسه أي وسام
-        // بالغش، مش بس top3_leaderboard. بدل ما نمنع الحالة العامة (مش
-        // مستخدمة فعليًا غير هنا)، بنمنع تحديدًا وسام "قدوة" - الوحيد
-        // اللي مبيتفتحش عن طريق Trigger سيرفر-سايد أصلاً - عن طريق RPC
-        // آمنة (check_and_unlock_top3_badge) بتتحقق فعليًا من ترتيبك
-        // all-time الحقيقي بعمود points في profiles قبل أي INSERT، وهي
-        // اللي بتعمل الـ INSERT نفسه (SECURITY DEFINER)، مش الفرونت إند.
-        // ده اللي بيمنع بالظبط باج "حساب جديد بصفر إنجاز واخد وسام
-        // قدوة" اللي كان بيحصل قبل كده.
-        const { data, error } = await supabaseClient.rpc('check_and_unlock_top3_badge');
-        if (error) {
-            console.error('خطأ في فتح وسام قدوة:', error.message);
-            return;
-        }
-        inserted = data === true;
-    } else {
-        const { error } = await supabaseClient
-            .from('user_badges')
-            .upsert({ user_id: currentAuthUser.id, badge_id: badgeId }, { onConflict: 'user_id,badge_id' });
-
-        if (error) {
-            console.error('خطأ في فتح الوسام:', error.message);
-            return;
-        }
-        inserted = true;
-    }
-
-    // (top3_leaderboard بس) لسه مش مستحقه فعليًا (رتبتك أكبر من 3) أو
-    // كان مفتوح بالفعل - مفيش أي وسام جديد نعمله له باقي الخطوات دي
-    if (!inserted) return;
-
+    // جميع الأوسمة يتم التحقق منها ومنحها حصرياً من خلال السيرفر
+    // (Triggers & Server Cron Jobs) لضمان تحقيق الشروط الفعلية.
+    // الفرونت إند يقوم فقط بإعادة تحميل الأوسمة الممنوحة من السيرفر.
     await loadAndRenderBadges(currentAuthUser.id);
-    const unlockedBadge = badgesData.find((b) => b.id === badgeId);
-    markBadgesAsNotified(currentAuthUser.id, [badgeId]);
-    document.dispatchEvent(new CustomEvent('profiles:badge-unlocked', { detail: { badge: unlockedBadge } }));
-
-    // إشعار "achievement_unlocked" للمستخدم نفسه (هو صاحب الإنجاز) عشان
-    // يشوفه في جرس الإشعارات، ولو ضغط عليه يوديه لقسم الأوسمة في
-    // بروفايله (شوف navigateToAchievementsSection في notifications.js).
-    // بنستورد sendNotification هنا محلياً (Dynamic Import) بدل import
-    // ثابت أعلى الملف - نفس سبب acceptFriendRequest/sendFriendRequest
-    // فوق (تجنب Circular Import مع notifications.js)
-    const { sendNotification } = await import('./notifications.js');
-    await sendNotification({
-        userId: currentAuthUser.id,
-        type: 'achievement_unlocked',
-        title: 'وسام جديد!',
-        message: `مبروك! لقد حصلت على وسام ${unlockedBadge?.title || badgeId}`,
-        data: {
-            badge_id: badgeId,
-        },
-    });
 }
 
 /**
@@ -2161,14 +2701,6 @@ async function checkAndUnlockBadges() {
 /** أقصى عدد أشخاص نبلغهم بإشعار "leaderboard_pass" في نفس دفعة التخطي الواحدة - لو المستخدم قفز قفزة كبيرة (مثلاً أول Flush خطوات كبير بعد فترة off) وخطى ناس كتير مرة واحدة، منبعتش سيل إشعارات لعدد كبير، بنبلغ الأقرب ليه بس (الأقل فرق نقط/خطوات) */
 const LEADERBOARD_PASS_NOTIFY_LIMIT = 5;
 
-/**
- * بعد أي زيادة في points أو total_steps للمستخدم الحالي، بنشوف هل
- * الزيادة دي خلته يتخطى حد كان لسه فوقه (بين قيمته القديمة والجديدة)
- * في الترتيب - لو آه، بنبعت لكل واحد منهم إشعار "leaderboard_pass".
- * "Fire and forget" بنفس فلسفة sendNotification العادية - فشلها
- * متمنعش حفظ النقاط نفسه من إنه يتم (اتحفظ بالفعل قبل ما الدالة دي
- * تتنادى، شوف patchProfileRow/flushPendingStepsBatch).
- * @param {'points'|'total_steps'} metric
 /** مدة الكولد داون (ساعتان) لمنع إزعاج نفس المنافس بتكرار الإشعار في وقت قصير */
 const LEADERBOARD_PASS_COOLDOWN_MS = 2 * 60 * 60 * 1000;
 
@@ -2594,6 +3126,12 @@ async function loadAndRenderFriends(userId) {
 
     renderFriends();
     renderIncomingFriendRequests();
+
+    // مزامنة الكاش المحلي مع أحدث حالة بعد العمليات
+    if (userId) {
+        setCached(`cached_friends_list:${userId}`, accepted).catch(() => {});
+        setCached(`cached_friend_requests:${userId}`, incoming).catch(() => {});
+    }
 }
 
 /**
@@ -3280,6 +3818,14 @@ async function fetchFriendshipStatusWith(targetUserId) {
 
     if (error) {
         console.error('خطأ في فحص حالة الصداقة:', error.message);
+        const existingFriend = friendsData.find((f) => f.userId === targetUserId);
+        if (existingFriend) {
+            return { status: 'accepted', requestId: existingFriend.id };
+        }
+        const incomingReq = incomingFriendRequests.find((r) => r.requesterId === targetUserId);
+        if (incomingReq) {
+            return { status: 'pending_received', requestId: incomingReq.id };
+        }
         return { status: 'none', requestId: null };
     }
 
@@ -3303,37 +3849,159 @@ async function fetchFriendshipStatusWith(targetUserId) {
  * @returns {Promise<object|null>}
  */
 async function fetchPublicProfileRow(targetUserId) {
-    // (جديد) public_profiles بدل profiles - نفس السبب المذكور في fetchLeaderboardTop
-    const { data, error } = await supabaseClient
-        .from('public_profiles')
-        .select('id, full_name, title, avatar_url, points, streak_count, best_streak_days, total_steps, correct_answers, daily_championship_wins, weekly_championship_wins, monthly_championship_wins, featured_badge_id')
-        .eq('id', targetUserId)
-        .maybeSingle();
+    if (!targetUserId) return null;
+    try {
+        let { data, error } = await supabaseClient
+            .from('public_profiles')
+            .select('id, full_name, title, avatar_url, points, streak_count, best_streak_days, total_steps, correct_answers, daily_championship_wins, weekly_championship_wins, monthly_championship_wins, featured_badge_id, created_at, best_daily_steps')
+            .eq('id', targetUserId)
+            .maybeSingle();
 
-    if (error) {
-        console.error('خطأ في جلب بيانات البروفايل العام:', error.message);
-        return null;
+        if (error && (error.code === '42703' || error.message?.includes('best_daily_steps') || error.message?.includes('created_at'))) {
+            let fallback = await supabaseClient
+                .from('public_profiles')
+                .select('id, full_name, title, avatar_url, points, streak_count, best_streak_days, total_steps, correct_answers, daily_championship_wins, weekly_championship_wins, monthly_championship_wins, featured_badge_id, created_at')
+                .eq('id', targetUserId)
+                .maybeSingle();
+            if (fallback.error && fallback.error.code === '42703') {
+                fallback = await supabaseClient
+                    .from('public_profiles')
+                    .select('id, full_name, title, avatar_url, points, streak_count, best_streak_days, total_steps, correct_answers, daily_championship_wins, weekly_championship_wins, monthly_championship_wins, featured_badge_id')
+                    .eq('id', targetUserId)
+                    .maybeSingle();
+            }
+            data = fallback.data;
+            error = fallback.error;
+        }
+
+        if (error) {
+            console.error('خطأ في جلب بيانات البروفايل العام:', error.message);
+            const cached = await getCached(`cached_public_profile:${targetUserId}`);
+            return cached || null;
+        }
+
+        if (data) {
+            if (currentAuthUser && targetUserId === currentAuthUser.id) {
+                if (!data.created_at) {
+                    data.created_at = currentAuthUser.created_at || currentProfileRow?.created_at || null;
+                }
+                if (typeof data.best_daily_steps === 'undefined' || data.best_daily_steps === null) {
+                    data.best_daily_steps = currentProfileRow?.best_daily_steps ?? profileStats.bestDailySteps ?? 0;
+                }
+            }
+            setCached(`cached_public_profile:${targetUserId}`, data).catch(() => {});
+        }
+
+        return data;
+    } catch (err) {
+        console.error('خطأ استثنائي في جلب البروفايل العام:', err);
+        const cached = await getCached(`cached_public_profile:${targetUserId}`);
+        return cached || null;
+    }
+}
+
+/** إخفاء مودال خيارات الاستوري للبروفايل العام */
+function hidePublicProfileStoryActionModal() {
+    const modal = document.getElementById('publicProfileStoryActionModal');
+    if (modal) {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+    }
+    pendingStoryChoice = null;
+}
+
+/** إغلاق مودال خيارات الاستوري للبروفايل العام عبر إدارة السجل */
+function closePublicProfileStoryChoiceModal() {
+    closeModal();
+}
+
+/**
+ * فتح مودال خيارات الاستوري وصورة الحساب عند النقر على صورة بروفايل يمتلك استوري نشطة
+ * @param {number} storyIndex
+ * @param {string} fullUrl
+ * @param {string} name
+ */
+function openPublicProfileStoryChoiceModal(storyIndex, fullUrl, name) {
+    pendingStoryChoice = { storyIndex, fullUrl, name };
+    const modal = document.getElementById('publicProfileStoryActionModal');
+    if (!modal) return;
+
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+    pushModalState(hidePublicProfileStoryActionModal);
+}
+
+/**
+ * جلب وعرض عدد الأصدقاء المقبولين في البروفايل العام
+ * @param {string} targetUserId
+ */
+async function loadAndRenderPublicFriendsCount(targetUserId) {
+    const badge = document.getElementById('publicProfileFriendsBadge');
+    if (!badge) return;
+
+    if (!targetUserId) {
+        badge.textContent = '';
+        badge.classList.add('hidden');
+        return;
     }
 
-    return data;
+    if (currentAuthUser && targetUserId === currentAuthUser.id) {
+        const count = friendsData.length;
+        const friendWord = count === 1 ? 'صديق واحد' : (count === 2 ? 'صديقان' : (count >= 3 && count <= 10 ? `${count} أصدقاء` : `${count} صديق`));
+        badge.textContent = friendWord;
+        badge.classList.remove('hidden');
+        return;
+    }
+
+    try {
+        const { count, error } = await supabaseClient
+            .from('friends')
+            .select('id', { count: 'exact', head: true })
+            .or(`requester_id.eq.${targetUserId},addressee_id.eq.${targetUserId}`)
+            .eq('status', 'accepted');
+
+        if (error) {
+            badge.textContent = '';
+            badge.classList.add('hidden');
+            return;
+        }
+
+        const friendCount = count ?? 0;
+        const friendWord = friendCount === 1 ? 'صديق واحد' : (friendCount === 2 ? 'صديقان' : (friendCount >= 3 && friendCount <= 10 ? `${friendCount} أصدقاء` : `${friendCount} صديق`));
+        badge.textContent = friendWord;
+        badge.classList.remove('hidden');
+    } catch (err) {
+        badge.textContent = '';
+        badge.classList.add('hidden');
+    }
 }
 
 /** إرجاع صفحة البروفايل العام لحالة "بيتحمّل" مؤقتة (قيم افتراضية) لحد ما البيانات الحقيقية توصل */
 function setPublicProfileLoadingState() {
+    currentPublicProfileData = null;
+    pendingStoryChoice = null;
+
     const nameEl = document.getElementById('publicProfileName');
     const titleEl = document.getElementById('publicProfileTitle');
     const avatarEl = document.getElementById('publicProfileAvatar');
     const pointsEl = document.getElementById('publicProfilePoints');
     const streakEl = document.getElementById('publicProfileStreakCount');
     const stepsEl = document.getElementById('publicProfileTotalSteps');
-    const answersEl = document.getElementById('publicProfileCorrectAnswers');
+    const bestDailyStepsEl = document.getElementById('publicProfileBestDailySteps');
+    const burnedCaloriesEl = document.getElementById('publicProfileBurnedCalories');
     const bestStreakEl = document.getElementById('publicProfileBestStreak');
+    const answersEl = document.getElementById('publicProfileCorrectAnswers');
+    const quizAccuracyEl = document.getElementById('publicProfileQuizAccuracy');
     const dailyWinsEl = document.getElementById('publicProfileDailyWins');
     const weeklyWinsEl = document.getElementById('publicProfileWeeklyWins');
     const monthlyWinsEl = document.getElementById('publicProfileMonthlyWins');
+    const totalPodiumsEl = document.getElementById('publicProfileTotalPodiums');
     const actionContainer = document.getElementById('publicProfileFriendActionContainer');
     const badgesGrid = document.getElementById('publicProfileBadgesGrid');
     const badgesCount = document.getElementById('publicProfileBadgesCount');
+    const joinedEl = document.getElementById('publicProfileJoinedText');
+    const friendsBadge = document.getElementById('publicProfileFriendsBadge');
+    const avatarBtn = document.getElementById('publicProfileAvatarBtn');
 
     if (nameEl) nameEl.textContent = 'بنجيب البيانات...';
     if (titleEl) {
@@ -3341,14 +4009,35 @@ function setPublicProfileLoadingState() {
         titleEl.classList.add('hidden');
     }
     if (avatarEl) avatarEl.src = DEFAULT_AVATAR_URI;
+    if (avatarBtn) {
+        avatarBtn.classList.remove('story-ring-active');
+        delete avatarBtn.dataset.storyIndex;
+    }
+    if (joinedEl) {
+        joinedEl.textContent = '';
+        joinedEl.classList.add('hidden');
+    }
+    if (friendsBadge) {
+        friendsBadge.textContent = '';
+        friendsBadge.classList.add('hidden');
+    }
+    const publicPresenceDotEl = document.getElementById('publicProfileAvatarPresenceDot');
+    if (publicPresenceDotEl) {
+        publicPresenceDotEl.removeAttribute('data-presence-avatar');
+        publicPresenceDotEl.classList.remove('is-online');
+    }
     if (pointsEl) pointsEl.textContent = '— نقطة';
     if (streakEl) streakEl.textContent = '— يوم ستريك حالي';
     if (stepsEl) stepsEl.textContent = '—';
+    if (bestDailyStepsEl) bestDailyStepsEl.textContent = '—';
+    if (burnedCaloriesEl) burnedCaloriesEl.textContent = '—';
     if (answersEl) answersEl.textContent = '—';
+    if (quizAccuracyEl) quizAccuracyEl.textContent = '—%';
     if (bestStreakEl) bestStreakEl.textContent = '—';
     if (dailyWinsEl) dailyWinsEl.textContent = '—';
     if (weeklyWinsEl) weeklyWinsEl.textContent = '—';
     if (monthlyWinsEl) monthlyWinsEl.textContent = '—';
+    if (totalPodiumsEl) totalPodiumsEl.textContent = '—';
     if (actionContainer) actionContainer.innerHTML = '';
     if (badgesGrid) badgesGrid.innerHTML = '';
     if (badgesCount) badgesCount.textContent = '— / —';
@@ -3371,17 +4060,24 @@ function setPublicProfileLoadingState() {
  * @param {object} profileRow
  */
 function renderPublicProfileContent(profileRow) {
+    currentPublicProfileData = profileRow;
+
     const nameEl = document.getElementById('publicProfileName');
     const titleEl = document.getElementById('publicProfileTitle');
     const avatarEl = document.getElementById('publicProfileAvatar');
     const pointsEl = document.getElementById('publicProfilePoints');
     const streakEl = document.getElementById('publicProfileStreakCount');
     const stepsEl = document.getElementById('publicProfileTotalSteps');
-    const answersEl = document.getElementById('publicProfileCorrectAnswers');
+    const bestDailyStepsEl = document.getElementById('publicProfileBestDailySteps');
+    const burnedCaloriesEl = document.getElementById('publicProfileBurnedCalories');
     const bestStreakEl = document.getElementById('publicProfileBestStreak');
+    const answersEl = document.getElementById('publicProfileCorrectAnswers');
+    const quizAccuracyEl = document.getElementById('publicProfileQuizAccuracy');
     const dailyWinsEl = document.getElementById('publicProfileDailyWins');
     const weeklyWinsEl = document.getElementById('publicProfileWeeklyWins');
     const monthlyWinsEl = document.getElementById('publicProfileMonthlyWins');
+    const totalPodiumsEl = document.getElementById('publicProfileTotalPodiums');
+    const joinedEl = document.getElementById('publicProfileJoinedText');
 
     const avatarUrl = profileRow.avatar_url || DEFAULT_AVATAR_URI;
 
@@ -3402,23 +4098,103 @@ function renderPublicProfileContent(profileRow) {
         avatarEl.src = avatarUrl;
         avatarEl.dataset.fullUrl = avatarUrl; // نفس رابط الصورة، لازم لـ lightbox التكبير
     }
+
+    // تاريخ الانضمام (إذا توفر)
+    if (joinedEl) {
+        const joinedDate = profileRow.created_at || (currentAuthUser && profileRow.id === currentAuthUser.id ? currentAuthUser.created_at : null);
+        const formattedJoined = formatJoinedDateArabic(joinedDate);
+        if (formattedJoined) {
+            joinedEl.textContent = `انضم في ${formattedJoined}`;
+            joinedEl.classList.remove('hidden');
+        } else {
+            joinedEl.textContent = '';
+            joinedEl.classList.add('hidden');
+        }
+    }
+
+    // فحص الاستوري النشطة لصاحب البروفايل لإظهار حلقة الاستوري التفاعلية
+    (async () => {
+        try {
+            const { getStories } = await import('./stories.js');
+            const allStories = getStories();
+            const storyIndex = allStories.findIndex((s) => s.userId === profileRow.id);
+            const avatarBtnEl = document.getElementById('publicProfileAvatarBtn');
+            if (avatarBtnEl) {
+                if (storyIndex !== -1) {
+                    avatarBtnEl.classList.add('story-ring-active');
+                    avatarBtnEl.dataset.storyIndex = String(storyIndex);
+                } else {
+                    avatarBtnEl.classList.remove('story-ring-active');
+                    delete avatarBtnEl.dataset.storyIndex;
+                }
+            }
+        } catch (err) {
+            // تجاهل بهدوء
+        }
+    })();
+
+    // جلب وعرض عدد الأصدقاء
+    loadAndRenderPublicFriendsCount(profileRow.id);
+
     // نقطة "أونلاين الآن" لصاحب البروفايل العام - بتتحقق من صلاحية
     // الرؤية على السيرفر نفسه (نفسي/صديقه المقبول/أدمن) شوف js/presence.js
     const publicPresenceDotEl = document.getElementById('publicProfileAvatarPresenceDot');
     if (profileRow.id) {
-        if (publicPresenceDotEl) publicPresenceDotEl.setAttribute('data-presence-avatar', profileRow.id);
+        if (publicPresenceDotEl) {
+            publicPresenceDotEl.classList.remove('is-online');
+            publicPresenceDotEl.setAttribute('data-presence-avatar', profileRow.id);
+        }
         loadAndApplyPresence([profileRow.id]);
     } else if (publicPresenceDotEl) {
+        publicPresenceDotEl.removeAttribute('data-presence-avatar');
         publicPresenceDotEl.classList.remove('is-online');
     }
     if (pointsEl) pointsEl.textContent = `${(profileRow.points ?? 0).toLocaleString()} نقطة`;
     if (streakEl) streakEl.textContent = `${profileRow.streak_count ?? 0} يوم ستريك حالي`;
-    if (stepsEl) stepsEl.textContent = formatCompactNumber(profileRow.total_steps ?? 0);
+    const totalSteps = Number(profileRow.total_steps) || 0;
+    if (stepsEl) stepsEl.textContent = formatCompactNumber(totalSteps);
+
+    // الرقم القياسي لأعلى عدد خطوات في يوم واحد
+    if (bestDailyStepsEl) {
+        let bestDaily = Number(profileRow.best_daily_steps) || 0;
+        if (currentAuthUser && profileRow.id === currentAuthUser.id) {
+            let todaySteps = 0;
+            try { todaySteps = getStepsCount?.() || 0; } catch (e) {}
+            bestDaily = Math.max(bestDaily, todaySteps, Number(profileStats.bestDailySteps) || 0);
+        }
+        bestDailyStepsEl.textContent = formatCompactNumber(bestDaily);
+    }
+
+    // السعرات المحروقة التقديرية (0.04 سعرة لكل خطوة)
+    if (burnedCaloriesEl) {
+        const burned = Math.round(totalSteps * 0.04);
+        burnedCaloriesEl.textContent = `${formatCompactNumber(burned)} سعرة`;
+    }
+
     if (answersEl) answersEl.textContent = String(profileRow.correct_answers ?? 0);
-    if (bestStreakEl) bestStreakEl.textContent = String(profileRow.best_streak_days ?? 0);
+
+    // معدل دقة الأسئلة اليومية
+    if (quizAccuracyEl) {
+        if (currentAuthUser && profileRow.id === currentAuthUser.id && profileStats.quizAccuracy !== null && typeof profileStats.quizAccuracy !== 'undefined') {
+            quizAccuracyEl.textContent = `${profileStats.quizAccuracy}%`;
+        } else {
+            quizAccuracyEl.textContent = '—%';
+            loadPublicUserQuizAccuracy(profileRow.id, profileRow.correct_answers);
+        }
+    }
+
+    if (bestStreakEl) bestStreakEl.textContent = `${profileRow.best_streak_days ?? 0} أيام`;
     if (dailyWinsEl) dailyWinsEl.textContent = String(profileRow.daily_championship_wins ?? 0);
     if (weeklyWinsEl) weeklyWinsEl.textContent = String(profileRow.weekly_championship_wins ?? 0);
     if (monthlyWinsEl) monthlyWinsEl.textContent = String(profileRow.monthly_championship_wins ?? 0);
+
+    // إجمالي كؤوس / منصات التتويج
+    if (totalPodiumsEl) {
+        const dWins = Number(profileRow.daily_championship_wins) || 0;
+        const wWins = Number(profileRow.weekly_championship_wins) || 0;
+        const mWins = Number(profileRow.monthly_championship_wins) || 0;
+        totalPodiumsEl.textContent = `${dWins + wWins + mWins} بطولة`;
+    }
 
     // (المرحلة 7) أيقونة الشارة المميزة جنب اسم صاحب البروفايل العام
     ensureBadgesCatalogCache().then(() => {
@@ -3745,6 +4521,12 @@ function hidePublicProfilePage() {
     const targetTab = document.getElementById(`tab-${targetTabId}`);
     if (targetTab) targetTab.classList.add('active');
 
+    const publicPresenceDotEl = document.getElementById('publicProfileAvatarPresenceDot');
+    if (publicPresenceDotEl) {
+        publicPresenceDotEl.removeAttribute('data-presence-avatar');
+        publicPresenceDotEl.classList.remove('is-online');
+    }
+
     currentPublicProfileTargetId = null;
     previousTabIdBeforePublicProfile = null;
 }
@@ -3858,8 +4640,9 @@ function renderPublicProfileSupportButton(targetUserId) {
  * على صورة أي بروفايل عام (publicProfileAvatarBtn)
  * @param {string} imageUrl
  * @param {string} altText
+ * @param {boolean} [useReplace=false]
  */
-function openAvatarLightbox(imageUrl, altText) {
+function openAvatarLightbox(imageUrl, altText, useReplace = false) {
     const lightbox = document.getElementById('avatarLightbox');
     const image = document.getElementById('avatarLightboxImage');
     if (!lightbox || !image || !imageUrl) return;
@@ -3869,7 +4652,11 @@ function openAvatarLightbox(imageUrl, altText) {
     lightbox.classList.remove('hidden');
     lightbox.classList.add('flex');
 
-    pushModalState(hideAvatarLightbox);
+    if (useReplace) {
+        replaceModalState(hideAvatarLightbox);
+    } else {
+        pushModalState(hideAvatarLightbox);
+    }
 }
 
 /** الإخفاء الخام لـ Lightbox تكبير الصورة الشخصية فقط - استخدم closeAvatarLightbox تحت */
@@ -3907,7 +4694,16 @@ function bindPublicProfileEvents() {
             const avatarImg = document.getElementById('publicProfileAvatar');
             const name = document.getElementById('publicProfileName')?.textContent || 'صورة البطل';
             const fullUrl = avatarImg?.dataset.fullUrl || avatarImg?.src;
-            openAvatarLightbox(fullUrl, name);
+            const storyIndexStr = avatarBtn.dataset.storyIndex;
+
+            if (storyIndexStr !== undefined && storyIndexStr !== null && storyIndexStr !== '') {
+                openPublicProfileStoryChoiceModal(Number(storyIndexStr), fullUrl, name);
+            } else {
+                if (!fullUrl || fullUrl === DEFAULT_AVATAR_URI || fullUrl.startsWith('data:image/svg')) {
+                    return;
+                }
+                openAvatarLightbox(fullUrl, name);
+            }
         });
     }
 
@@ -3918,6 +4714,55 @@ function bindPublicProfileEvents() {
     if (lightbox) {
         lightbox.addEventListener('click', (event) => {
             if (event.target === lightbox) closeAvatarLightbox(); // قفل لو ضغط برّه الصورة نفسها
+        });
+    }
+
+    // أزرار مودال خيارات الاستوري وصورة الحساب
+    const btnViewUserStory = document.getElementById('btnActionViewUserStory');
+    if (btnViewUserStory) {
+        btnViewUserStory.addEventListener('click', async () => {
+            const choice = pendingStoryChoice;
+            hidePublicProfileStoryActionModal();
+            if (choice && typeof choice.storyIndex === 'number') {
+                try {
+                    const { openStory } = await import('./stories.js');
+                    openStory(choice.storyIndex, { replaceHistory: true });
+                } catch (err) {
+                    console.error('تعذر فتح الاستوري:', err);
+                }
+            }
+        });
+    }
+
+    const btnViewUserAvatar = document.getElementById('btnActionViewUserAvatar');
+    if (btnViewUserAvatar) {
+        btnViewUserAvatar.addEventListener('click', () => {
+            const choice = pendingStoryChoice;
+            hidePublicProfileStoryActionModal();
+            if (choice && choice.fullUrl && choice.fullUrl !== DEFAULT_AVATAR_URI && !choice.fullUrl.startsWith('data:image/svg')) {
+                openAvatarLightbox(choice.fullUrl, choice.name, true);
+            } else {
+                closeModal();
+                document.dispatchEvent(new CustomEvent('app:toast', {
+                    detail: { message: 'المستخدم لم يقم بتعيين صورة شخصية بعد', type: 'info' }
+                }));
+            }
+        });
+    }
+
+    const btnCancelChoice = document.getElementById('btnActionCancelStoryChoice');
+    if (btnCancelChoice) {
+        btnCancelChoice.addEventListener('click', () => {
+            closeModal();
+        });
+    }
+
+    const storyChoiceModal = document.getElementById('publicProfileStoryActionModal');
+    if (storyChoiceModal) {
+        storyChoiceModal.addEventListener('click', (event) => {
+            if (event.target === storyChoiceModal) {
+                closeModal();
+            }
         });
     }
 }
@@ -3992,6 +4837,9 @@ async function loadAndRenderRealProfile(user) {
             // (best_daily_steps) - عشان "رقمك القياسي" يفضل صح عبر كل
             // الأجهزة لنفس الحساب، مش بس محفوظ محليًا على جهاز واحد
             reconcileServerBestSteps(currentProfileRow.best_daily_steps ?? 0);
+
+            // مزامنة أي خطوات تم قطعها أوفلاين ولم تصل للسيرفر بعد
+            await syncOfflineStepsToServerIfNeeded();
         }
 
         // تحميل الأوسمة الحقيقية وقائمة الأصدقاء (المرحلتين 4 و5) بعد ما
@@ -4027,6 +4875,7 @@ async function loadAndRenderRealProfile(user) {
         renderProfileHeader(profile, user);
         updateProfileStats({
             totalSteps: profile?.total_steps ?? 0,
+            bestDailySteps: profile?.best_daily_steps ?? 0,
             correctAnswers: profile?.correct_answers ?? 0,
             bestStreakDays: profile?.best_streak_days ?? 0,
             points: profile?.points ?? 0,
@@ -4035,6 +4884,7 @@ async function loadAndRenderRealProfile(user) {
             weeklyChampionshipWins: profile?.weekly_championship_wins ?? 0,
             monthlyChampionshipWins: profile?.monthly_championship_wins ?? 0,
         });
+        loadMyQuizAccuracy(user.id);
 
         await runProfilePipeline(profile);
     });
@@ -4101,9 +4951,15 @@ function populateEditTitleSelectOptions() {
     const currentTitle = currentProfileRow?.title || '';
 
     if (unlockedBadges.length === 0) {
-        titleSelect.innerHTML = `<option value="">لسه معندكش أوسمة تقدر تستخدمها كلقب</option>`;
-        titleSelect.value = '';
-        titleSelect.disabled = true;
+        if (currentTitle) {
+            titleSelect.disabled = false;
+            titleSelect.innerHTML = `<option value="${escapeHtml(currentTitle)}">${escapeHtml(currentTitle)} (الحالي)</option><option value="">من غير لقب</option>`;
+            titleSelect.value = currentTitle;
+        } else {
+            titleSelect.innerHTML = `<option value="">لسه معندكش أوسمة تقدر تستخدمها كلقب</option>`;
+            titleSelect.value = '';
+            titleSelect.disabled = true;
+        }
         return;
     }
 
@@ -4121,13 +4977,13 @@ function populateEditTitleSelectOptions() {
         })
         .join('');
 
-    titleSelect.innerHTML = noneOptionHtml + badgeOptionsHtml;
-
-    // لو اللقب المحفوظ حاليًا لسه من ضمن الأوسمة المفتوحة، بنحدده -
-    // وإلا (اتشال من الكتالوج، أو حساب قديم كان عليه لقب ثابت زمان)
-    // بنسيب "من غير لقب" محدد بدل ما نفترض اختيار غلط
     const matchesUnlockedBadge = unlockedBadges.some((badge) => badge.title === currentTitle);
-    titleSelect.value = matchesUnlockedBadge ? currentTitle : '';
+    const currentPreservedOptionHtml = (currentTitle && !matchesUnlockedBadge)
+        ? `<option value="${escapeHtml(currentTitle)}">${escapeHtml(currentTitle)} (الحالي)</option>`
+        : '';
+
+    titleSelect.innerHTML = currentPreservedOptionHtml + noneOptionHtml + badgeOptionsHtml;
+    titleSelect.value = currentTitle;
 }
 
 /** Escape بسيط لأي نص بيتحط جوه innerHTML (عناوين الأوسمة نصوص إدارية
@@ -4320,6 +5176,16 @@ async function handleEditProfileSubmit(event) {
         return;
     }
 
+    if (window.checkProfanity) {
+        const { hasProfanity } = window.checkProfanity(fullName);
+        if (hasProfanity) {
+            document.dispatchEvent(new CustomEvent('app:toast', {
+                detail: { message: 'الاسم يحتوي على كلمات غير مسموح بها', type: 'error' },
+            }));
+            return;
+        }
+    }
+
     if (!birthDate) {
         document.dispatchEvent(new CustomEvent('app:toast', {
             detail: { message: 'من فضلك اختار تاريخ الميلاد', type: 'error' },
@@ -4337,7 +5203,22 @@ async function handleEditProfileSubmit(event) {
     setEditProfileLoading(true);
 
     try {
-        const updates = { full_name: fullName, title, birth_date: birthDate, gender };
+        const nameParts = fullName.split(/\s+/).filter(Boolean);
+        const firstName = nameParts[0] || fullName;
+        const lastName = nameParts.slice(1).join(' ') || '';
+
+        const matchingBadge = title ? badgesData.find((b) => b.title === title) : null;
+        const featuredBadgeId = matchingBadge ? matchingBadge.id : (title ? (currentProfileRow?.featured_badge_id || null) : null);
+
+        const updates = {
+            full_name: fullName,
+            first_name: firstName,
+            last_name: lastName,
+            title,
+            featured_badge_id: featuredBadgeId,
+            birth_date: birthDate,
+            gender,
+        };
 
         // لو المستخدم اختار صورة جديدة بس، بنرفعها ونضيف رابطها
         // للتحديث - لو مختارش صورة جديدة، avatar_url مش بتتحط في
@@ -4359,6 +5240,11 @@ async function handleEditProfileSubmit(event) {
         }
 
         editAvatarRemoved = false;
+        editSelectedAvatarFile = null;
+
+        document.dispatchEvent(new CustomEvent('profile:updated', {
+            detail: { profile: finalProfile },
+        }));
 
         closeAccountSettingsPage();
         document.dispatchEvent(new CustomEvent('app:toast', {
@@ -4714,6 +5600,29 @@ function bindEditProfileEvents() {
     if (btnCancelEditAvatarCrop) btnCancelEditAvatarCrop.addEventListener('click', () => closeEditAvatarCropModal());
 
     if (form) form.addEventListener('submit', handleEditProfileSubmit);
+
+    // النقر على صورة البروفايل في تبويب بروفايلي يفتح عارض الصور إذا كانت صورة حقيقية، أو يفتح إعدادات الحساب
+    const profileAvatarImg = document.getElementById('profileAvatar');
+    if (profileAvatarImg) {
+        profileAvatarImg.style.cursor = 'pointer';
+        profileAvatarImg.addEventListener('click', () => {
+            const fullUrl = profileAvatarImg.src;
+            if (fullUrl && fullUrl !== DEFAULT_AVATAR_URI && !fullUrl.startsWith('data:image/svg')) {
+                const name = document.getElementById('profileName')?.textContent || 'صورة بروفايلي';
+                openAvatarLightbox(fullUrl, name);
+            } else {
+                openAccountSettingsPage();
+            }
+        });
+    }
+
+    const profileAvatarGuestIcon = document.getElementById('profileAvatarGuestIcon');
+    if (profileAvatarGuestIcon) {
+        profileAvatarGuestIcon.style.cursor = 'pointer';
+        profileAvatarGuestIcon.addEventListener('click', () => {
+            openAccountSettingsPage();
+        });
+    }
 }
 
 /**
@@ -4873,6 +5782,25 @@ export async function initProfileUI(user) {
         // بتاعة الحساب الجديد قبل ما أي checkAndUnlockBadges تشتغل عليه أصلاً)
         badgesData = [];
         badgesLoadedOnce = false;
+        friendsData = [];
+        incomingFriendRequests = [];
+        profileStats = {
+            totalSteps: 0,
+            bestDailySteps: 0,
+            burnedCalories: 0,
+            totalPodiums: 0,
+            quizAccuracy: null,
+            correctAnswers: 0,
+            bestStreakDays: 0,
+            points: 0,
+            streakCount: 0,
+            dailyChampionshipWins: 0,
+            weeklyChampionshipWins: 0,
+            monthlyChampionshipWins: 0,
+        };
+        updateProfileStats();
+        renderFriends();
+        renderIncomingFriendRequests();
     }
 
     // ربط مودال "تعديل البروفايل" الحقيقي (صورة + اسم + لقب) - بيستبدل
@@ -4908,6 +5836,12 @@ export async function initProfileUI(user) {
 
     // ربط زرار "المساعدة والشكاوى" بفتح شات دعم مباشر مع الأدمن
     bindSupportHelpButton();
+
+    // ربط مودال تفاصيل الوسام والشارة
+    bindBadgeDetailsModalEvents();
+
+    // ربط أزرار مشاركة البروفايل (بروفايلي والبروفايل العام)
+    bindShareProfileEvents();
 
     // تهيئة تبويب "لوحة الصدارة" بالبيانات الحقيقية من profiles (المرحلة 5)
     await initLeaderboardUI();

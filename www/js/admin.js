@@ -23,6 +23,7 @@
 
 import { supabaseClient } from './supabase-config.js';
 import { getCurrentUser } from './auth.js';
+import { clearGeofenceSettingsCache } from './geofence.js';
 
 
 /* ==================================================================
@@ -33,36 +34,184 @@ import { getCurrentUser } from './auth.js';
    من لوحة التحكم خالص.
    ================================================================== */
 
-/** id الأدمن الحالي (اللي فاتح لوحة التحكم) - بتتحدّد في
- * verifyAdminAccessOrRedirect وبنستخدمها كخط دفاع إضافي (بصري بس) في
- * الواجهة عشان نخفي زرار "حظر" من على صف حسابه هو، رغم إن الـ RPC
- * admin_toggle_user_block نفسها برضو بترفض حظر الأدمن لنفسه */
+/** id الأدمن الحالي (اللي فاتح لوحة التحكم) */
 let currentAdminUserId = null;
+let isAdminModulesInitialized = false;
 
-async function verifyAdminAccessOrRedirect() {
-    const user = await getCurrentUser();
+/**
+ * التحقق من صلاحية الأدمن للمستخدم المسجل حالياً (إن وجد)
+ * @returns {Promise<boolean>}
+ */
+async function checkAdminSession() {
+    try {
+        const user = await getCurrentUser();
+        if (!user) return false;
 
-    if (!user) {
-        window.location.href = 'index.html';
+        const { data: profile, error } = await supabaseClient
+            .from('profiles')
+            .select('role')
+            .eq('id', user.id)
+            .single();
+
+        if (error || !profile || profile.role !== 'admin') {
+            return false;
+        }
+
+        currentAdminUserId = user.id;
+        return true;
+    } catch (e) {
+        console.error('[admin.js] خطأ في فحص صلاحيات الأدمن:', e);
         return false;
     }
+}
 
-    const { data: profile, error } = await supabaseClient
-        .from('profiles')
-        .select('role')
-        .eq('id', user.id)
-        .single();
+/**
+ * إظهار لوحة التحكم بعد التحقق الناجح من الأدمن
+ */
+function revealAdminDashboard() {
+    const gateEl = document.getElementById('adminLoginGate');
+    const contentEl = document.getElementById('adminPageContent');
 
-    // ملاحظة: الاستعلام ده بيقرا صف المستخدم الحالي بس (auth.uid() = id)،
-    // وده مسموح بيه في RLS الحالية لأي مستخدم مسجّل - مش محتاج دالة RPC
-    // خاصة هنا لأننا بنقرا بياناتنا احنا بس، مش بيانات حد تاني
-    if (error || !profile || profile.role !== 'admin') {
-        window.location.href = 'index.html';
-        return false;
+    if (gateEl) gateEl.classList.add('hidden');
+    if (contentEl) contentEl.style.visibility = 'visible';
+
+    if (!isAdminModulesInitialized) {
+        isAdminModulesInitialized = true;
+        initAdminDashboardModules();
     }
+}
 
-    currentAdminUserId = user.id;
-    return true;
+/**
+ * إظهار بوابة تسجيل الدخول للأدمن وقفل لوحة التحكم
+ */
+function showAdminLoginGate(errorMessage = '') {
+    const gateEl = document.getElementById('adminLoginGate');
+    const contentEl = document.getElementById('adminPageContent');
+    const errorEl = document.getElementById('adminGateError');
+
+    if (contentEl) contentEl.style.visibility = 'hidden';
+    if (gateEl) gateEl.classList.remove('hidden');
+
+    if (errorEl) {
+        if (errorMessage) {
+            errorEl.textContent = errorMessage;
+            errorEl.classList.remove('hidden');
+        } else {
+            errorEl.textContent = '';
+            errorEl.classList.add('hidden');
+        }
+    }
+}
+
+/**
+ * ربط بوابة تسجيل الدخول للأدمن وأزرار الخروج
+ */
+function initAdminLoginGate() {
+    const gateForm = document.getElementById('adminGateForm');
+    const usernameInput = document.getElementById('adminGateUsername');
+    const passwordInput = document.getElementById('adminGatePassword');
+    const submitBtn = document.getElementById('btnAdminGateSubmit');
+    const spinner = document.getElementById('adminGateSpinner');
+    const btnText = document.getElementById('adminGateBtnText');
+    const errorEl = document.getElementById('adminGateError');
+
+    // أزرار تسجيل الخروج (ديسكتوب وموبايل)
+    const btnLogout = document.getElementById('btnAdminLogout');
+    const btnMobileLogout = document.getElementById('btnAdminMobileLogout');
+
+    const handleLogout = async () => {
+        if (!confirm('هل تريد تسجيل الخروج من لوحة التحكم؟')) return;
+        try {
+            await supabaseClient.auth.signOut();
+        } catch (e) {
+            console.error('Logout error:', e);
+        }
+        window.location.reload();
+    };
+
+    if (btnLogout) btnLogout.addEventListener('click', handleLogout);
+    if (btnMobileLogout) btnMobileLogout.addEventListener('click', handleLogout);
+
+    if (!gateForm) return;
+
+    gateForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        if (errorEl) errorEl.classList.add('hidden');
+
+        const rawUsername = usernameInput ? usernameInput.value.trim() : '';
+        const password = passwordInput ? passwordInput.value : '';
+
+        if (!rawUsername || !password) {
+            if (errorEl) {
+                errorEl.textContent = 'من فضلك اكتب اسم المستخدم وكلمة المرور';
+                errorEl.classList.remove('hidden');
+            }
+            return;
+        }
+
+        // تحويل اسم المستخدم لإيميل داخلي لو لم يكن إيميل كامل
+        let email = rawUsername.toLowerCase();
+        if (!email.includes('@')) {
+            email = `${email}@batal.com`;
+        }
+
+        // حالة التحميل
+        if (submitBtn) submitBtn.disabled = true;
+        if (spinner) spinner.classList.remove('hidden');
+        if (btnText) btnText.textContent = 'جاري التحقق…';
+
+        try {
+            const { data, error: signInError } = await supabaseClient.auth.signInWithPassword({
+                email,
+                password,
+            });
+
+            if (signInError) {
+                console.error('[admin.js] فشل تسجيل دخول الأدمن:', signInError.message);
+                if (errorEl) {
+                    errorEl.textContent = 'اسم المستخدم أو كلمة المرور غير صحيحة';
+                    errorEl.classList.remove('hidden');
+                }
+                return;
+            }
+
+            const loggedInUser = data && data.user;
+            if (!loggedInUser) {
+                throw new Error('تعذر جلب بيانات المستخدم');
+            }
+
+            // فحص دور المستخدم role في جدول profiles
+            const { data: profile, error: profileErr } = await supabaseClient
+                .from('profiles')
+                .select('role')
+                .eq('id', loggedInUser.id)
+                .single();
+
+            if (profileErr || !profile || profile.role !== 'admin') {
+                // ليس أدمن! نسجل خروجه فوراً ونقفل اللوحة بوجهه
+                await supabaseClient.auth.signOut({ scope: 'local' });
+                if (errorEl) {
+                    errorEl.textContent = 'هذا الحساب لا يملك صلاحيات الإدارة';
+                    errorEl.classList.remove('hidden');
+                }
+                return;
+            }
+
+            // تم التحقق بنجاح كأدمن
+            currentAdminUserId = loggedInUser.id;
+            revealAdminDashboard();
+        } catch (err) {
+            console.error('[admin.js] خطأ غير متوقع في تسجيل الدخول:', err);
+            if (errorEl) {
+                errorEl.textContent = 'حدث خطأ أثناء تسجيل الدخول: ' + (err.message || 'حاول ثانية');
+                errorEl.classList.remove('hidden');
+            }
+        } finally {
+            if (submitBtn) submitBtn.disabled = false;
+            if (spinner) spinner.classList.add('hidden');
+            if (btnText) btnText.textContent = 'تسجيل الدخول للإدارة';
+        }
+    });
 }
 
 
@@ -139,6 +288,15 @@ async function loadVisitorStats() {
         recentRows: recentResult.data || [],
         todayStr,
     });
+
+    try {
+        const { data: analytics, error: analyticsErr } = await supabaseClient.rpc('admin_get_traffic_analytics');
+        if (!analyticsErr && analytics) {
+            renderPeakHoursAndSegmentation(analytics);
+        }
+    } catch (e) {
+        console.error('[admin.js] فشل تحميل تحليلات المرور:', e);
+    }
 }
 
 /**
@@ -150,11 +308,14 @@ function renderVisitorStats({ allTimeTotal, recentRows, todayStr }) {
     const todayRows = recentRows.filter((row) => row.visit_date === todayStr);
     const todayRegistered = todayRows.filter((row) => row.user_id !== null).length;
     const todayGuests = todayRows.filter((row) => row.user_id === null).length;
+    const todayTotal = todayRegistered + todayGuests;
 
+    const todayTotalEl = document.getElementById('visitorsTodayTotal');
     const registeredEl = document.getElementById('visitorsTodayRegistered');
     const guestsEl = document.getElementById('visitorsTodayGuests');
     const totalEl = document.getElementById('visitorsAllTimeTotal');
 
+    if (todayTotalEl) todayTotalEl.textContent = todayTotal.toLocaleString('ar-EG');
     if (registeredEl) registeredEl.textContent = todayRegistered.toLocaleString('ar-EG');
     if (guestsEl) guestsEl.textContent = todayGuests.toLocaleString('ar-EG');
     if (totalEl) totalEl.textContent = allTimeTotal.toLocaleString('ar-EG');
@@ -247,9 +408,12 @@ function renderVisitorsWeeklyChart(recentRows, todayStr) {
  * @returns {boolean}
  */
 function isUserOnline(user) {
-    if (!user.is_online || !user.last_seen_at) return false;
-    const elapsedMs = Date.now() - new Date(user.last_seen_at).getTime();
-    return elapsedMs < ONLINE_FRESHNESS_THRESHOLD_MS;
+    if (!user || !user.is_online || !user.last_seen_at) return false;
+    const lastSeenTime = new Date(user.last_seen_at).getTime();
+    if (isNaN(lastSeenTime)) return false;
+    const elapsedMs = Date.now() - lastSeenTime;
+    // التحقق من الحداثة وحماية تفاوت التوقيت (ساعة الجهاز متأخرة أو متقدمة)
+    return elapsedMs > -2 * 60 * 60 * 1000 && elapsedMs < ONLINE_FRESHNESS_THRESHOLD_MS;
 }
 
 /**
@@ -422,6 +586,7 @@ async function updateGeofenceRadius(newRadiusMeters) {
         return false;
     }
 
+    clearGeofenceSettingsCache();
     applyGeofenceRadiusToInputs(clampedRadius);
     setStatusText(statusEl, 'تم حفظ نصف القطر الجديد بنجاح.', 'success');
     return true;
@@ -835,39 +1000,22 @@ function buildUserRowElement(user) {
         <span class="admin-user-bounds-badge ${isInside ? 'is-inside' : 'is-outside'}">
             ${isInside ? 'داخل النطاق' : 'خارج النطاق'}
         </span>
-        <div class="admin-user-actions">
-            <label class="admin-toggle-switch" for="${toggleId}" title="تفعيل يدوي كمغترب">
-                <input type="checkbox" id="${toggleId}" ${isVerifiedOverride ? 'checked' : ''}>
-                <span class="admin-toggle-switch-track"></span>
-                <span class="admin-toggle-switch-thumb"></span>
-            </label>
+        <div class="admin-user-actions flex items-center gap-2">
             ${isSelfRow ? '' : `
                 <button type="button" class="admin-block-btn ${isBlocked ? 'is-blocked' : ''}">
                     ${isBlocked ? 'إلغاء الحظر' : 'حظر'}
                 </button>
             `}
+            <button type="button" class="admin-user-manage-btn admin-notify-clear-btn" title="تحكم ومكافحة غش وتعويضات">
+                تحكم
+            </button>
         </div>
     `;
 
-    const toggleWrapper = li.querySelector('.admin-toggle-switch');
-    const toggleInput = li.querySelector(`#${toggleId}`);
-
-    toggleInput.addEventListener('change', async () => {
-        const newValue = toggleInput.checked;
-
-        toggleWrapper.classList.add('is-saving');
-        const succeeded = await toggleUserVerifiedOverride(user.id, newValue);
-        toggleWrapper.classList.remove('is-saving');
-
-        if (!succeeded) {
-            // فشل الحفظ - نرجّع السويتش لحالته القديمة (Rollback بصري)
-            toggleInput.checked = !newValue;
-            const statusEl = document.getElementById('userSearchStatus');
-            setStatusText(statusEl, `تعذّر تحديث حالة تفعيل ${displayName}. حاول تاني.`, 'error');
-        } else {
-            user.is_verified_override = newValue;
-        }
-    });
+    const manageBtn = li.querySelector('.admin-user-manage-btn');
+    if (manageBtn) {
+        manageBtn.addEventListener('click', () => openUserActionModal(user));
+    }
 
     const blockBtn = li.querySelector('.admin-block-btn');
     if (blockBtn) {
@@ -932,7 +1080,7 @@ async function handleBlockButtonClick(blockBtn, user, displayName) {
 function buildFallbackAvatarUrl(seedText) {
     const initial = (seedText.trim()[0] || '؟').toUpperCase();
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><rect width="40" height="40" rx="20" fill="%2314171F"/><text x="20" y="26" font-size="16" font-family="Cairo,sans-serif" text-anchor="middle" fill="%23D4AF37">${initial}</text></svg>`;
-    return `data:image/svg+xml,${svg}`;
+    return `data:image/svg+xml,${encodeURIComponent(svg)}`;
 }
 
 /**
@@ -962,7 +1110,7 @@ function escapeHtml(text) {
 
 /** عنوان ثابت لكل رسائل الأدمن - المستخدم بيدخل النص (الرسالة) بس،
  * زي ما هو متفق عليه في الخطة ("textarea للنص" بس، من غير حقل عنوان
- * منفصل يزوّد الاحتكاك وقت الإرسال). من غير إيموجي (📣) عمداً - الشكل
+ * منفصل يزوّد الاحتكاك وقت الإرسال). من غير إيموجي () عمداً - الشكل
  * "الرسمي" للرسالة بقى مسؤولية أيقونة الـ SVG المرسومة في notifications.js
  * (NOTIFICATION_SVG_ICONS.admin_message) بدل ما يتحط جوه النص نفسه اللي
  * بيتخزن في العمود title بقاعدة البيانات */
@@ -1160,7 +1308,7 @@ async function handleNotifySendClick() {
         return;
     }
 
-    setStatusText(statusEl, 'اتبعت بنجاح ✓', 'success');
+    setStatusText(statusEl, 'اتبعت بنجاح ', 'success');
     if (messageInput) messageInput.value = '';
     if (notifyMode === 'single') clearNotifyRecipient();
 }
@@ -1519,7 +1667,7 @@ async function saveHomeBanner() {
         return;
     }
 
-    setStatusText(statusEl, 'اتحفظ ونُشر بنجاح ✓', 'success');
+    setStatusText(statusEl, 'اتحفظ ونُشر بنجاح ', 'success');
 }
 
 /** ربط أحداث ويدجت البانر (رفع صورة، إزالتها، تحديث المعاينة، الحفظ) - تُستدعى مرة واحدة من initAdminPage */
@@ -1814,7 +1962,7 @@ async function saveAppIdentity() {
         return;
     }
 
-    setStatusText(statusEl, 'اتحفظت الهوية بنجاح ✓', 'success');
+    setStatusText(statusEl, 'اتحفظت الهوية بنجاح ', 'success');
 }
 
 /** ربط أحداث ويدجت الهوية (رفع صورة، قص، إزالة، حفظ) - تُستدعى مرة واحدة من initAdminPage */
@@ -2018,7 +2166,7 @@ async function publishPost() {
     updatePostRemoveButtonVisibility();
     updatePostCreatePreview();
 
-    setStatusText(statusEl, 'اتنشر بنجاح ✓', 'success');
+    setStatusText(statusEl, 'اتنشر بنجاح ', 'success');
     loadRecentPostsForAdmin();
 }
 
@@ -2263,7 +2411,10 @@ function getQuestionFormValues() {
     const difficultyInput = document.getElementById('questionDifficultyInput');
     const difficulty = difficultyInput ? difficultyInput.value : 'medium';
 
-    return { questionText, options, correctOptionId, category, difficulty };
+    const scheduledDateInput = document.getElementById('questionScheduledDateInput');
+    const scheduledForDate = scheduledDateInput && scheduledDateInput.value ? scheduledDateInput.value : null;
+
+    return { questionText, options, correctOptionId, category, difficulty, scheduledForDate };
 }
 
 /** (مجموعة 1) تحديث كارت المعاينة الحية (#questionPreviewCard) بنفس
@@ -2327,6 +2478,9 @@ function resetQuestionForm() {
     const difficultyInput = document.getElementById('questionDifficultyInput');
     if (difficultyInput) difficultyInput.value = 'medium';
 
+    const scheduledDateInput = document.getElementById('questionScheduledDateInput');
+    if (scheduledDateInput) scheduledDateInput.value = '';
+
     const titleEl = document.getElementById('questionFormTitle');
     if (titleEl) titleEl.textContent = 'سؤال جديد';
 
@@ -2362,6 +2516,9 @@ function fillQuestionFormForEdit(question) {
 
     const difficultyInput = document.getElementById('questionDifficultyInput');
     if (difficultyInput) difficultyInput.value = question.difficulty || 'medium';
+
+    const scheduledDateInput = document.getElementById('questionScheduledDateInput');
+    if (scheduledDateInput) scheduledDateInput.value = question.scheduled_for_date ? question.scheduled_for_date.slice(0, 10) : '';
 
     const titleEl = document.getElementById('questionFormTitle');
     if (titleEl) titleEl.textContent = 'تعديل السؤال';
@@ -2403,6 +2560,7 @@ async function handleSaveQuestion() {
             p_is_active: true,
             p_category: values.category || null,
             p_difficulty: values.difficulty,
+            p_scheduled_for_date: values.scheduledForDate,
         })
         : await supabaseClient.rpc('admin_create_daily_question', {
             p_question_text: values.questionText,
@@ -2410,6 +2568,7 @@ async function handleSaveQuestion() {
             p_correct_option_id: values.correctOptionId,
             p_category: values.category || null,
             p_difficulty: values.difficulty,
+            p_scheduled_for_date: values.scheduledForDate,
         });
 
     if (saveBtn) saveBtn.disabled = false;
@@ -2426,7 +2585,7 @@ async function handleSaveQuestion() {
         logQuestionAction('question_update', { id: editingQuestionId, question_text: values.questionText });
     }
 
-    setStatusText(statusEl, isEditing ? 'اتحدّث بنجاح ✓' : 'اتضاف بنجاح ✓', 'success');
+    setStatusText(statusEl, isEditing ? 'اتحدّث بنجاح ' : 'اتضاف بنجاح ', 'success');
     resetQuestionForm();
     loadDailyQuestionsList();
 }
@@ -2522,7 +2681,7 @@ function renderQuestionsActiveWarning() {
         ? 'مفيش أي سؤال مفعّل دلوقتي'
         : `${activeCount} بس مفعّلين حالياً`;
     warningEl.querySelector('.admin-inline-warning-text').textContent =
-        `⚠️ الأسئلة المفعّلة قلّت (${countText}) - السيستم هيبدأ يكرر نفس الأسئلة كل كام يوم. فعّل أسئلة أكتر أو ضيف جديدة من الفورم فوق.`;
+        `تنبيه: الأسئلة المفعّلة قلّت (${countText}) - السيستم هيبدأ يكرر نفس الأسئلة كل كام يوم. فعّل أسئلة أكتر أو ضيف جديدة من الفورم فوق.`;
 }
 
 /* ==================================================================
@@ -2718,6 +2877,7 @@ function renderQuestionsList(questions) {
             question.category ? escapeHtml(question.category) : null,
             difficultyLabel,
             `اتعرض ${question.used_count || 0} مرة`,
+            question.scheduled_for_date ? `مجدول ليوم: ${question.scheduled_for_date.slice(0, 10)}` : null,
         ].filter(Boolean);
 
         // (مجموعة 2) شارة نسبة الإجابة الصح - بتتحط بس لو فيه بيانات
@@ -3106,7 +3266,7 @@ function handleExportQuestionsBackup() {
         JSON.stringify(payload, null, 2),
         'application/json',
     );
-    setStatusText(statusEl, `اتصدّر ${allLoadedQuestions.length} سؤال بنجاح ✓`, 'success');
+    setStatusText(statusEl, `اتصدّر ${allLoadedQuestions.length} سؤال بنجاح `, 'success');
 }
 
 /** (مجموعة 3) تنزيل نموذج CSV فاضي بالأعمدة المطلوبة + صف مثال واحد -
@@ -3277,7 +3437,7 @@ function renderImportPreview(validRows, errors) {
     if (errors.length) parts.push(`${errors.length} سطر فيه مشكلة وهيتجاهل`);
     summaryEl.textContent = parts.join(' - ') + (validRows.length ? '.' : ' - مفيش أي سؤال صالح للاستيراد.');
 
-    errorsEl.innerHTML = errors.map((e) => `<li>⚠️ ${escapeHtml(e)}</li>`).join('');
+    errorsEl.innerHTML = errors.map((e) => `<li>${escapeHtml(e)}</li>`).join('');
 
     if (confirmBtn) confirmBtn.disabled = validRows.length === 0;
 }
@@ -3367,7 +3527,7 @@ async function handleConfirmImport() {
     if (confirmBtn) confirmBtn.disabled = false;
     if (cancelBtn) cancelBtn.disabled = false;
 
-    const resultParts = [`اتستورد ${successCount} من ${total} سؤال بنجاح ✓`];
+    const resultParts = [`اتستورد ${successCount} من ${total} سؤال بنجاح `];
     if (failedMessages.length) resultParts.push(`${failedMessages.length} فشلوا (شوف الـ Console للتفاصيل)`);
     setStatusText(statusEl, resultParts.join(' - '), successCount === total ? 'success' : 'error');
 
@@ -3575,6 +3735,34 @@ function renderBadgesToggleList() {
  * @param {object} badge
  * @returns {HTMLLIElement}
  */
+const BADGE_CUSTOM_3D_ASSETS = new Set([
+    'first_steps',
+    'first_correct',
+    'streak_3',
+    'first_friend',
+    'committed',
+    'steps_50k',
+    'genius',
+    'streak_7',
+    'daily_champion',
+    'friends_10',
+    'runner',
+    'steps_250k',
+    'correct_200',
+    'blaze',
+    'weekly_champion',
+    'monthly_champion',
+    'legend_10_wins',
+    'streak_100',
+    'million_steps',
+    'top3_leaderboard',
+    'champion',
+    'veteran_1_year',
+    'champion_daily',
+    'champion_weekly',
+    'champion_monthly',
+]);
+
 function buildBadgeToggleRowElement(badge) {
     const li = document.createElement('li');
     li.className = 'admin-user-row';
@@ -3582,8 +3770,12 @@ function buildBadgeToggleRowElement(badge) {
     const isUnlocked = badgesSelectedUserUnlockedIds.has(badge.id);
     const toggleId = `badgeToggle_${badge.id}`;
 
+    const badgeVisualHtml = BADGE_CUSTOM_3D_ASSETS.has(badge.id)
+        ? `<img src="images/badges/${escapeHtml(badge.id)}.png" alt="" class="w-6 h-6 object-contain shrink-0">`
+        : `<span class="text-xl shrink-0" aria-hidden="true">${escapeHtml(badge.icon)}</span>`;
+
     li.innerHTML = `
-        <span class="text-xl shrink-0" aria-hidden="true">${escapeHtml(badge.icon)}</span>
+        ${badgeVisualHtml}
         <div class="admin-user-info">
             <div class="admin-user-name">${escapeHtml(badge.title)}</div>
             <div class="text-[0.65rem] font-medium text-lux-500 mt-0.5">${escapeHtml(badge.description || '')}</div>
@@ -3654,7 +3846,7 @@ async function handleBadgeToggleChange(badgeId, unlocked) {
         }
     }
 
-    setStatusText(statusEl, 'اتحفظ ✓', 'success');
+    setStatusText(statusEl, 'اتحفظ ', 'success');
     renderBadgesFeaturedSelect(badgesSelectedUser.featured_badge_id ?? null);
     return true;
 }
@@ -3710,7 +3902,7 @@ async function handleBadgesFeaturedSelectChange() {
     }
 
     badgesSelectedUser.featured_badge_id = newBadgeId;
-    setStatusText(statusEl, 'اتحفظ ✓', 'success');
+    setStatusText(statusEl, 'اتحفظ ', 'success');
 }
 
 /** ربط كل أحداث ويدجت الأوسمة - تُستدعى مرة واحدة من initAdminPage */
@@ -3934,7 +4126,7 @@ async function handleSupportInboxReplySend() {
     }
 
     inputEl.value = '';
-    setStatusText(statusEl, 'اتبعت ✓', 'success');
+    setStatusText(statusEl, 'اتبعت ', 'success');
     await loadAndRenderSupportThread(supportInboxActiveUserId);
 }
 
@@ -4002,6 +4194,18 @@ function setStatusText(el, message, state) {
 function initAdminTabNavigation() {
     const tabButtons = document.querySelectorAll('.admin-nav-tab[data-tab-target]');
     const panels = document.querySelectorAll('.admin-tab-panel');
+    const mobileMoreBtn = document.getElementById('btnAdminMobileMoreDrawer');
+    const drawer = document.getElementById('adminMobileDrawer');
+    const mobileMenuBtn = document.getElementById('btnAdminMobileMenu');
+    const closeDrawerBtn = document.getElementById('btnCloseAdminMobileDrawer');
+
+    const coreBottomTabs = ['tabPanelVisitors', 'tabPanelMaster', 'tabPanelUsers', 'tabPanelPosts'];
+
+    function updateMobileMoreActive(targetId) {
+        if (mobileMoreBtn) {
+            mobileMoreBtn.classList.toggle('is-active', !coreBottomTabs.includes(targetId));
+        }
+    }
 
     tabButtons.forEach((btn) => {
         btn.addEventListener('click', () => {
@@ -4010,16 +4214,36 @@ function initAdminTabNavigation() {
             panels.forEach((panel) => {
                 panel.classList.toggle('hidden', panel.id !== targetId);
             });
-            // بنزامن كل نسخ الزرار (Sidebar + شريط سفلي) اللي بتشاور
-            // على نفس التاب، مش بس الزرار اللي اتضغط فعلياً
+            // بنزامن كل نسخ الزرار (Sidebar + شريط سفلي + دروج) اللي بتشاور على نفس التاب
             tabButtons.forEach((b) => b.classList.toggle('is-active', b.dataset.tabTarget === targetId));
 
-            // نرجّع منطقة المحتوى لأول سطر لما تفتح تاب جديد - تجربة
-            // أنضف من إنك تلاقي نفسك في نص Scroll قديم من تاب سابق
+            // تحديث حالة زر "المزيد" بالموبايل
+            updateMobileMoreActive(targetId);
+
+            // إغلاق دروج الموبايل تلقائياً إن كان مفتوحاً
+            if (drawer && !drawer.classList.contains('hidden')) {
+                drawer.classList.add('hidden');
+            }
+
+            // نرجّع منطقة المحتوى لأول سطر لما تفتح تاب جديد
             const mainEl = document.querySelector('main');
             if (mainEl) mainEl.scrollTop = 0;
         });
     });
+
+    // فتح وإغلاق دروج التنقل للموبايل
+    const toggleDrawer = () => {
+        if (drawer) drawer.classList.toggle('hidden');
+    };
+
+    if (mobileMenuBtn) mobileMenuBtn.addEventListener('click', toggleDrawer);
+    if (mobileMoreBtn) mobileMoreBtn.addEventListener('click', toggleDrawer);
+    if (closeDrawerBtn) closeDrawerBtn.addEventListener('click', () => drawer?.classList.add('hidden'));
+    if (drawer) {
+        drawer.addEventListener('click', (e) => {
+            if (e.target === drawer) drawer.classList.add('hidden');
+        });
+    }
 }
 
 
@@ -4027,16 +4251,908 @@ function initAdminTabNavigation() {
    5) التهيئة العامة
    ================================================================== */
 
-async function initAdminPage() {
-    // بوابة الصلاحية أول حاجة - لو مش أدمن، بترجع false وتكون عملت
-    // redirect فعلاً لـ index.html، فمنكملش نعرض أي widget خالص
-    const isAdmin = await verifyAdminAccessOrRedirect();
-    if (!isAdmin) return;
 
-    // اتأكدنا إنه أدمن فعلاً - نظهر المحتوى اللي كان مخفي بـ visibility:hidden
-    const contentEl = document.getElementById('adminPageContent');
-    if (contentEl) contentEl.style.visibility = 'visible';
+/* ==================================================================
+   10) تحليلات المرور وإشعار الحسابات الخاملة
+   ================================================================== */
 
+function renderPeakHoursAndSegmentation(analytics) {
+    const segToday = document.getElementById('segActiveToday');
+    const segWeek = document.getElementById('segActiveWeek');
+    const segInactive7d = document.getElementById('segInactive7d');
+    const segInactive30d = document.getElementById('segInactive30d');
+
+    if (segToday) segToday.textContent = (analytics.active_today || 0).toLocaleString('ar-EG');
+    if (segWeek) segWeek.textContent = (analytics.active_this_week || 0).toLocaleString('ar-EG');
+    if (segInactive7d) segInactive7d.textContent = (analytics.inactive_7d || 0).toLocaleString('ar-EG');
+    if (segInactive30d) segInactive30d.textContent = (analytics.inactive_30d || 0).toLocaleString('ar-EG');
+
+    const container = document.getElementById('visitorsPeakHoursContainer');
+    if (!container) return;
+
+    const peakObj = analytics.peak_hours || {};
+    const hours = [];
+    for (let i = 0; i < 24; i += 1) {
+        const k1 = String(i).padStart(2, '0');
+        const k2 = String(i);
+        const count = Number(peakObj[k1] || peakObj[k2] || 0);
+        hours.push({ hour: i, count });
+    }
+    const maxVal = Math.max(1, ...hours.map((h) => h.count || 0));
+
+    container.innerHTML = '';
+    hours.forEach((h) => {
+        const heightPct = Math.round(((h.count || 0) / maxVal) * 100);
+        const col = document.createElement('div');
+        col.className = 'flex-1 min-w-[14px] flex flex-col items-center gap-1 group relative';
+
+        const hourLabel = h.hour === 0 ? '12ص' : h.hour < 12 ? `${h.hour}ص` : h.hour === 12 ? '12م' : `${h.hour - 12}م`;
+
+        col.innerHTML = `
+            <div class="text-[9px] font-mono font-bold text-lux-400 opacity-0 group-hover:opacity-100 transition whitespace-nowrap absolute -top-5">
+                ${(h.count || 0).toLocaleString('ar-EG')}
+            </div>
+            <div class="w-full bg-lux-800 rounded-t group-hover:bg-gold-500/70 transition-all flex items-end justify-center" style="height: ${Math.max(6, heightPct * 0.65)}px;">
+                ${h.count > 0 ? '<div class="w-full bg-gold-500/40 rounded-t" style="height: 100%;"></div>' : ''}
+            </div>
+            <span class="text-[8px] font-mono text-lux-500">${hourLabel}</span>
+        `;
+        container.appendChild(col);
+    });
+}
+
+function initInactiveUsersNotifyModal() {
+    const openBtn = document.getElementById('btnOpenNotifyInactiveModal');
+    const modal = document.getElementById('notifyInactiveModal');
+    const closeBtn = document.getElementById('btnCloseNotifyInactiveModal');
+    const cancelBtn = document.getElementById('btnCancelSendInactiveNotify');
+    const confirmBtn = document.getElementById('btnConfirmSendInactiveNotify');
+    const statusEl = document.getElementById('notifyInactiveStatus');
+
+    if (!openBtn || !modal) return;
+
+    const showModal = () => {
+        modal.classList.remove('hidden');
+        if (statusEl) setStatusText(statusEl, '', null);
+    };
+
+    const hideModal = () => {
+        modal.classList.add('hidden');
+    };
+
+    openBtn.addEventListener('click', showModal);
+    if (closeBtn) closeBtn.addEventListener('click', hideModal);
+    if (cancelBtn) cancelBtn.addEventListener('click', hideModal);
+
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) hideModal();
+    });
+
+    if (confirmBtn) {
+        confirmBtn.addEventListener('click', async () => {
+            const daysSelect = document.getElementById('notifyInactiveDaysSelect');
+            const titleInput = document.getElementById('notifyInactiveTitle');
+            const bodyInput = document.getElementById('notifyInactiveBody');
+
+            const days = parseInt(daysSelect ? daysSelect.value : '7', 10);
+            const title = titleInput ? titleInput.value.trim() : '';
+            const body = bodyInput ? bodyInput.value.trim() : '';
+
+            if (!title || !body) {
+                setStatusText(statusEl, 'يرجى كتابة عنوان ونص الإشعار.', 'error');
+                return;
+            }
+
+            confirmBtn.disabled = true;
+            setStatusText(statusEl, 'جاري إرسال الإشعار لجميع الحسابات الخاملة…', 'loading');
+
+            const { data, error } = await supabaseClient.rpc('admin_notify_inactive_users', {
+                p_title: title,
+                p_body: body,
+                p_days_inactive: days,
+            });
+
+            confirmBtn.disabled = false;
+
+            if (error) {
+                console.error('[admin.js] فشل إرسال إشعار الخمول:', error);
+                setStatusText(statusEl, 'تعذر إرسال الإشعار. تحقق من الصلاحيات وحاول ثانية.', 'error');
+                return;
+            }
+
+            const count = data?.notified_count || 0;
+            setStatusText(statusEl, `تم إرسال الإشعار بنجاح إلى ${count} مستخدم خامل.`, 'success');
+            setTimeout(hideModal, 1800);
+        });
+    }
+}
+
+/* ==================================================================
+   11) مكافحة الغش وإجراءات تحكم المستخدمين والتعويضات
+   ================================================================== */
+
+let selectedUserForAction = null;
+
+function initUserActionModal() {
+    const modal = document.getElementById('userAdminActionModal');
+    const closeBtn = document.getElementById('btnCloseUserActionModal');
+    const statusEl = document.getElementById('userModalStatus');
+
+    if (!modal) return;
+
+    const hideModal = () => {
+        modal.classList.add('hidden');
+        selectedUserForAction = null;
+    };
+
+    if (closeBtn) closeBtn.addEventListener('click', hideModal);
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) hideModal();
+    });
+
+    // 1. Reset steps
+    const btnResetSteps = document.getElementById('btnExecuteResetSteps');
+    if (btnResetSteps) {
+        btnResetSteps.addEventListener('click', async () => {
+            if (!selectedUserForAction) return;
+            const reasonInput = document.getElementById('inputResetStepsReason');
+            const reason = reasonInput ? reasonInput.value.trim() : '';
+            if (!reason) {
+                setStatusText(statusEl, 'يرجى كتابة سبب تصفير الخطوات.', 'error');
+                return;
+            }
+
+            if (!confirm(`هل أنت متأكد من تصفير خطوات اليوم للمستخدم (${selectedUserForAction.full_name || selectedUserForAction.username})؟`)) return;
+
+            btnResetSteps.disabled = true;
+            setStatusText(statusEl, 'جاري تصفير خطوات اليوم…', 'loading');
+
+            const { error } = await supabaseClient.rpc('admin_reset_user_today_steps', {
+                p_user_id: selectedUserForAction.id,
+                p_reason: reason,
+            });
+
+            btnResetSteps.disabled = false;
+
+            if (error) {
+                console.error('[admin.js] فشل تصفير الخطوات:', error);
+                setStatusText(statusEl, error.message || 'تعذر تصفير الخطوات.', 'error');
+                return;
+            }
+
+            setStatusText(statusEl, 'تم تصفير خطوات اليوم وحذف نقاطها وسجل نشاطها بنجاح.', 'success');
+            if (reasonInput) reasonInput.value = '';
+            const stepsEl = document.getElementById('userModalTodaySteps');
+            if (stepsEl) stepsEl.textContent = '0';
+        });
+    }
+
+    // 2. Disqualify weekly
+    const btnDisqualify = document.getElementById('btnExecuteDisqualifyWeekly');
+    if (btnDisqualify) {
+        btnDisqualify.addEventListener('click', async () => {
+            if (!selectedUserForAction) return;
+            const reasonInput = document.getElementById('inputDisqualifyReason');
+            const reason = reasonInput ? reasonInput.value.trim() : '';
+            if (!reason) {
+                setStatusText(statusEl, 'يرجى كتابة سبب الاستبعاد.', 'error');
+                return;
+            }
+
+            if (!confirm(`هل أنت متأكد من استبعاد (${selectedUserForAction.full_name || selectedUserForAction.username}) من بطولة هذا الأسبوع؟`)) return;
+
+            btnDisqualify.disabled = true;
+            setStatusText(statusEl, 'جاري استبعاد المستخدم من دوري الأسبوع…', 'loading');
+
+            const { error } = await supabaseClient.rpc('admin_disqualify_user_weekly', {
+                p_user_id: selectedUserForAction.id,
+                p_reason: reason,
+            });
+
+            btnDisqualify.disabled = false;
+
+            if (error) {
+                console.error('[admin.js] فشل الاستبعاد:', error);
+                setStatusText(statusEl, error.message || 'تعذر استبعاد المستخدم.', 'error');
+                return;
+            }
+
+            setStatusText(statusEl, 'تم استبعاد المستخدم من بطولة الأسبوع وتصفير نقاط أسبوعه.', 'success');
+            if (reasonInput) reasonInput.value = '';
+        });
+    }
+
+    // 3. Adjust points
+    const btnAdjustPoints = document.getElementById('btnExecuteAdjustPoints');
+    if (btnAdjustPoints) {
+        btnAdjustPoints.addEventListener('click', async () => {
+            if (!selectedUserForAction) return;
+            const deltaInput = document.getElementById('inputAdjustPointsDelta');
+            const reasonInput = document.getElementById('inputAdjustPointsReason');
+
+            const delta = parseInt(deltaInput ? deltaInput.value : '0', 10);
+            const reason = reasonInput ? reasonInput.value.trim() : '';
+
+            if (isNaN(delta) || delta === 0) {
+                setStatusText(statusEl, 'يرجى كتابة رقم صحيح للنقاط (+ للإضافة أو - للخصم).', 'error');
+                return;
+            }
+            if (!reason) {
+                setStatusText(statusEl, 'يرجى كتابة سبب تعديل النقاط.', 'error');
+                return;
+            }
+
+            btnAdjustPoints.disabled = true;
+            setStatusText(statusEl, 'جاري تعديل النقاط…', 'loading');
+
+            const { data, error } = await supabaseClient.rpc('admin_adjust_user_points', {
+                p_user_id: selectedUserForAction.id,
+                p_points_delta: delta,
+                p_reason: reason,
+            });
+
+            btnAdjustPoints.disabled = false;
+
+            if (error) {
+                console.error('[admin.js] فشل تعديل النقاط:', error);
+                setStatusText(statusEl, error.message || 'تعذر تعديل النقاط.', 'error');
+                return;
+            }
+
+            const newTotal = data?.new_total_points ?? ((selectedUserForAction.points || 0) + delta);
+            selectedUserForAction.points = newTotal;
+            const ptsEl = document.getElementById('userModalPoints');
+            if (ptsEl) ptsEl.textContent = newTotal.toLocaleString('ar-EG');
+            setStatusText(statusEl, `تم تعديل النقاط بنجاح. الرصيد الجديد: ${newTotal.toLocaleString('ar-EG')}`, 'success');
+            if (deltaInput) deltaInput.value = '';
+            if (reasonInput) reasonInput.value = '';
+        });
+    }
+
+    // 4. Restore streak
+    const btnRestoreStreak = document.getElementById('btnExecuteRestoreStreak');
+    if (btnRestoreStreak) {
+        btnRestoreStreak.addEventListener('click', async () => {
+            if (!selectedUserForAction) return;
+            const daysInput = document.getElementById('inputRestoreStreakDays');
+            const reasonInput = document.getElementById('inputRestoreStreakReason');
+
+            const days = parseInt(daysInput ? daysInput.value : '0', 10);
+            const reason = reasonInput ? reasonInput.value.trim() : '';
+
+            if (isNaN(days) || days <= 0) {
+                setStatusText(statusEl, 'يرجى كتابة عدد صحيح لأيام السلسلة.', 'error');
+                return;
+            }
+            if (!reason) {
+                setStatusText(statusEl, 'يرجى كتابة سبب استعادة السلسلة.', 'error');
+                return;
+            }
+
+            btnRestoreStreak.disabled = true;
+            setStatusText(statusEl, 'جاري استعادة سلسلة الأيام…', 'loading');
+
+            const { data, error } = await supabaseClient.rpc('admin_restore_user_streak', {
+                p_user_id: selectedUserForAction.id,
+                p_streak_days: days,
+                p_reason: reason,
+            });
+
+            btnRestoreStreak.disabled = false;
+
+            if (error) {
+                console.error('[admin.js] فشل استعادة السلسلة:', error);
+                setStatusText(statusEl, error.message || 'تعذر استعادة السلسلة.', 'error');
+                return;
+            }
+
+            const newStreak = data?.current_streak_days ?? days;
+            selectedUserForAction.current_streak_days = newStreak;
+            const strkEl = document.getElementById('userModalStreak');
+            if (strkEl) strkEl.textContent = `${newStreak.toLocaleString('ar-EG')} يوم`;
+            setStatusText(statusEl, `تمت استعادة السلسلة المتتالية بنجاح (${newStreak} يوم).`, 'success');
+            if (daysInput) daysInput.value = '';
+            if (reasonInput) reasonInput.value = '';
+        });
+    }
+}
+
+async function openUserActionModal(user) {
+    selectedUserForAction = user;
+    const modal = document.getElementById('userAdminActionModal');
+    if (!modal) return;
+
+    const avatarEl = document.getElementById('userModalAvatar');
+    const nameEl = document.getElementById('userModalName');
+    const usernameEl = document.getElementById('userModalUsername');
+    const pointsEl = document.getElementById('userModalPoints');
+    const streakEl = document.getElementById('userModalStreak');
+    const todayStepsEl = document.getElementById('userModalTodaySteps');
+    const statusEl = document.getElementById('userModalStatus');
+
+    if (avatarEl) avatarEl.src = user.avatar_url || buildFallbackAvatarUrl(user.username || user.full_name || '?');
+    if (nameEl) nameEl.textContent = user.full_name || user.username || 'مستخدم بدون اسم';
+    if (usernameEl) usernameEl.textContent = user.username ? `@${user.username}` : '';
+    if (pointsEl) pointsEl.textContent = (user.points || 0).toLocaleString('ar-EG');
+    if (streakEl) streakEl.textContent = `${(user.current_streak_days || 0).toLocaleString('ar-EG')} يوم`;
+    if (todayStepsEl) {
+        todayStepsEl.textContent = (user.daily_steps || 0).toLocaleString('ar-EG');
+    }
+    if (statusEl) setStatusText(statusEl, '', null);
+
+    modal.classList.remove('hidden');
+}
+
+/* ==================================================================
+   12) إدارة ومراقبة القصص (Stories Moderation)
+   ================================================================== */
+
+function initStoriesModerationWidget() {
+    const btnPosts = document.getElementById('btnSubTabPostsView');
+    const btnStories = document.getElementById('btnSubTabStoriesView');
+    const postsContainer = document.getElementById('subTabPostsContainer');
+    const storiesContainer = document.getElementById('subTabStoriesContainer');
+    const btnRefresh = document.getElementById('btnRefreshAdminStories');
+
+    if (!btnPosts || !btnStories || !postsContainer || !storiesContainer) return;
+
+    btnPosts.addEventListener('click', () => {
+        postsContainer.classList.remove('hidden');
+        storiesContainer.classList.add('hidden');
+        btnPosts.className = 'px-4 py-2 rounded-xl text-xs font-bold bg-lux-800 text-gold-400 border border-gold-500/30 transition';
+        btnStories.className = 'px-4 py-2 rounded-xl text-xs font-bold bg-lux-950 text-lux-400 border border-lux-800 hover:text-lux-200 transition';
+    });
+
+    btnStories.addEventListener('click', () => {
+        postsContainer.classList.add('hidden');
+        storiesContainer.classList.remove('hidden');
+        btnStories.className = 'px-4 py-2 rounded-xl text-xs font-bold bg-lux-800 text-gold-400 border border-gold-500/30 transition';
+        btnPosts.className = 'px-4 py-2 rounded-xl text-xs font-bold bg-lux-950 text-lux-400 border border-lux-800 hover:text-lux-200 transition';
+        loadAdminStories();
+    });
+
+    if (btnRefresh) {
+        btnRefresh.addEventListener('click', loadAdminStories);
+    }
+}
+
+async function loadAdminStories() {
+    const statusEl = document.getElementById('adminStoriesStatus');
+    const container = document.getElementById('adminStoriesListContainer');
+    if (!container) return;
+
+    setStatusText(statusEl, 'جاري تحميل القصص النشطة…', 'loading');
+    container.innerHTML = '';
+
+    const { data: stories, error } = await supabaseClient.rpc('admin_list_stories');
+
+    if (error) {
+        console.error('[admin.js] فشل تحميل القصص:', error);
+        setStatusText(statusEl, 'تعذر تحميل القصص النشطة.', 'error');
+        return;
+    }
+
+    if (!stories || stories.length === 0) {
+        setStatusText(statusEl, 'لا توجد قصص نشطة حالياً.', 'empty');
+        return;
+    }
+
+    setStatusText(statusEl, '', null);
+
+    stories.forEach((story) => {
+        const card = document.createElement('div');
+        card.className = 'p-4 rounded-xl bg-lux-950 border border-lux-800 space-y-3 flex flex-col justify-between';
+
+        const avatar = story.author_avatar || buildFallbackAvatarUrl(story.author_name || '?');
+        const authorName = escapeHtml(story.author_name || 'مستخدم');
+        const username = story.author_username ? `@${escapeHtml(story.author_username)}` : '';
+        const timeAgo = formatRelativeArabicTime(story.created_at);
+        const expiresAt = new Date(story.expires_at);
+        const remainingHours = Math.max(0, Math.round((expiresAt.getTime() - Date.now()) / (1000 * 60 * 60)));
+
+        const mediaHtml = story.media_url
+            ? `<div class="w-full h-44 rounded-lg overflow-hidden bg-black/40 border border-lux-800">
+                 <img src="${escapeHtml(story.media_url)}" class="w-full h-full object-cover" alt="">
+               </div>`
+            : story.text_content
+                ? `<div class="w-full h-32 rounded-lg p-3 flex items-center justify-center text-center font-bold text-sm text-white" style="background-color: ${escapeHtml(story.background_color || '#1e1b4b')}">
+                     ${escapeHtml(story.text_content)}
+                   </div>`
+                : '';
+
+        const captionHtml = story.media_url && story.text_content
+            ? `<p class="text-xs text-lux-200 mt-1">${escapeHtml(story.text_content)}</p>`
+            : '';
+
+        card.innerHTML = `
+            <div class="space-y-2">
+                <div class="flex items-center gap-2.5">
+                    <img src="${avatar}" class="w-8 h-8 rounded-full border border-lux-700 object-cover" alt="">
+                    <div>
+                        <div class="text-xs font-bold text-lux-100">${authorName}</div>
+                        <div class="text-[10px] text-lux-400 font-mono">${username} · ${timeAgo}</div>
+                    </div>
+                </div>
+                ${mediaHtml}
+                ${captionHtml}
+                <div class="text-[10px] font-mono text-lux-500">
+                    تنتهي بعد حوالي ${remainingHours} ساعة
+                </div>
+            </div>
+
+            <button type="button" class="btn-delete-story w-full py-1.5 rounded-lg bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-600/40 text-xs font-bold transition mt-2">
+                حذف القصة فوراً
+            </button>
+        `;
+
+        const delBtn = card.querySelector('.btn-delete-story');
+        if (delBtn) {
+            delBtn.addEventListener('click', async () => {
+                const reason = prompt('اكتب سبب حذف القصة (سيتم تسجيله وإرسال إشعار للمستخدم):', 'مخالفة معايير النشر');
+                if (!reason) return;
+
+                delBtn.disabled = true;
+                delBtn.textContent = 'جاري الحذف…';
+
+                const { error: delErr } = await supabaseClient.rpc('admin_delete_story', {
+                    p_story_id: story.id,
+                    p_reason: reason,
+                });
+
+                if (delErr) {
+                    alert('فشل حذف القصة: ' + (delErr.message || delErr));
+                    delBtn.disabled = false;
+                    delBtn.textContent = 'حذف القصة فوراً';
+                    return;
+                }
+
+                card.remove();
+                if (container.children.length === 0) {
+                    setStatusText(statusEl, 'لا توجد قصص نشطة حالياً.', 'empty');
+                }
+            });
+        }
+
+        container.appendChild(card);
+    });
+}
+
+/* ==================================================================
+   13) غرفة التحكم الرئيسية (Master Control Panel)
+   ================================================================== */
+
+let currentProfanityWords = [];
+
+async function initMasterSettings() {
+    const panel = document.getElementById('tabPanelMaster');
+    if (!panel) return;
+
+    const { data: settings, error } = await supabaseClient
+        .from('app_settings')
+        .select('*')
+        .eq('id', 1)
+        .single();
+
+    if (error) {
+        console.error('[admin.js] فشل تحميل إعدادات التحكم العامة:', error);
+        return;
+    }
+
+    // 1. Maintenance
+    const maintToggle = document.getElementById('masterMaintenanceToggle');
+    const maintMsg = document.getElementById('masterMaintenanceMsg');
+    const maintEnd = document.getElementById('masterMaintenanceEndTime');
+    const btnSaveMaint = document.getElementById('btnSaveMaintenanceSettings');
+
+    if (maintToggle) maintToggle.checked = Boolean(settings.is_maintenance_mode);
+    if (maintMsg) maintMsg.value = settings.maintenance_message || '';
+    if (maintEnd && settings.maintenance_estimated_end) {
+        try {
+            const d = new Date(settings.maintenance_estimated_end);
+            maintEnd.value = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+        } catch (e) {}
+    }
+
+    if (btnSaveMaint) {
+        btnSaveMaint.addEventListener('click', async () => {
+            btnSaveMaint.disabled = true;
+            btnSaveMaint.textContent = 'جاري الحفظ…';
+
+            const payload = {
+                is_maintenance_mode: maintToggle ? maintToggle.checked : false,
+                maintenance_message: maintMsg ? maintMsg.value.trim() : '',
+                maintenance_estimated_end: maintEnd && maintEnd.value ? new Date(maintEnd.value).toISOString() : null,
+            };
+
+            const { error: saveErr } = await supabaseClient.rpc('admin_update_master_settings', {
+                p_settings: payload,
+            });
+
+            btnSaveMaint.disabled = false;
+            btnSaveMaint.textContent = 'حفظ إعدادات الصيانة';
+
+            if (saveErr) {
+                alert('فشل حفظ إعدادات وضع الصيانة: ' + saveErr.message);
+            } else {
+                alert('تم حفظ وتطبيق إعدادات الصيانة بنجاح.');
+            }
+        });
+    }
+
+    // 2. Force update
+    const fuToggle = document.getElementById('masterForceUpdateToggle');
+    const fuMin = document.getElementById('masterMinVersion');
+    const fuLatest = document.getElementById('masterLatestVersion');
+    const fuUrl = document.getElementById('masterForceUpdateUrl');
+    const fuMsg = document.getElementById('masterForceUpdateMsg');
+    const btnSaveFu = document.getElementById('btnSaveForceUpdateSettings');
+
+    if (fuToggle) fuToggle.checked = Boolean(settings.is_force_update_enabled);
+    if (fuMin) fuMin.value = settings.min_app_version || '1.0.0';
+    if (fuLatest) fuLatest.value = settings.latest_app_version || '1.0.0';
+    if (fuUrl) fuUrl.value = settings.force_update_url || '';
+    if (fuMsg) fuMsg.value = settings.force_update_message || '';
+
+    if (btnSaveFu) {
+        btnSaveFu.addEventListener('click', async () => {
+            btnSaveFu.disabled = true;
+            btnSaveFu.textContent = 'جاري الحفظ…';
+
+            const payload = {
+                is_force_update_enabled: fuToggle ? fuToggle.checked : false,
+                min_app_version: fuMin ? fuMin.value.trim() : '1.0.0',
+                latest_app_version: fuLatest ? fuLatest.value.trim() : '1.0.0',
+                force_update_url: fuUrl ? fuUrl.value.trim() : '',
+                force_update_message: fuMsg ? fuMsg.value.trim() : '',
+            };
+
+            const { error: saveErr } = await supabaseClient.rpc('admin_update_master_settings', {
+                p_settings: payload,
+            });
+
+            btnSaveFu.disabled = false;
+            btnSaveFu.textContent = 'حفظ إعدادات التحديث';
+
+            if (saveErr) {
+                alert('فشل حفظ إعدادات التحديث: ' + saveErr.message);
+            } else {
+                alert('تم حفظ إعدادات التحديث بنجاح.');
+            }
+        });
+    }
+
+    // 3. Points multiplier
+    const pmSelect = document.getElementById('masterPointsMultiplier');
+    const pmTitle = document.getElementById('masterPointsMultiplierTitle');
+    const pmExpiry = document.getElementById('masterPointsMultiplierExpiry');
+    const btnSavePm = document.getElementById('btnSavePointsMultiplier');
+
+    if (pmSelect) pmSelect.value = String(Number(settings.points_multiplier || 1).toFixed(1));
+    if (pmTitle) pmTitle.value = settings.points_multiplier_title || '';
+    if (pmExpiry && settings.points_multiplier_expires_at) {
+        try {
+            const d = new Date(settings.points_multiplier_expires_at);
+            pmExpiry.value = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+        } catch (e) {}
+    }
+
+    if (btnSavePm) {
+        btnSavePm.addEventListener('click', async () => {
+            btnSavePm.disabled = true;
+            btnSavePm.textContent = 'جاري الحفظ…';
+
+            const payload = {
+                points_multiplier: parseFloat(pmSelect.value) || 1.0,
+                points_multiplier_title: pmTitle ? pmTitle.value.trim() : '',
+                points_multiplier_expires_at: pmExpiry && pmExpiry.value ? new Date(pmExpiry.value).toISOString() : null,
+            };
+
+            const { error: saveErr } = await supabaseClient.rpc('admin_update_master_settings', {
+                p_settings: payload,
+            });
+
+            btnSavePm.disabled = false;
+            btnSavePm.textContent = 'حفظ وتفعيل مضاعف النقاط';
+
+            if (saveErr) {
+                alert('فشل حفظ مضاعف النقاط: ' + saveErr.message);
+            } else {
+                alert('تم تفعيل إعدادات مضاعف النقاط بنجاح.');
+            }
+        });
+    }
+
+    // 4. Feature flags
+    const fStories = document.getElementById('flagStories');
+    const fPosts = document.getElementById('flagPosts');
+    const fComments = document.getElementById('flagComments');
+    const fSupport = document.getElementById('flagSupportChat');
+    const fDailyQ = document.getElementById('flagDailyQuestion');
+    const fLeaderboard = document.getElementById('flagLeaderboard');
+    const btnSaveFlags = document.getElementById('btnSaveFeatureFlags');
+
+    if (fStories) fStories.checked = settings.feature_stories_enabled !== false;
+    if (fPosts) fPosts.checked = settings.feature_posts_enabled !== false;
+    if (fComments) fComments.checked = settings.feature_comments_enabled !== false;
+    if (fSupport) fSupport.checked = settings.feature_support_chat_enabled !== false;
+    if (fDailyQ) fDailyQ.checked = settings.feature_daily_question_enabled !== false;
+    if (fLeaderboard) fLeaderboard.checked = settings.feature_leaderboard_enabled !== false;
+
+    if (btnSaveFlags) {
+        btnSaveFlags.addEventListener('click', async () => {
+            btnSaveFlags.disabled = true;
+            btnSaveFlags.textContent = 'جاري الحفظ…';
+
+            const payload = {
+                feature_stories_enabled: fStories ? fStories.checked : true,
+                feature_posts_enabled: fPosts ? fPosts.checked : true,
+                feature_comments_enabled: fComments ? fComments.checked : true,
+                feature_support_chat_enabled: fSupport ? fSupport.checked : true,
+                feature_daily_question_enabled: fDailyQ ? fDailyQ.checked : true,
+                feature_leaderboard_enabled: fLeaderboard ? fLeaderboard.checked : true,
+            };
+
+            const { error: saveErr } = await supabaseClient.rpc('admin_update_master_settings', {
+                p_settings: payload,
+            });
+
+            btnSaveFlags.disabled = false;
+            btnSaveFlags.textContent = 'حفظ مفاتيح الميزات';
+
+            if (saveErr) {
+                alert('فشل حفظ مفاتيح الميزات: ' + saveErr.message);
+            } else {
+                alert('تم حفظ مفاتيح الميزات بنجاح.');
+            }
+        });
+    }
+
+    // 5. In-app announcement
+    const annToggle = document.getElementById('masterAnnouncementToggle');
+    const annId = document.getElementById('masterAnnouncementId');
+    const annTitle = document.getElementById('masterAnnouncementTitle');
+    const annBody = document.getElementById('masterAnnouncementBody');
+    const annImg = document.getElementById('masterAnnouncementImage');
+    const annBtnText = document.getElementById('masterAnnouncementBtnText');
+    const annBtnUrl = document.getElementById('masterAnnouncementBtnUrl');
+    const btnSaveAnn = document.getElementById('btnSaveAnnouncement');
+
+    // عناصر رفع ومعاينة صورة الإعلان
+    const btnUploadAnnImg = document.getElementById('btnUploadAnnouncementImage');
+    const annFileInput = document.getElementById('announcementFileInput');
+    const btnRemoveAnnImg = document.getElementById('btnRemoveAnnouncementImage');
+    const annUploadStatus = document.getElementById('announcementUploadStatus');
+    const annPreviewBox = document.getElementById('announcementPreviewContainer');
+    const annPreviewImg = document.getElementById('announcementPreviewImg');
+
+    const updateAnnouncementImagePreview = (url) => {
+        const cleanUrl = url ? url.trim() : '';
+        if (cleanUrl) {
+            if (annPreviewImg) annPreviewImg.src = cleanUrl;
+            if (annPreviewBox) annPreviewBox.classList.remove('hidden');
+            if (btnRemoveAnnImg) btnRemoveAnnImg.classList.remove('hidden');
+        } else {
+            if (annPreviewImg) annPreviewImg.src = '';
+            if (annPreviewBox) annPreviewBox.classList.add('hidden');
+            if (btnRemoveAnnImg) btnRemoveAnnImg.classList.add('hidden');
+        }
+    };
+
+    if (annToggle) annToggle.checked = Boolean(settings.announcement_enabled ?? settings.announcement_is_active);
+    if (annId) annId.value = settings.announcement_id || 'announcement_1';
+    if (annTitle) annTitle.value = settings.announcement_title || '';
+    if (annBody) annBody.value = settings.announcement_body || '';
+    if (annImg) {
+        annImg.value = settings.announcement_image_url || '';
+        annImg.addEventListener('input', () => updateAnnouncementImagePreview(annImg.value));
+    }
+    if (annBtnText) annBtnText.value = settings.announcement_button_text || 'حسناً';
+    if (annBtnUrl) annBtnUrl.value = settings.announcement_button_url || '';
+
+    updateAnnouncementImagePreview(settings.announcement_image_url || '');
+
+    if (btnUploadAnnImg && annFileInput) {
+        btnUploadAnnImg.addEventListener('click', () => annFileInput.click());
+
+        annFileInput.addEventListener('change', async () => {
+            const file = annFileInput.files && annFileInput.files[0];
+            annFileInput.value = '';
+            if (!file) return;
+
+            if (file.size > 5 * 1024 * 1024) {
+                if (annUploadStatus) {
+                    annUploadStatus.textContent = 'حجم الصورة كبير - الحد الأقصى 5 ميجابايت';
+                    annUploadStatus.className = 'text-xs text-rose-400 font-bold';
+                }
+                return;
+            }
+
+            if (annUploadStatus) {
+                annUploadStatus.textContent = 'جاري رفع الصورة…';
+                annUploadStatus.className = 'text-xs text-lux-400 font-medium';
+            }
+
+            const fileExt = (file.name.split('.').pop() || 'jpg').toLowerCase();
+            const filePath = `announcement-${Date.now()}.${fileExt}`;
+
+            const { error: uploadError } = await supabaseClient
+                .storage
+                .from('banners')
+                .upload(filePath, file, { upsert: false });
+
+            if (uploadError) {
+                console.error('[admin.js] فشل رفع صورة الإعلان:', uploadError);
+                if (annUploadStatus) {
+                    annUploadStatus.textContent = 'تعذر رفع الصورة: ' + uploadError.message;
+                    annUploadStatus.className = 'text-xs text-rose-400 font-bold';
+                }
+                return;
+            }
+
+            const { data: publicUrlData } = supabaseClient
+                .storage
+                .from('banners')
+                .getPublicUrl(filePath);
+
+            const publicUrl = publicUrlData ? publicUrlData.publicUrl : '';
+            if (annImg) annImg.value = publicUrl;
+            updateAnnouncementImagePreview(publicUrl);
+
+            if (annUploadStatus) {
+                annUploadStatus.textContent = 'تم رفع الصورة بنجاح';
+                annUploadStatus.className = 'text-xs text-emerald-400 font-bold';
+                setTimeout(() => {
+                    if (annUploadStatus) annUploadStatus.textContent = '';
+                }, 4000);
+            }
+        });
+    }
+
+    if (btnRemoveAnnImg) {
+        btnRemoveAnnImg.addEventListener('click', () => {
+            if (annImg) annImg.value = '';
+            updateAnnouncementImagePreview('');
+            if (annUploadStatus) annUploadStatus.textContent = '';
+        });
+    }
+
+    if (btnSaveAnn) {
+        btnSaveAnn.addEventListener('click', async () => {
+            btnSaveAnn.disabled = true;
+            btnSaveAnn.textContent = 'جاري الحفظ…';
+
+            const payload = {
+                announcement_enabled: annToggle ? annToggle.checked : false,
+                announcement_is_active: annToggle ? annToggle.checked : false,
+                announcement_id: annId ? annId.value.trim() : 'announcement_1',
+                announcement_title: annTitle ? annTitle.value.trim() : '',
+                announcement_body: annBody ? annBody.value.trim() : '',
+                announcement_image_url: annImg ? annImg.value.trim() : '',
+                announcement_button_text: annBtnText ? annBtnText.value.trim() : 'حسناً',
+                announcement_button_url: annBtnUrl ? annBtnUrl.value.trim() : '',
+            };
+
+            const { error: saveErr } = await supabaseClient.rpc('admin_update_master_settings', {
+                p_settings: payload,
+            });
+
+            btnSaveAnn.disabled = false;
+            btnSaveAnn.textContent = 'حفظ ونشر الإعلان';
+
+            if (saveErr) {
+                alert('فشل حفظ الإعلان: ' + saveErr.message);
+            } else {
+                alert('تم حفظ وتحديث الإعلان العام بنجاح.');
+            }
+        });
+    }
+
+    // 6. Profanity words
+    currentProfanityWords = Array.isArray(settings.profanity_words) ? settings.profanity_words : [];
+    renderProfanityTags();
+
+    const addWordBtn = document.getElementById('btnAddProfanityWord');
+    const newWordInput = document.getElementById('profanityNewWordInput');
+    const saveWordsBtn = document.getElementById('btnSaveProfanityWords');
+
+    const handleAddWord = () => {
+        if (!newWordInput) return;
+        const w = newWordInput.value.trim().toLowerCase();
+        if (w && !currentProfanityWords.includes(w)) {
+            currentProfanityWords.push(w);
+            renderProfanityTags();
+            newWordInput.value = '';
+        }
+    };
+
+    if (addWordBtn) addWordBtn.addEventListener('click', handleAddWord);
+    if (newWordInput) {
+        newWordInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                handleAddWord();
+            }
+        });
+    }
+
+    if (saveWordsBtn) {
+        saveWordsBtn.addEventListener('click', async () => {
+            saveWordsBtn.disabled = true;
+            saveWordsBtn.textContent = 'جاري الحفظ…';
+
+            const { error: saveErr } = await supabaseClient.rpc('admin_update_master_settings', {
+                p_settings: { profanity_words: currentProfanityWords },
+            });
+
+            saveWordsBtn.disabled = false;
+            saveWordsBtn.textContent = 'حفظ قائمة الكلمات';
+
+            if (saveErr) {
+                alert('فشل حفظ الكلمات المحظورة: ' + saveErr.message);
+            } else {
+                alert('تم حفظ قائمة الكلمات المحظورة بنجاح.');
+            }
+        });
+    }
+
+    // 7. Championships reset
+    const btnDaily = document.getElementById('btnTriggerDailyReset');
+    const btnWeekly = document.getElementById('btnTriggerWeeklyReset');
+    const btnMonthly = document.getElementById('btnTriggerMonthlyReset');
+
+    const handleChampionshipTrigger = async (period, label, btn) => {
+        if (!confirm(`هل أنت متأكد من تنفيذ ${label} الآن؟ سيتم تتويج الفائزين وتصفير عداد الفترة.`)) return;
+
+        btn.disabled = true;
+        const origText = btn.innerHTML;
+        const labelEl = btn.querySelector('.text-xs');
+        if (labelEl) labelEl.textContent = 'جاري التنفيذ…';
+
+        const { error: resetErr } = await supabaseClient.rpc('admin_trigger_leaderboard_reset', {
+            p_period: period,
+        });
+
+        btn.disabled = false;
+        btn.innerHTML = origText;
+
+        if (resetErr) {
+            alert(`فشل تنفيذ ${label}: ` + resetErr.message);
+        } else {
+            alert(`تم تنفيذ ${label} وتتويج الأبطال بنجاح.`);
+        }
+    };
+
+    if (btnDaily) btnDaily.addEventListener('click', () => handleChampionshipTrigger('daily', 'إغلاق وتتويج بطولة اليوم', btnDaily));
+    if (btnWeekly) btnWeekly.addEventListener('click', () => handleChampionshipTrigger('weekly', 'إغلاق وتتويج بطولة الأسبوع', btnWeekly));
+    if (btnMonthly) btnMonthly.addEventListener('click', () => handleChampionshipTrigger('monthly', 'إغلاق وتتويج بطولة الشهر', btnMonthly));
+}
+
+function renderProfanityTags() {
+    const container = document.getElementById('profanityWordsTagsContainer');
+    if (!container) return;
+
+    container.innerHTML = '';
+    if (currentProfanityWords.length === 0) {
+        container.innerHTML = '<span class="text-xs text-lux-500 font-medium">لا توجد كلمات محظورة مضافة حالياً.</span>';
+        return;
+    }
+
+    currentProfanityWords.forEach((word, idx) => {
+        const tag = document.createElement('span');
+        tag.className = 'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-lux-900 border border-lux-700 text-xs text-lux-200';
+        tag.innerHTML = `
+            <span>${escapeHtml(word)}</span>
+            <button type="button" class="text-lux-400 hover:text-rose-400 font-bold ml-1 text-xs" data-idx="${idx}">x</button>
+        `;
+        tag.querySelector('button').addEventListener('click', () => {
+            currentProfanityWords.splice(idx, 1);
+            renderProfanityTags();
+        });
+        container.appendChild(tag);
+    });
+}
+
+function initAdminDashboardModules() {
     initAdminTabNavigation();
     initGeofenceRadiusWidget();
     initUserVerificationWidget();
@@ -4049,6 +5165,23 @@ async function initAdminPage() {
     initSupportInboxWidget();
     loadGeofenceSettings();
     loadVisitorStats();
+    initMasterSettings();
+    initStoriesModerationWidget();
+    initUserActionModal();
+    initInactiveUsersNotifyModal();
+}
+
+async function initAdminPage() {
+    // ربط نموذج تسجيل الدخول وأزرار الخروج
+    initAdminLoginGate();
+
+    // فحص هل المستخدم مسجل دخول بالفعل وعنده صلاحية أدمن
+    const isAdmin = await checkAdminSession();
+    if (isAdmin) {
+        revealAdminDashboard();
+    } else {
+        showAdminLoginGate();
+    }
 }
 
 document.addEventListener('DOMContentLoaded', initAdminPage);

@@ -32,7 +32,7 @@
          بين النسختين - شوف التعليق فوق الدالة في admin.js).
      ------------------------------------------------------------------
 
-     ⚠️ ملاحظة أمان مهمة (مقروءة بعناية قبل النشر الفعلي):
+     [ملاحظة] ملاحظة أمان مهمة (مقروءة بعناية قبل النشر الفعلي):
      كما هو موضّح في تعليقات 001_geofencing_setup.sql، الـ RLS الحالي
      على app_settings بيسمح بـ SELECT فقط لـ authenticated/anon، ومفيش
      policy لـ UPDATE. يعني بالإعداد الحالي، نداءات updateGeofenceRadius
@@ -51,6 +51,8 @@
     <title>لوحة تحكم الأدمن — سِكّاوي</title>
     <meta name="robots" content="noindex, nofollow">
 
+    <!-- خطوط Cairo و Tajawal المحلية لدعم وضع الأوفلاين داخل التطبيق -->
+    <link rel="stylesheet" href="vendor/fonts/fonts.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <!-- [هوية "غرفة التحكم"] ضفنا JetBrains Mono - مستخدم بس للأرقام
@@ -58,9 +60,8 @@
          عشان تحس إنها قراءات حقيقية بتتحدث لحظياً، مش نص عادي -->
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&family=Tajawal:wght@400;500;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 
-    <!-- نفس إعداد Tailwind CDN الموجود في index.html بالضبط، عشان كلاسات
-         lux-XXX / gold-XXX / brand-XXX تشتغل هنا كمان بنفس القيم -->
-    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- استخدام نسخة Tailwind المحلية من vendor بدلاً من الـ CDN للعمل أوفلاين -->
+    <script src="vendor/tailwind.js"></script>
     <script>
         tailwind.config = {
             darkMode: 'class',
@@ -129,38 +130,66 @@
             display: flex;
             flex-direction: column;
             align-items: center;
-            gap: 0.25rem;
-            padding: 0.5rem 0.75rem;
-            border-radius: 0.6rem;
+            justify-content: center;
+            gap: 0.2rem;
+            padding: 0.45rem 0.5rem;
+            border-radius: 0.75rem;
             color: var(--lux-500, #6b7280);
-            transition: color 0.2s ease, background-color 0.2s ease;
+            transition: all 0.2s ease;
             flex: 1;
+            min-width: 0;
+            user-select: none;
         }
-        .admin-nav-tab svg { width: 1.25rem; height: 1.25rem; }
-        .admin-nav-tab span { font-size: 0.65rem; font-weight: 700; }
+        .admin-nav-tab svg { width: 1.25rem; height: 1.25rem; flex-shrink: 0; }
+        .admin-nav-tab span { font-size: 0.65rem; font-weight: 700; white-space: nowrap; }
+        .admin-nav-tab:hover {
+            color: var(--lux-200, #e5e7eb);
+        }
         .admin-nav-tab.is-active {
             color: #E8C158;
-            background: rgba(212, 175, 55, 0.06);
+            background: rgba(212, 175, 55, 0.08);
         }
 
-        /* نسخة "أفقية" من نفس الزرار (أيقونة جنب النص، عرض كامل) -
-           مستخدمة بس جوه الـ Sidebar بالديسكتوب. بتضاف كـ class ثانية
-           فوق .admin-nav-tab الأساسية، فبتورث نفس حالة .is-active، وبناخد
-           خط ذهبي رفيع على الحافة (اللي هي يمين العنصر في RTL) بدل
-           الخلفية الكاملة كإشارة "أنت هنا" أوضح وأهدأ */
+        /* نسخة "أفقية" من نفس الزرار (أيقونة جنب النص، عرض كامل) للـ Sidebar */
         .admin-nav-tab--side {
             flex-direction: row;
             justify-content: flex-start;
             width: 100%;
             gap: 0.75rem;
             padding: 0.6rem 0.85rem;
-            border-radius: 0.5rem;
-            border-inline-end: 2px solid transparent;
+            border-radius: 0.75rem;
+            border-inline-start: 3px solid transparent;
+            border-inline-end: none;
+            color: var(--lux-400, #9ca3af);
+            font-size: 0.8rem;
+            font-weight: 700;
+            background: transparent;
+            transition: all 0.15s ease;
         }
-        .admin-nav-tab--side svg { width: 1.05rem; height: 1.05rem; flex-shrink: 0; }
-        .admin-nav-tab--side span { font-size: 0.8rem; font-weight: 600; }
+        .admin-nav-tab--side svg { width: 1.15rem; height: 1.15rem; flex-shrink: 0; }
+        .admin-nav-tab--side span { font-size: 0.8rem; font-weight: 700; }
+        .admin-nav-tab--side:hover {
+            background: rgba(255, 255, 255, 0.04);
+            color: var(--lux-100, #f3f4f6);
+        }
         .admin-nav-tab--side.is-active {
-            border-inline-end-color: #D4AF37;
+            color: #F2D77E;
+            background: rgba(212, 175, 55, 0.1);
+            border-inline-start-color: #D4AF37;
+            box-shadow: inset 0 0 12px rgba(212, 175, 55, 0.05);
+        }
+
+        .admin-card {
+            background: rgba(18, 22, 31, 0.65);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(212, 175, 55, 0.12);
+            border-radius: 1.25rem;
+            box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5), 0 4px 12px -2px rgba(0, 0, 0, 0.25);
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+        }
+        .admin-card:hover {
+            border-color: rgba(212, 175, 55, 0.22);
         }
 
         /* شرائح اختيار ترتيب "كل الحسابات" - Segmented Control بسيط */
@@ -350,14 +379,62 @@
     <!-- Cropper.js - قص دائري لصورة هوية التطبيق (widget "identityWidget"
          جوه تاب المنشورات) - مكتبة خفيفة عن طريق CDN بدل ما تتبنى من
          الصفر، شوف initAppIdentityWidget في js/admin.js -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.2/cropper.min.css">
+    <link rel="stylesheet" href="vendor/cropper.min.css">
 </head>
 <body class="h-full bg-lux-950 font-cairo text-lux-50 antialiased overflow-hidden">
+
+    <!-- بوابة قفل لوحة التحكم (Admin Login Gate) -->
+    <div id="adminLoginGate" class="hidden fixed inset-0 z-[9999] bg-lux-950/95 backdrop-blur-xl flex items-center justify-center p-4 overflow-y-auto">
+        <div class="w-full max-w-md bg-lux-900 border border-gold-500/30 rounded-3xl p-6 md:p-8 shadow-2xl space-y-6">
+            <div class="text-center space-y-2">
+                <div class="w-14 h-14 mx-auto rounded-2xl bg-gradient-to-br from-amber-500/20 to-yellow-500/10 border border-gold-500/40 flex items-center justify-center text-gold-400 shadow-glow-amber">
+                    <svg class="w-7 h-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                        <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                    </svg>
+                </div>
+                <h1 class="text-xl font-black text-lux-50">لوحة تحكم الأدمن</h1>
+                <p class="text-xs text-lux-400 font-medium">
+                    لوحة التحكم محمية. يرجى تسجيل الدخول بحساب مسؤول للإكمال
+                </p>
+            </div>
+
+            <form id="adminGateForm" class="space-y-4">
+                <div>
+                    <label for="adminGateUsername" class="block text-xs font-bold text-lux-300 mb-1.5">اسم المستخدم أو البريد</label>
+                    <input type="text" id="adminGateUsername" required autocomplete="username" dir="ltr"
+                           class="w-full bg-lux-950 border border-lux-800 focus:border-gold-500 rounded-xl px-4 py-2.5 text-xs text-lux-100 placeholder-lux-600 focus:outline-none transition font-sans"
+                           placeholder="admin">
+                </div>
+
+                <div>
+                    <label for="adminGatePassword" class="block text-xs font-bold text-lux-300 mb-1.5">كلمة المرور</label>
+                    <input type="password" id="adminGatePassword" required autocomplete="current-password" dir="ltr"
+                           class="w-full bg-lux-950 border border-lux-800 focus:border-gold-500 rounded-xl px-4 py-2.5 text-xs text-lux-100 placeholder-lux-600 focus:outline-none transition font-mono"
+                           placeholder="••••••••">
+                </div>
+
+                <div id="adminGateError" class="hidden p-3 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs font-bold text-center"></div>
+
+                <button type="submit" id="btnAdminGateSubmit" class="w-full py-3 rounded-xl bg-gradient-to-r from-gold-500 to-amber-500 hover:from-gold-400 hover:to-amber-400 text-lux-950 font-black text-xs transition shadow-lg flex items-center justify-center gap-2">
+                    <span id="adminGateSpinner" class="hidden w-4 h-4 border-2 border-lux-950 border-t-transparent rounded-full animate-spin"></span>
+                    <span id="adminGateBtnText">تسجيل الدخول للإدارة</span>
+                </button>
+            </form>
+
+            <div class="text-center pt-2 border-t border-lux-800/80">
+                <a href="index.html" class="inline-flex items-center gap-1.5 text-xs font-bold text-lux-400 hover:text-gold-400 transition">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3.5 h-3.5"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                    <span>العودة للتطبيق</span>
+                </a>
+            </div>
+        </div>
+    </div>
 
     <!-- مخفي افتراضياً (visibility:hidden مش display:none عشان الـ layout
          يتحسب صح) لحد ما verifyAdminAccessOrRedirect في admin.js تتأكد
          إن اللي فاتح الصفحة أدمن فعلاً - admin.js بيشيل الكلاس ده يدوياً
-         بعد التحقق الناجح، وإلا بيعمل redirect قبل ما يوصل للسطر ده أصلاً.
+         بعد التحقق الناجح، وإلا بيعرض بوابة تسجيل الدخول فوق.
 
          هيكل الصفحة بقى "App Shell" ثابت الارتفاع (h-full) على شكل
          لوحة تحكم حقيقية: من md فما فوق flex-row بين Sidebar (aside)
@@ -370,157 +447,241 @@
              في الـ DOM يعني بيتحط في جهة "البداية" واللي هي اليمين في
              RTL - شكل طبيعي للوحة تحكم عربية -->
         <!-- ========================================================= -->
-        <aside class="hidden md:flex md:flex-col md:w-64 shrink-0 border-l border-lux-800/60 bg-lux-900/50 backdrop-blur-xl">
+        <aside class="hidden md:flex md:flex-col md:w-72 shrink-0 border-l border-lux-800/80 bg-lux-900/60 backdrop-blur-2xl">
 
-            <div class="px-5 pt-6 pb-5 border-b border-lux-800/60">
-                <h1 class="text-lg font-black text-lux-50 leading-tight">لوحة تحكم الأدمن</h1>
-                <p class="text-[0.7rem] text-lux-500 font-bold mt-1">سِكّاوي</p>
+            <div class="px-5 py-5 border-b border-lux-800/70 flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-500/20 to-yellow-500/10 border border-gold-500/30 flex items-center justify-center text-gold-400 shadow-sm">
+                        <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+                        </svg>
+                    </div>
+                    <div>
+                        <h1 class="text-sm font-black text-lux-50 tracking-tight">غرفة تحكم سِكّاوي</h1>
+                        <p class="text-[10px] text-lux-500 font-bold">Admin Ops Console</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-1.5">
+                    <a href="index.html" class="inline-flex items-center gap-1 px-2 py-1.5 rounded-lg border border-lux-700/80 hover:border-gold-500/50 text-[11px] font-bold text-lux-300 hover:text-gold-400 bg-lux-800/40 hover:bg-lux-800 transition" title="العودة للتطبيق">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3.5 h-3.5"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                        <span>التطبيق</span>
+                    </a>
+                    <button type="button" id="btnAdminLogout" class="inline-flex items-center gap-1 px-2 py-1.5 rounded-lg border border-rose-500/30 hover:border-rose-500/60 text-[11px] font-bold text-rose-300 hover:text-rose-200 bg-rose-500/10 hover:bg-rose-500/20 transition" title="تسجيل الخروج من لوحة التحكم">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3.5 h-3.5"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>
+                        <span>خروج</span>
+                    </button>
+                </div>
             </div>
 
-            <!-- نفس أزرار التنقل بالظبط (class="admin-nav-tab" +
-                 data-tab-target) بس بشكل أفقي (admin-nav-tab--side) -
-                 initAdminTabNavigation في js/admin.js بتلقطها تلقائياً
-                 لأنها بتدور على .admin-nav-tab[data-tab-target] مش على
-                 مكانها في الصفحة -->
-            <nav class="flex-1 px-3 py-4 space-y-1">
-                <button type="button" class="admin-nav-tab admin-nav-tab--side is-active" data-tab-target="tabPanelVisitors">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <rect x="4" y="12" width="4" height="8" rx="1"></rect>
-                        <rect x="10" y="7" width="4" height="13" rx="1"></rect>
-                        <rect x="16" y="3" width="4" height="17" rx="1"></rect>
-                    </svg>
-                    <span>الزوار</span>
-                </button>
+            <!-- قائمة التابات المقسمة حسب القطاعات الوظيفية -->
+            <nav class="flex-1 px-3 py-4 space-y-4 overflow-y-auto notif-scroll">
+                <!-- قطاع 1: التحليلات والمؤشرات -->
+                <div class="space-y-1">
+                    <div class="px-3 pb-1 text-[10px] font-black uppercase tracking-wider text-lux-500 flex items-center gap-1.5">
+                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                        <span>التحليلات والمؤشرات</span>
+                    </div>
+                    <button type="button" class="admin-nav-tab admin-nav-tab--side is-active" data-tab-target="tabPanelVisitors">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4 text-emerald-400">
+                            <rect x="4" y="12" width="4" height="8" rx="1"></rect>
+                            <rect x="10" y="7" width="4" height="13" rx="1"></rect>
+                            <rect x="16" y="3" width="4" height="17" rx="1"></rect>
+                        </svg>
+                        <span>الزوار والنشاط</span>
+                    </button>
+                </div>
 
-                <button type="button" class="admin-nav-tab admin-nav-tab--side" data-tab-target="tabPanelGeofence">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <circle cx="12" cy="9" r="4"></circle>
-                        <path d="M12 21c4-4.5 7-8.5 7-12a7 7 0 1 0-14 0c0 3.5 3 7.5 7 12z"></path>
-                    </svg>
-                    <span>النطاق الجغرافي</span>
-                </button>
+                <!-- قطاع 2: النظام والتحكم العام -->
+                <div class="space-y-1">
+                    <div class="px-3 pb-1 text-[10px] font-black uppercase tracking-wider text-lux-500 flex items-center gap-1.5">
+                        <span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+                        <span>النظام والتحكم العام</span>
+                    </div>
+                    <button type="button" class="admin-nav-tab admin-nav-tab--side" data-tab-target="tabPanelMaster">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4 text-amber-400">
+                            <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>
+                            <circle cx="12" cy="12" r="3"/>
+                        </svg>
+                        <span>التحكم الشامل</span>
+                    </button>
+                    <button type="button" class="admin-nav-tab admin-nav-tab--side" data-tab-target="tabPanelGeofence">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4 text-cyan-400">
+                            <circle cx="12" cy="9" r="4"></circle>
+                            <path d="M12 21c4-4.5 7-8.5 7-12a7 7 0 1 0-14 0c0 3.5 3 7.5 7 12z"></path>
+                        </svg>
+                        <span>النطاق الجغرافي</span>
+                    </button>
+                </div>
 
-                <button type="button" class="admin-nav-tab admin-nav-tab--side" data-tab-target="tabPanelUsers">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <circle cx="9" cy="8" r="3.5"></circle>
-                        <path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"></path>
-                        <circle cx="18" cy="9" r="2.5"></circle>
-                        <path d="M15.5 14.2c2.6.4 4.5 2.7 4.5 5.3"></path>
-                    </svg>
-                    <span>الحسابات</span>
-                </button>
+                <!-- قطاع 3: المستخدمين ومكافحة الغش -->
+                <div class="space-y-1">
+                    <div class="px-3 pb-1 text-[10px] font-black uppercase tracking-wider text-lux-500 flex items-center gap-1.5">
+                        <span class="w-1.5 h-1.5 rounded-full bg-blue-400"></span>
+                        <span>المستخدمين ومكافحة الغش</span>
+                    </div>
+                    <button type="button" class="admin-nav-tab admin-nav-tab--side" data-tab-target="tabPanelUsers">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4 text-blue-400">
+                            <circle cx="9" cy="8" r="3.5"></circle>
+                            <path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"></path>
+                            <circle cx="18" cy="9" r="2.5"></circle>
+                            <path d="M15.5 14.2c2.6.4 4.5 2.7 4.5 5.3"></path>
+                        </svg>
+                        <span>سجل الحسابات</span>
+                    </button>
+                    <button type="button" class="admin-nav-tab admin-nav-tab--side" data-tab-target="tabPanelBadges">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4 text-yellow-400">
+                            <path d="M12 3l2.2 4.5 5 .7-3.6 3.5.9 5-4.5-2.4-4.5 2.4.9-5-3.6-3.5 5-.7z"></path>
+                        </svg>
+                        <span>الأوسمة والشارات</span>
+                    </button>
+                </div>
 
-                <button type="button" class="admin-nav-tab admin-nav-tab--side" data-tab-target="tabPanelNotifications">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"></path>
-                        <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
-                    </svg>
-                    <span>الإشعارات</span>
-                </button>
+                <!-- قطاع 4: المحتوى والأنشطة -->
+                <div class="space-y-1">
+                    <div class="px-3 pb-1 text-[10px] font-black uppercase tracking-wider text-lux-500 flex items-center gap-1.5">
+                        <span class="w-1.5 h-1.5 rounded-full bg-purple-400"></span>
+                        <span>المحتوى والأنشطة</span>
+                    </div>
+                    <button type="button" class="admin-nav-tab admin-nav-tab--side" data-tab-target="tabPanelPosts">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4 text-purple-400">
+                            <rect x="3" y="4" width="18" height="16" rx="2"></rect>
+                            <line x1="7" y1="9" x2="17" y2="9"></line>
+                            <line x1="7" y1="13" x2="14" y2="13"></line>
+                            <path d="M7 17h4"></path>
+                        </svg>
+                        <span>المنشورات والقصص</span>
+                    </button>
+                    <button type="button" class="admin-nav-tab admin-nav-tab--side" data-tab-target="tabPanelQuestions">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4 text-indigo-400">
+                            <circle cx="12" cy="12" r="9"></circle>
+                            <path d="M9.5 9a2.5 2.5 0 0 1 4.7-1.2c.5.9.2 1.7-.6 2.4-.9.8-1.6 1.3-1.6 2.6"></path>
+                            <circle cx="12" cy="17" r="0.75" fill="currentColor" stroke="none"></circle>
+                        </svg>
+                        <span>الأسئلة اليومية</span>
+                    </button>
+                    <button type="button" class="admin-nav-tab admin-nav-tab--side" data-tab-target="tabPanelBanner">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4 text-amber-400">
+                            <rect x="3" y="5" width="18" height="14" rx="2"></rect>
+                            <circle cx="8.5" cy="10" r="1.5"></circle>
+                            <path d="M3 16l5-4 4 3 3-2.5 6 5"></path>
+                        </svg>
+                        <span>البانر الترويجي</span>
+                    </button>
+                </div>
 
-                <button type="button" class="admin-nav-tab admin-nav-tab--side" data-tab-target="tabPanelBanner">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <rect x="3" y="5" width="18" height="14" rx="2"></rect>
-                        <circle cx="8.5" cy="10" r="1.5"></circle>
-                        <path d="M3 16l5-4 4 3 3-2.5 6 5"></path>
-                    </svg>
-                    <span>البانر</span>
-                </button>
-
-                <button type="button" class="admin-nav-tab admin-nav-tab--side" data-tab-target="tabPanelPosts">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <rect x="3" y="4" width="18" height="16" rx="2"></rect>
-                        <line x1="7" y1="9" x2="17" y2="9"></line>
-                        <line x1="7" y1="13" x2="14" y2="13"></line>
-                        <path d="M7 17h4"></path>
-                    </svg>
-                    <span>المنشورات</span>
-                </button>
-
-                <button type="button" class="admin-nav-tab admin-nav-tab--side" data-tab-target="tabPanelQuestions">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <circle cx="12" cy="12" r="9"></circle>
-                        <path d="M9.5 9a2.5 2.5 0 0 1 4.7-1.2c.5.9.2 1.7-.6 2.4-.9.8-1.6 1.3-1.6 2.6"></path>
-                        <circle cx="12" cy="17" r="0.75" fill="currentColor" stroke="none"></circle>
-                    </svg>
-                    <span>الأسئلة اليومية</span>
-                </button>
-
-                <!-- المرحلة 7: الأوسمة والشارة المميزة -->
-                <button type="button" class="admin-nav-tab admin-nav-tab--side" data-tab-target="tabPanelBadges">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <path d="M12 3l2.2 4.5 5 .7-3.6 3.5.9 5-4.5-2.4-4.5 2.4.9-5-3.6-3.5 5-.7z"></path>
-                    </svg>
-                    <span>الأوسمة</span>
-                </button>
-
-                <!-- المرحلة 8: صندوق رسائل الدعم -->
-                <button type="button" class="admin-nav-tab admin-nav-tab--side" data-tab-target="tabPanelSupport">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <rect x="3" y="5" width="18" height="14" rx="2"></rect>
-                        <path d="m3 7 9 6 9-6"></path>
-                    </svg>
-                    <span>صندوق الرسائل</span>
-                </button>
+                <!-- قطاع 5: التواصل والدعم -->
+                <div class="space-y-1">
+                    <div class="px-3 pb-1 text-[10px] font-black uppercase tracking-wider text-lux-500 flex items-center gap-1.5">
+                        <span class="w-1.5 h-1.5 rounded-full bg-rose-400"></span>
+                        <span>التواصل والدعم</span>
+                    </div>
+                    <button type="button" class="admin-nav-tab admin-nav-tab--side" data-tab-target="tabPanelNotifications">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4 text-rose-400">
+                            <path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                            <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+                        </svg>
+                        <span>مركز الإشعارات</span>
+                    </button>
+                    <button type="button" class="admin-nav-tab admin-nav-tab--side" data-tab-target="tabPanelSupport">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4 text-emerald-400">
+                            <rect x="3" y="5" width="18" height="14" rx="2"></rect>
+                            <path d="m3 7 9 6 9-6"></path>
+                        </svg>
+                        <span>صندوق الدعم الفني</span>
+                    </button>
+                </div>
             </nav>
 
-            <div class="px-5 py-4 border-t border-lux-800/60">
-                <div class="console-readout" style="border-inline-start:none; padding-inline-start:0;">
-                    <span class="console-readout-label">
-                        <span class="console-live-dot"></span>أونلاين الآن
-                    </span>
-                    <span id="sidebarOnlineReadout" class="console-readout-value text-emerald-400">—</span>
+            <!-- تذييل القائمة الجانبية: مؤشر أونلاين الآن الحي -->
+            <div class="px-5 py-4 border-t border-lux-800/70 bg-lux-950/40">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                        <span class="relative flex h-2.5 w-2.5">
+                            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                            <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                        </span>
+                        <span class="text-xs font-bold text-lux-300">أونلاين الآن</span>
+                    </div>
+                    <span id="sidebarOnlineReadout" class="font-mono text-sm font-extrabold text-emerald-400 tracking-wider">—</span>
                 </div>
             </div>
         </aside>
 
         <!-- ========================================================= -->
-        <!-- منطقة المحتوى (هيدر + تابات) - بتاخد باقي المساحة جنب
-             الـ Sidebar بالديسكتوب، وكل المساحة على الموبايل -->
+        <!-- منطقة المحتوى (هيدر + تابات) -->
         <!-- ========================================================= -->
         <div class="flex-1 min-h-0 flex flex-col">
 
-        <!-- ============================================================= -->
-        <!-- هيدر الصفحة (ثابت، مش بيتحرك مع الـ Scroll) - فيه كمان صف
-             "إحصائيات سريعة" ثابت وظاهر مهما كان التاب المفتوح (إجمالي
-             الحسابات / مسجلين اليوم / أونلاين الآن) - شوف updateHeaderStats
-             في js/admin.js، بتتحدث تلقائياً مع نفس بيانات تابي الزوار
-             والحسابات من غير أي طلب إضافي لـ Supabase -->
-        <!-- ============================================================= -->
-        <header class="shrink-0 px-4 md:px-8 pt-[max(1.5rem,calc(env(safe-area-inset-top,0px)+1rem))] pb-4 border-b border-lux-800/60 space-y-4">
-            <div>
-                <h1 class="md:hidden text-xl font-black text-lux-50">لوحة تحكم الأدمن</h1>
-                <p class="text-xs md:text-sm text-lux-400 font-medium max-w-md">
-                    سِكّاوي — إدارة نطاق نزلة عبيد الجغرافي وحسابات المغتربين
-                </p>
+        <!-- هيدر الصفحة والمؤشرات السريعة -->
+        <header class="shrink-0 px-4 md:px-8 pt-[max(1.25rem,calc(env(safe-area-inset-top,0px)+0.75rem))] pb-4 border-b border-lux-800/70 space-y-3.5 bg-lux-900/30 backdrop-blur-md">
+            <div class="flex items-center justify-between gap-3">
+                <div class="flex items-center gap-3">
+                    <button type="button" id="btnAdminMobileMenu" aria-label="القائمة الشاملة" class="md:hidden w-9 h-9 rounded-xl bg-lux-800/80 border border-lux-700/80 flex items-center justify-center text-lux-300 hover:text-gold-400 transition active:scale-95 shrink-0">
+                        <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="3" y1="12" x2="21" y2="12"></line>
+                            <line x1="3" y1="6" x2="21" y2="6"></line>
+                            <line x1="3" y1="18" x2="21" y2="18"></line>
+                        </svg>
+                    </button>
+                    <div>
+                        <h1 class="text-base md:text-xl font-black text-lux-50">لوحة تحكم الأدمن</h1>
+                        <p class="text-[11px] md:text-xs text-lux-400 font-medium">
+                            سِكّاوي — إدارة القرية ونظام العمليات الإدارية
+                        </p>
+                    </div>
+                </div>
+                <div class="md:hidden flex items-center gap-1.5 shrink-0">
+                    <a href="index.html" class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl border border-lux-700/80 hover:border-gold-500/50 text-xs font-bold text-lux-300 hover:text-gold-400 bg-lux-800/60 hover:bg-lux-800 transition shadow-sm">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3.5 h-3.5"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                        <span>التطبيق</span>
+                    </a>
+                    <button type="button" id="btnAdminMobileLogout" class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl border border-rose-500/30 hover:border-rose-500/60 text-xs font-bold text-rose-300 hover:text-rose-200 bg-rose-500/10 hover:bg-rose-500/20 transition shadow-sm" title="تسجيل الخروج">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3.5 h-3.5"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>
+                        <span>خروج</span>
+                    </button>
+                </div>
             </div>
 
-            <!-- [هوية "غرفة التحكم"] شريط "قراءات" مش كروت: تسمية هادية
-                 فوق رقم كبير بخط Mono، وفاصل شعري بين كل قراءة والتانية
-                 - شوف updateHeaderStats في js/admin.js -->
-            <div class="flex items-start">
-                <div class="console-readout">
-                    <span class="console-readout-label">إجمالي الحسابات</span>
-                    <span id="headerStatTotalUsers" class="console-readout-value">—</span>
+            <!-- كروت المؤشرات السريعة KPI -->
+            <div class="grid grid-cols-3 gap-2.5 md:gap-4">
+                <div class="bg-lux-900/70 border border-lux-800/80 rounded-2xl p-3 md:p-4 flex items-center justify-between shadow-soft-card">
+                    <div>
+                        <span class="block text-[10px] md:text-xs font-bold text-lux-400">إجمالي الحسابات</span>
+                        <span id="headerStatTotalUsers" class="font-mono text-base md:text-2xl font-black text-lux-50 tabular-nums leading-tight mt-0.5 block">—</span>
+                    </div>
+                    <div class="w-9 h-9 rounded-xl bg-blue-500/10 border border-blue-500/20 hidden sm:flex items-center justify-center text-blue-400 shrink-0">
+                        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                    </div>
                 </div>
-                <div class="console-readout">
-                    <span class="console-readout-label">مسجلين اليوم</span>
-                    <span id="headerStatRegisteredToday" class="console-readout-value">—</span>
+
+                <div class="bg-lux-900/70 border border-lux-800/80 rounded-2xl p-3 md:p-4 flex items-center justify-between shadow-soft-card">
+                    <div>
+                        <span class="block text-[10px] md:text-xs font-bold text-lux-400">مسجلين اليوم</span>
+                        <span id="headerStatRegisteredToday" class="font-mono text-base md:text-2xl font-black text-gold-400 tabular-nums leading-tight mt-0.5 block">—</span>
+                    </div>
+                    <div class="w-9 h-9 rounded-xl bg-amber-500/10 border border-amber-500/20 hidden sm:flex items-center justify-center text-amber-400 shrink-0">
+                        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                    </div>
                 </div>
-                <div class="console-readout console-readout--live">
-                    <span class="console-readout-label"><span class="console-live-dot"></span>أونلاين الآن</span>
-                    <span id="headerStatOnline" class="console-readout-value">—</span>
+
+                <div class="bg-lux-900/70 border border-lux-800/80 rounded-2xl p-3 md:p-4 flex items-center justify-between shadow-soft-card">
+                    <div>
+                        <span class="text-[10px] md:text-xs font-bold text-emerald-400 flex items-center gap-1.5">
+                            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                            أونلاين الآن
+                        </span>
+                        <span id="headerStatOnline" class="font-mono text-base md:text-2xl font-black text-emerald-400 tabular-nums leading-tight mt-0.5 block">—</span>
+                    </div>
+                    <div class="w-9 h-9 rounded-xl bg-emerald-500/10 border border-emerald-500/20 hidden sm:flex items-center justify-center text-emerald-400 shrink-0">
+                        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                    </div>
                 </div>
             </div>
         </header>
 
-        <!-- ============================================================= -->
-        <!-- منطقة المحتوى - تاب واحد بس ظاهر في المرة الواحدة (شوف
-             .admin-tab-panel + hidden في js/admin.js)، وهي دي بس اللي
-             بتعمل Scroll لو محتواها طويل (زي قائمة حسابات كتير) -->
-        <!-- ============================================================= -->
+        <!-- منطقة المحتوى -->
         <main class="flex-1 min-h-0 overflow-y-auto px-4 md:px-8 py-5 md:py-7">
-        <div class="md:max-w-3xl space-y-4">
+        <div class="max-w-6xl mx-auto w-full space-y-6">
 
             <!-- ------------------------------------------------------- -->
             <!-- تاب 1: الزوار والمستخدمين النشطين (المرحلة 1)
@@ -539,20 +700,22 @@
                         </p>
                     </div>
 
-                    <!-- كروت إحصائيات اليوم + الإجمالي - حدود شعرية بدل
-                         خلفية مقفولة، والذهبي محجوز لـ"إجمالي كل الوقت"
-                         بس (أهم رقم هنا) عشان يفضل له معنى مميز -->
-                    <div class="grid grid-cols-3 gap-2">
-                        <div class="border border-lux-800/70 rounded-xl p-3 text-center">
+                    <!-- كروت إحصائيات اليوم + الإجمالي - زوار اليوم (مسجلين + عابرين أقاموا أكثر من 30 ثانية) مميز بالذهبي -->
+                    <div class="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
+                        <div class="border-2 border-gold-500/50 bg-gradient-to-b from-gold-500/10 to-transparent rounded-xl p-3.5 text-center shadow-sm">
+                            <div id="visitorsTodayTotal" class="text-2xl font-mono font-black tabular-nums text-gold-400">—</div>
+                            <div class="text-[0.7rem] font-bold text-lux-200 mt-1">إجمالي زوار اليوم (>30 ثانية)</div>
+                        </div>
+                        <div class="border border-lux-800/70 bg-lux-950/40 rounded-xl p-3.5 text-center">
                             <div id="visitorsTodayRegistered" class="text-xl font-mono font-bold tabular-nums text-lux-50">—</div>
-                            <div class="text-[0.65rem] font-bold text-lux-500 mt-1">مسجلين اليوم</div>
+                            <div class="text-[0.65rem] font-bold text-lux-500 mt-1">مستخدمين مسجلين اليوم</div>
                         </div>
-                        <div class="border border-lux-800/70 rounded-xl p-3 text-center">
+                        <div class="border border-lux-800/70 bg-lux-950/40 rounded-xl p-3.5 text-center">
                             <div id="visitorsTodayGuests" class="text-xl font-mono font-bold tabular-nums text-lux-50">—</div>
-                            <div class="text-[0.65rem] font-bold text-lux-500 mt-1">عابرين اليوم</div>
+                            <div class="text-[0.65rem] font-bold text-lux-500 mt-1">زائرين عابرين اليوم</div>
                         </div>
-                        <div class="border border-gold-500/25 rounded-xl p-3 text-center">
-                            <div id="visitorsAllTimeTotal" class="text-xl font-mono font-bold tabular-nums text-gold-400">—</div>
+                        <div class="border border-lux-800/70 bg-lux-950/40 rounded-xl p-3.5 text-center">
+                            <div id="visitorsAllTimeTotal" class="text-xl font-mono font-bold tabular-nums text-lux-300">—</div>
                             <div class="text-[0.65rem] font-bold text-lux-500 mt-1">إجمالي كل الوقت</div>
                         </div>
                     </div>
@@ -567,6 +730,51 @@
 
                     <p id="visitorsStatus" class="admin-status-text" role="status" aria-live="polite"></p>
 
+                </section>
+
+                <!-- تحليلات الحركة المتقدمة وساعات الذروة -->
+                <section class="admin-card bg-lux-900/40 rounded-2xl p-5 md:p-6 border border-lux-800/70 space-y-5">
+                    <div>
+                        <h2 class="text-sm font-extrabold text-lux-50">ساعات الذروة وحركة المشي</h2>
+                        <p class="text-xs text-lux-400 font-medium mt-0.5">
+                            توزيع حركة مستخدمي التطبيق عبر ساعات اليوم (آخر 30 يوماً بتوقيت القاهرة)
+                        </p>
+                    </div>
+
+                    <div id="visitorsPeakHoursContainer" class="w-full min-h-[90px] flex items-end gap-1 pt-3 pb-1 overflow-x-auto">
+                        <!-- يتم حقن أعمدة الساعات ديناميكياً من admin.js -->
+                    </div>
+
+                    <div class="border-t border-lux-800/60 pt-4 space-y-3">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <h3 class="text-xs font-bold text-lux-200">حالة نشاط المستخدمين</h3>
+                                <p class="text-[11px] text-lux-400 font-medium">متابعة الحسابات النشطة ومكافحة الخمول</p>
+                            </div>
+                            <button type="button" id="btnOpenNotifyInactiveModal" class="px-3 py-1.5 rounded-lg bg-lux-800 hover:bg-lux-700 text-gold-400 text-xs font-bold border border-gold-500/30 transition">
+                                إشعار الحسابات الخاملة
+                            </button>
+                        </div>
+
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
+                            <div class="border border-lux-800 rounded-xl p-2.5 text-center">
+                                <div id="segActiveToday" class="text-lg font-mono font-bold text-emerald-400">—</div>
+                                <div class="text-[10px] font-bold text-lux-400 mt-0.5">نشط اليوم</div>
+                            </div>
+                            <div class="border border-lux-800 rounded-xl p-2.5 text-center">
+                                <div id="segActiveWeek" class="text-lg font-mono font-bold text-teal-300">—</div>
+                                <div class="text-[10px] font-bold text-lux-400 mt-0.5">نشط هذا الأسبوع</div>
+                            </div>
+                            <div class="border border-lux-800 rounded-xl p-2.5 text-center">
+                                <div id="segInactive7d" class="text-lg font-mono font-bold text-amber-400">—</div>
+                                <div class="text-[10px] font-bold text-lux-400 mt-0.5">خامل (+7 أيام)</div>
+                            </div>
+                            <div class="border border-lux-800 rounded-xl p-2.5 text-center">
+                                <div id="segInactive30d" class="text-lg font-mono font-bold text-rose-400">—</div>
+                                <div class="text-[10px] font-bold text-lux-400 mt-0.5">خامل (+30 يوماً)</div>
+                            </div>
+                        </div>
+                    </div>
                 </section>
 
             </section>
@@ -678,7 +886,7 @@
                          userSortMode في js/admin.js -->
                     <div id="userSortControls" class="flex items-center gap-1.5 overflow-x-auto pb-0.5">
                         <button type="button" class="admin-sort-chip is-active" data-sort-mode="active">
-                            🟢 الأونلاين أولاً
+                             الأونلاين أولاً
                         </button>
                         <button type="button" class="admin-sort-chip" data-sort-mode="recent">
                             الأحدث نشاطاً
@@ -756,7 +964,7 @@
                         <div id="notifyRecipientSelectedChip" class="admin-notify-selected-chip hidden">
                             <img id="notifyRecipientSelectedAvatar" class="admin-user-avatar" src="" alt="" loading="lazy">
                             <span id="notifyRecipientSelectedName" class="flex-1 min-w-0"></span>
-                            <button type="button" id="notifyRecipientClearBtn" class="admin-notify-clear-btn" aria-label="إلغاء اختيار المستخدم">✕</button>
+                            <button type="button" id="notifyRecipientClearBtn" class="admin-notify-clear-btn" aria-label="إلغاء اختيار المستخدم">x</button>
                         </div>
                     </div>
 
@@ -828,7 +1036,7 @@
                                 <span id="bannerUploadBtnLabel">ارفع صورة</span>
                             </button>
                             <button type="button" id="bannerRemoveImageBtn" class="admin-notify-clear-btn admin-notify-clear-btn--wide hidden">
-                                ✕ إزالة الصورة
+                                x إزالة الصورة
                             </button>
                             <input type="file" id="bannerImageInput" accept="image/*" class="hidden">
                         </div>
@@ -911,6 +1119,18 @@
             <!-- ------------------------------------------------------- -->
             <section id="tabPanelPosts" class="admin-tab-panel hidden space-y-4">
 
+                <!-- أزرار التبديل بين المنشورات والقصص -->
+                <div class="flex items-center gap-2 border-b border-lux-800 pb-3">
+                    <button type="button" id="btnSubTabPostsView" class="px-4 py-2 rounded-xl text-xs font-bold bg-lux-800 text-gold-400 border border-gold-500/30 transition">
+                        المنشورات وهويتها
+                    </button>
+                    <button type="button" id="btnSubTabStoriesView" class="px-4 py-2 rounded-xl text-xs font-bold bg-lux-950 text-lux-400 border border-lux-800 hover:text-lux-200 transition">
+                        القصص والستوريز (Stories)
+                    </button>
+                </div>
+
+                <div id="subTabPostsContainer" class="space-y-4">
+
                 <!-- ----------------------------------------------------- -->
                 <!-- هوية "سِكّاوي" القابلة للتحكم - اسم + صورة قابلين
                      للتعديل بدل النص/الحرف الثابتين في هيدر كل كارت
@@ -947,7 +1167,7 @@
                                 <span>ارفع صورة</span>
                             </button>
                             <button type="button" id="identityRemoveAvatarBtn" class="admin-notify-clear-btn admin-notify-clear-btn--wide hidden">
-                                ✕ إزالة الصورة
+                                x إزالة الصورة
                             </button>
                             <input type="file" id="identityImageInput" accept="image/*" class="hidden">
                         </div>
@@ -1026,7 +1246,7 @@
                                 <span id="postImageUploadBtnLabel">ارفع صورة</span>
                             </button>
                             <button type="button" id="postRemoveImageBtn" class="admin-notify-clear-btn admin-notify-clear-btn--wide hidden">
-                                ✕ إزالة الصورة
+                                x إزالة الصورة
                             </button>
                             <input type="file" id="postImageInput" accept="image/*" class="hidden">
                         </div>
@@ -1065,6 +1285,29 @@
                     <ul id="postsManageList" class="space-y-2"></ul>
 
                 </section>
+
+                </div>
+
+                <!-- حاوية إدارة القصص والستوريز -->
+                <div id="subTabStoriesContainer" class="hidden space-y-4">
+                    <section class="admin-card bg-lux-900/40 rounded-2xl p-5 md:p-6 border border-lux-800/70 space-y-4">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <h2 class="text-sm font-extrabold text-lux-50">إدارة ومراقبة القصص (Stories Moderation)</h2>
+                                <p class="text-xs text-lux-400 font-medium mt-0.5">
+                                    جميع القصص النشطة حالياً المنشورة بواسطة المستخدمين (تختفي تلقائياً بعد 24 ساعة)
+                                </p>
+                            </div>
+                            <button type="button" id="btnRefreshAdminStories" class="px-3 py-1.5 rounded-lg bg-lux-800 hover:bg-lux-700 text-lux-200 text-xs font-bold border border-lux-700 transition">
+                                تحديث القصص
+                            </button>
+                        </div>
+                        <p id="adminStoriesStatus" class="admin-status-text" role="status" aria-live="polite"></p>
+                        <div id="adminStoriesListContainer" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                            <!-- يتم ملؤها ديناميكياً من admin.js -->
+                        </div>
+                    </section>
+                </div>
 
             </section>
 
@@ -1120,6 +1363,11 @@
                                 <option value="hard">صعب</option>
                             </select>
                         </div>
+                    </div>
+
+                    <div class="space-y-1.5">
+                        <label class="text-[0.7rem] font-bold text-lux-400" for="questionScheduledDateInput">جدولة ليوم محدد (اختياري - اتركه فارغاً للاختيار التلقائي اليومي)</label>
+                        <input type="date" id="questionScheduledDateInput" class="admin-text-input w-full">
                     </div>
 
                     <!-- 4 اختيارات - كل واحد فيه حقل نص + راديو لتحديد
@@ -1387,7 +1635,7 @@
                         <div id="badgesUserSelectedChip" class="admin-notify-selected-chip hidden">
                             <img id="badgesUserSelectedAvatar" class="admin-user-avatar" src="" alt="" loading="lazy">
                             <span id="badgesUserSelectedName" class="flex-1 min-w-0"></span>
-                            <button type="button" id="badgesUserClearBtn" class="admin-notify-clear-btn" aria-label="إلغاء اختيار المستخدم">✕</button>
+                            <button type="button" id="badgesUserClearBtn" class="admin-notify-clear-btn" aria-label="إلغاء اختيار المستخدم">x</button>
                         </div>
                     </div>
 
@@ -1463,18 +1711,327 @@
 
             </section>
 
+            <!-- ------------------------------------------------------- -->
+            <!-- تاب 10: التحكم الشامل والصيانة (Master Controls) -->
+            <!-- ------------------------------------------------------- -->
+            <section id="tabPanelMaster" class="admin-tab-panel hidden space-y-5">
+
+                <!-- 1. وضع الصيانة وقفل التطبيق -->
+                <div class="admin-card bg-lux-900/40 rounded-2xl p-5 md:p-6 border border-lux-800/70 space-y-4">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h2 class="text-sm font-extrabold text-lux-50">وضع الصيانة وقفل التطبيق (Kill Switch)</h2>
+                            <p class="text-xs text-lux-400 font-medium mt-0.5">
+                                إغلاق التطبيق أمام الجميع فوراً مع استثناء حساب الأدمن للتجربة
+                            </p>
+                        </div>
+                        <label class="admin-toggle-switch" for="masterMaintenanceToggle">
+                            <input type="checkbox" id="masterMaintenanceToggle">
+                            <span class="admin-toggle-switch-track"></span>
+                            <span class="admin-toggle-switch-thumb"></span>
+                        </label>
+                    </div>
+
+                    <div class="space-y-3">
+                        <div>
+                            <label for="masterMaintenanceMsg" class="block text-xs font-bold text-lux-300 mb-1">رسالة الصيانة للمستخدمين</label>
+                            <input type="text" id="masterMaintenanceMsg" class="w-full bg-lux-950 border border-lux-800 rounded-xl px-3.5 py-2.5 text-xs text-lux-100 placeholder-lux-600 focus:outline-none focus:border-gold-500/50" placeholder="التطبيق في وضع الصيانة المؤقتة، سنعود قريباً.">
+                        </div>
+                        <div>
+                            <label for="masterMaintenanceEndTime" class="block text-xs font-bold text-lux-300 mb-1">وقت الانتهاء التقريبي (اختياري)</label>
+                            <input type="datetime-local" id="masterMaintenanceEndTime" class="w-full bg-lux-950 border border-lux-800 rounded-xl px-3.5 py-2.5 text-xs text-lux-100 focus:outline-none focus:border-gold-500/50">
+                        </div>
+                        <div class="flex justify-end">
+                            <button type="button" id="btnSaveMaintenanceSettings" class="px-4 py-2 rounded-xl bg-gold-500 hover:bg-gold-400 text-lux-950 text-xs font-bold transition">
+                                حفظ وضع الصيانة
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 2. إدارة التحديثات والإجبار على التحديث -->
+                <div class="admin-card bg-lux-900/40 rounded-2xl p-5 md:p-6 border border-lux-800/70 space-y-4">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h2 class="text-sm font-extrabold text-lux-50">الإجبار على التحديث (Force App Update)</h2>
+                            <p class="text-xs text-lux-400 font-medium mt-0.5">
+                                منع تشغيل النسخ القديمة وتوجيه المستخدم لتنزيل أحدث APK
+                            </p>
+                        </div>
+                        <label class="admin-toggle-switch" for="masterForceUpdateToggle">
+                            <input type="checkbox" id="masterForceUpdateToggle">
+                            <span class="admin-toggle-switch-track"></span>
+                            <span class="admin-toggle-switch-thumb"></span>
+                        </label>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div>
+                            <label for="masterMinVersion" class="block text-xs font-bold text-lux-300 mb-1">الحد الأدنى للنسخة المسموح بها</label>
+                            <input type="text" id="masterMinVersion" class="w-full bg-lux-950 border border-lux-800 rounded-xl px-3.5 py-2 text-xs text-lux-100 font-mono" placeholder="1.0.0">
+                        </div>
+                        <div>
+                            <label for="masterLatestVersion" class="block text-xs font-bold text-lux-300 mb-1">رقم أحدث نسخة متوفرة</label>
+                            <input type="text" id="masterLatestVersion" class="w-full bg-lux-950 border border-lux-800 rounded-xl px-3.5 py-2 text-xs text-lux-100 font-mono" placeholder="1.0.1">
+                        </div>
+                    </div>
+                    <div>
+                        <label for="masterForceUpdateUrl" class="block text-xs font-bold text-lux-300 mb-1">رابط تحميل التحديث (APK Link)</label>
+                        <input type="url" id="masterForceUpdateUrl" class="w-full bg-lux-950 border border-lux-800 rounded-xl px-3.5 py-2 text-xs text-lux-100 font-mono" placeholder="https://...">
+                    </div>
+                    <div>
+                        <label for="masterForceUpdateMsg" class="block text-xs font-bold text-lux-300 mb-1">رسالة التحديث للمستخدم</label>
+                        <input type="text" id="masterForceUpdateMsg" class="w-full bg-lux-950 border border-lux-800 rounded-xl px-3.5 py-2 text-xs text-lux-100" placeholder="يرجى تحديث التطبيق إلى أحدث إصدار للمتابعة والاستفادة من الميزات الجديدة.">
+                    </div>
+                    <div class="flex justify-end">
+                        <button type="button" id="btnSaveForceUpdateSettings" class="px-4 py-2 rounded-xl bg-gold-500 hover:bg-gold-400 text-lux-950 text-xs font-bold transition">
+                            حفظ إعدادات التحديث
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 3. مضاعفة النقاط والفعاليات (Double XP) -->
+                <div class="admin-card bg-lux-900/40 rounded-2xl p-5 md:p-6 border border-lux-800/70 space-y-4">
+                    <div>
+                        <h2 class="text-sm font-extrabold text-lux-50">مضاعف النقاط والفعاليات (Points Multiplier)</h2>
+                        <p class="text-xs text-lux-400 font-medium mt-0.5">
+                            مضاعفة نقاط الخطوات والأسئلة لجميع المستخدمين في المناسبات
+                        </p>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <div>
+                            <label for="masterPointsMultiplier" class="block text-xs font-bold text-lux-300 mb-1">قيمة المضاعف</label>
+                            <select id="masterPointsMultiplier" class="w-full bg-lux-950 border border-lux-800 rounded-xl px-3.5 py-2 text-xs text-lux-100 font-bold focus:outline-none">
+                                <option value="1.0">1x (عادي بدون مضاعفة)</option>
+                                <option value="1.5">1.5x (تنشيط 50%+)</option>
+                                <option value="2.0">2x (مضاعفة كاملة)</option>
+                                <option value="3.0">3x (حارق)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="masterPointsMultiplierTitle" class="block text-xs font-bold text-lux-300 mb-1">عنوان الفعالية</label>
+                            <input type="text" id="masterPointsMultiplierTitle" class="w-full bg-lux-950 border border-lux-800 rounded-xl px-3.5 py-2 text-xs text-lux-100" placeholder="مضاعفة نقاط عطلة نهاية الأسبوع">
+                        </div>
+                        <div>
+                            <label for="masterPointsMultiplierExpiry" class="block text-xs font-bold text-lux-300 mb-1">تاريخ انتهاء الفعالية (اختياري)</label>
+                            <input type="datetime-local" id="masterPointsMultiplierExpiry" class="w-full bg-lux-950 border border-lux-800 rounded-xl px-3.5 py-2 text-xs text-lux-100">
+                        </div>
+                    </div>
+                    <div class="flex justify-end">
+                        <button type="button" id="btnSavePointsMultiplier" class="px-4 py-2 rounded-xl bg-gold-500 hover:bg-gold-400 text-lux-950 text-xs font-bold transition">
+                            حفظ وتفعيل مضاعف النقاط
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 4. مفاتيح الميزات (Feature Flags) -->
+                <div class="admin-card bg-lux-900/40 rounded-2xl p-5 md:p-6 border border-lux-800/70 space-y-4">
+                    <div>
+                        <h2 class="text-sm font-extrabold text-lux-50">مفاتيح تشغيل وإيقاف الميزات (Feature Flags)</h2>
+                        <p class="text-xs text-lux-400 font-medium mt-0.5">
+                            تشغيل أو تعطيل أي جزء في التطبيق فوراً بدون كود
+                        </p>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div class="flex items-center justify-between p-3 rounded-xl bg-lux-950 border border-lux-800">
+                            <span class="text-xs font-bold text-lux-200">القصص (Stories)</span>
+                            <label class="admin-toggle-switch" for="flagStories">
+                                <input type="checkbox" id="flagStories" checked>
+                                <span class="admin-toggle-switch-track"></span>
+                                <span class="admin-toggle-switch-thumb"></span>
+                            </label>
+                        </div>
+                        <div class="flex items-center justify-between p-3 rounded-xl bg-lux-950 border border-lux-800">
+                            <span class="text-xs font-bold text-lux-200">إضافة المنشورات (Posts)</span>
+                            <label class="admin-toggle-switch" for="flagPosts">
+                                <input type="checkbox" id="flagPosts" checked>
+                                <span class="admin-toggle-switch-track"></span>
+                                <span class="admin-toggle-switch-thumb"></span>
+                            </label>
+                        </div>
+                        <div class="flex items-center justify-between p-3 rounded-xl bg-lux-950 border border-lux-800">
+                            <span class="text-xs font-bold text-lux-200">التعليقات (Comments)</span>
+                            <label class="admin-toggle-switch" for="flagComments">
+                                <input type="checkbox" id="flagComments" checked>
+                                <span class="admin-toggle-switch-track"></span>
+                                <span class="admin-toggle-switch-thumb"></span>
+                            </label>
+                        </div>
+                        <div class="flex items-center justify-between p-3 rounded-xl bg-lux-950 border border-lux-800">
+                            <span class="text-xs font-bold text-lux-200">شات الدعم الفني للمغتربين</span>
+                            <label class="admin-toggle-switch" for="flagSupportChat">
+                                <input type="checkbox" id="flagSupportChat" checked>
+                                <span class="admin-toggle-switch-track"></span>
+                                <span class="admin-toggle-switch-thumb"></span>
+                            </label>
+                        </div>
+                        <div class="flex items-center justify-between p-3 rounded-xl bg-lux-950 border border-lux-800">
+                            <span class="text-xs font-bold text-lux-200">السؤال اليومي (Daily Quiz)</span>
+                            <label class="admin-toggle-switch" for="flagDailyQuestion">
+                                <input type="checkbox" id="flagDailyQuestion" checked>
+                                <span class="admin-toggle-switch-track"></span>
+                                <span class="admin-toggle-switch-thumb"></span>
+                            </label>
+                        </div>
+                        <div class="flex items-center justify-between p-3 rounded-xl bg-lux-950 border border-lux-800">
+                            <span class="text-xs font-bold text-lux-200">لوحة المتصدرين (Leaderboard)</span>
+                            <label class="admin-toggle-switch" for="flagLeaderboard">
+                                <input type="checkbox" id="flagLeaderboard" checked>
+                                <span class="admin-toggle-switch-track"></span>
+                                <span class="admin-toggle-switch-thumb"></span>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="flex justify-end">
+                        <button type="button" id="btnSaveFeatureFlags" class="px-4 py-2 rounded-xl bg-gold-500 hover:bg-gold-400 text-lux-950 text-xs font-bold transition">
+                            حفظ مفاتيح الميزات
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 5. الإعلان المنبثق العام -->
+                <div class="admin-card bg-lux-900/40 rounded-2xl p-5 md:p-6 border border-lux-800/70 space-y-4">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h2 class="text-sm font-extrabold text-lux-50">الإعلان المنبثق العام (In-App Announcement)</h2>
+                            <p class="text-xs text-lux-400 font-medium mt-0.5">
+                                نافذة منبثقة تظهر مرة واحدة لكل مستخدم فور فتح التطبيق
+                            </p>
+                        </div>
+                        <label class="admin-toggle-switch" for="masterAnnouncementToggle">
+                            <input type="checkbox" id="masterAnnouncementToggle">
+                            <span class="admin-toggle-switch-track"></span>
+                            <span class="admin-toggle-switch-thumb"></span>
+                        </label>
+                    </div>
+
+                    <div class="space-y-3">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div>
+                                <label for="masterAnnouncementId" class="block text-xs font-bold text-lux-300 mb-1">معرّف الإعلان (تغييره يعيد إظهاره للجميع)</label>
+                                <input type="text" id="masterAnnouncementId" class="w-full bg-lux-950 border border-lux-800 rounded-xl px-3.5 py-2 text-xs text-lux-100 font-mono" placeholder="announcement_1">
+                            </div>
+                            <div>
+                                <label for="masterAnnouncementTitle" class="block text-xs font-bold text-lux-300 mb-1">عنوان الإعلان</label>
+                                <input type="text" id="masterAnnouncementTitle" class="w-full bg-lux-950 border border-lux-800 rounded-xl px-3.5 py-2 text-xs text-lux-100" placeholder="بطل الشهر في نزلة عبيد">
+                            </div>
+                        </div>
+                        <div>
+                            <label for="masterAnnouncementBody" class="block text-xs font-bold text-lux-300 mb-1">نص الإعلان</label>
+                            <textarea id="masterAnnouncementBody" rows="3" class="w-full bg-lux-950 border border-lux-800 rounded-xl px-3.5 py-2 text-xs text-lux-100 focus:outline-none focus:border-gold-500/50" placeholder="اكتب تفاصيل الإعلان هنا..."></textarea>
+                        </div>
+                        <!-- صورة الإعلان: رفع من الجهاز أو رابط مباشر -->
+                        <div class="space-y-2 p-3.5 rounded-xl bg-lux-950/60 border border-lux-800">
+                            <label class="block text-xs font-bold text-lux-300">صورة الإعلان (اختياري)</label>
+                            <div class="flex items-center gap-2.5 flex-wrap">
+                                <button type="button" id="btnUploadAnnouncementImage" class="px-3.5 py-2 rounded-xl bg-lux-850 hover:bg-lux-700 text-lux-100 text-xs font-bold border border-lux-700 inline-flex items-center gap-2 transition">
+                                    <svg class="w-4 h-4 text-gold-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M12 16V4"></path>
+                                        <path d="M6 10l6-6 6 6"></path>
+                                        <path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"></path>
+                                    </svg>
+                                    <span>اختيار صورة من جهازك</span>
+                                </button>
+                                <input type="file" id="announcementFileInput" accept="image/*" class="hidden">
+                                <button type="button" id="btnRemoveAnnouncementImage" class="text-xs text-rose-400 hover:text-rose-300 font-bold px-2 py-1 rounded hidden transition">
+                                    إزالة الصورة
+                                </button>
+                                <span id="announcementUploadStatus" class="text-xs text-lux-400"></span>
+                            </div>
+
+                            <!-- معاينة حية للصورة -->
+                            <div id="announcementPreviewContainer" class="hidden mt-2 p-2 rounded-xl bg-lux-900 border border-lux-800 max-w-sm">
+                                <img id="announcementPreviewImg" src="" alt="معاينة صورة الإعلان" class="max-h-44 w-full rounded-lg object-contain bg-lux-950/50">
+                            </div>
+
+                            <div>
+                                <label for="masterAnnouncementImage" class="block text-[11px] font-medium text-lux-500 mb-1">أو رابط صورة مباشر:</label>
+                                <input type="url" id="masterAnnouncementImage" class="w-full bg-lux-950 border border-lux-800 rounded-xl px-3.5 py-2 text-xs text-lux-100 font-mono" placeholder="https://...">
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div>
+                                <label for="masterAnnouncementBtnText" class="block text-xs font-bold text-lux-300 mb-1">نص الزرار</label>
+                                <input type="text" id="masterAnnouncementBtnText" class="w-full bg-lux-950 border border-lux-800 rounded-xl px-3.5 py-2 text-xs text-lux-100" placeholder="حسناً">
+                            </div>
+                            <div>
+                                <label for="masterAnnouncementBtnUrl" class="block text-xs font-bold text-lux-300 mb-1">رابط الزرار (اختياري)</label>
+                                <input type="url" id="masterAnnouncementBtnUrl" class="w-full bg-lux-950 border border-lux-800 rounded-xl px-3.5 py-2 text-xs text-lux-100 font-mono" placeholder="https://...">
+                            </div>
+                        </div>
+                        <div class="flex justify-end">
+                            <button type="button" id="btnSaveAnnouncement" class="px-4 py-2 rounded-xl bg-gold-500 hover:bg-gold-400 text-lux-950 text-xs font-bold transition">
+                                حفظ ونشر الإعلان
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 6. فلتر الكلمات المحظورة -->
+                <div class="admin-card bg-lux-900/40 rounded-2xl p-5 md:p-6 border border-lux-800/70 space-y-4">
+                    <div>
+                        <h2 class="text-sm font-extrabold text-lux-50">فلتر الكلمات المحظورة (Profanity Filter)</h2>
+                        <p class="text-xs text-lux-400 font-medium mt-0.5">
+                            أي كلمة هنا تُرفض تلقائياً عند كتابتها في المنشورات أو التعليقات أو أسماء البروفايل
+                        </p>
+                    </div>
+
+                    <div class="flex gap-2">
+                        <input type="text" id="profanityNewWordInput" class="flex-1 bg-lux-950 border border-lux-800 rounded-xl px-3.5 py-2 text-xs text-lux-100 placeholder-lux-600 focus:outline-none" placeholder="اكتب كلمة واضغط إضافة...">
+                        <button type="button" id="btnAddProfanityWord" class="px-4 py-2 rounded-xl bg-lux-800 hover:bg-lux-700 text-lux-100 text-xs font-bold border border-lux-700 transition">
+                            إضافة
+                        </button>
+                    </div>
+
+                    <div id="profanityWordsTagsContainer" class="flex flex-wrap gap-1.5 min-h-[2.5rem] p-3 rounded-xl bg-lux-950 border border-lux-800/80"></div>
+
+                    <div class="flex justify-end">
+                        <button type="button" id="btnSaveProfanityWords" class="px-4 py-2 rounded-xl bg-gold-500 hover:bg-gold-400 text-lux-950 text-xs font-bold transition">
+                            حفظ قائمة الكلمات
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 7. إدارة البطولات والتتويج اليدوي -->
+                <div class="admin-card bg-lux-900/40 rounded-2xl p-5 md:p-6 border border-lux-800/70 space-y-4">
+                    <div>
+                        <h2 class="text-sm font-extrabold text-lux-50">إدارة البطولات والتتويج اليدوي (Championships)</h2>
+                        <p class="text-xs text-lux-400 font-medium mt-0.5">
+                            إعادة احتساب وإغلاق البطولات وتتويج الأبطال يدوياً في أي وقت
+                        </p>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <button type="button" id="btnTriggerDailyReset" class="p-3.5 rounded-xl border border-lux-800 bg-lux-950 hover:border-gold-500/40 text-right space-y-1 transition active:scale-95">
+                            <div class="text-xs font-bold text-lux-100">إغلاق وتتويج بطولة اليوم</div>
+                            <div class="text-[11px] text-lux-400 font-medium">تتويج بطل اليوم وتصفير العداد لليوم الجديد</div>
+                        </button>
+
+                        <button type="button" id="btnTriggerWeeklyReset" class="p-3.5 rounded-xl border border-lux-800 bg-lux-950 hover:border-gold-500/40 text-right space-y-1 transition active:scale-95">
+                            <div class="text-xs font-bold text-lux-100">إغلاق وتتويج بطولة الأسبوع</div>
+                            <div class="text-[11px] text-lux-400 font-medium">منح وسام بطل الأسبوع وتصفير عداد الأسبوع</div>
+                        </button>
+
+                        <button type="button" id="btnTriggerMonthlyReset" class="p-3.5 rounded-xl border border-lux-800 bg-lux-950 hover:border-gold-500/40 text-right space-y-1 transition active:scale-95">
+                            <div class="text-xs font-bold text-lux-100">إغلاق وتتويج بطولة الشهر</div>
+                            <div class="text-[11px] text-lux-400 font-medium">منح وسام بطل الشهر التاريخي وتصفير الشهر</div>
+                        </button>
+                    </div>
+                </div>
+
+            </section>
+
         </div>
         </main>
 
-        <!-- ============================================================= -->
-        <!-- شريط التنقل السفلي الثابت - موبايل بس (md:hidden) - على
-             الديسكتوب التنقل بقى من الـ Sidebar على اليمين بدل منه -
-             شوف initAdminTabNavigation في js/admin.js -->
-        <!-- ============================================================= -->
-        <nav class="md:hidden shrink-0 border-t border-lux-800/60 bg-lux-900/80 backdrop-blur-xl px-2 py-2 flex items-center justify-around">
+        <!-- شريط التنقل السفلي الذكي للموبايل -->
+        <nav class="md:hidden shrink-0 border-t border-lux-800/80 bg-lux-900/95 backdrop-blur-2xl px-2 py-1.5 flex items-center justify-around gap-1 z-30 shadow-lg">
 
             <button type="button" class="admin-nav-tab is-active" data-tab-target="tabPanelVisitors">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                     <rect x="4" y="12" width="4" height="8" rx="1"></rect>
                     <rect x="10" y="7" width="4" height="13" rx="1"></rect>
                     <rect x="16" y="3" width="4" height="17" rx="1"></rect>
@@ -1482,43 +2039,26 @@
                 <span>الزوار</span>
             </button>
 
-            <button type="button" class="admin-nav-tab" data-tab-target="tabPanelGeofence">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <circle cx="12" cy="9" r="4"></circle>
-                    <path d="M12 21c4-4.5 7-8.5 7-12a7 7 0 1 0-14 0c0 3.5 3 7.5 7 12z"></path>
+            <button type="button" class="admin-nav-tab" data-tab-target="tabPanelMaster">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>
+                    <circle cx="12" cy="12" r="3"/>
                 </svg>
-                <span>النطاق</span>
+                <span>التحكم</span>
             </button>
 
             <button type="button" class="admin-nav-tab" data-tab-target="tabPanelUsers">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                     <circle cx="9" cy="8" r="3.5"></circle>
                     <path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"></path>
                     <circle cx="18" cy="9" r="2.5"></circle>
                     <path d="M15.5 14.2c2.6.4 4.5 2.7 4.5 5.3"></path>
                 </svg>
-                <span>المستخدمين</span>
-            </button>
-
-            <button type="button" class="admin-nav-tab" data-tab-target="tabPanelNotifications">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"></path>
-                    <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
-                </svg>
-                <span>الإشعارات</span>
-            </button>
-
-            <button type="button" class="admin-nav-tab" data-tab-target="tabPanelBanner">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <rect x="3" y="5" width="18" height="14" rx="2"></rect>
-                    <circle cx="8.5" cy="10" r="1.5"></circle>
-                    <path d="M3 16l5-4 4 3 3-2.5 6 5"></path>
-                </svg>
-                <span>البانر</span>
+                <span>الحسابات</span>
             </button>
 
             <button type="button" class="admin-nav-tab" data-tab-target="tabPanelPosts">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                     <rect x="3" y="4" width="18" height="16" rx="2"></rect>
                     <line x1="7" y1="9" x2="17" y2="9"></line>
                     <line x1="7" y1="13" x2="14" y2="13"></line>
@@ -1527,28 +2067,13 @@
                 <span>المنشورات</span>
             </button>
 
-            <button type="button" class="admin-nav-tab" data-tab-target="tabPanelQuestions">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <circle cx="12" cy="12" r="9"></circle>
-                    <path d="M9.5 9a2.5 2.5 0 0 1 4.7-1.2c.5.9.2 1.7-.6 2.4-.9.8-1.6 1.3-1.6 2.6"></path>
-                    <circle cx="12" cy="17" r="0.75" fill="currentColor" stroke="none"></circle>
+            <button type="button" id="btnAdminMobileMoreDrawer" class="admin-nav-tab text-lux-400">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <circle cx="12" cy="12" r="1.5"></circle>
+                    <circle cx="19" cy="12" r="1.5"></circle>
+                    <circle cx="5" cy="12" r="1.5"></circle>
                 </svg>
-                <span>الأسئلة</span>
-            </button>
-
-            <button type="button" class="admin-nav-tab" data-tab-target="tabPanelBadges">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <path d="M12 3l2.2 4.5 5 .7-3.6 3.5.9 5-4.5-2.4-4.5 2.4.9-5-3.6-3.5 5-.7z"></path>
-                </svg>
-                <span>الأوسمة</span>
-            </button>
-
-            <button type="button" class="admin-nav-tab" data-tab-target="tabPanelSupport">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <rect x="3" y="5" width="18" height="14" rx="2"></rect>
-                    <path d="m3 7 9 6 9-6"></path>
-                </svg>
-                <span>الرسائل</span>
+                <span>المزيد</span>
             </button>
 
         </nav>
@@ -1557,13 +2082,247 @@
 
     </div>
 
-    <!-- مكتبة Supabase نفسها من الـ CDN - لازم تتحط قبل js/supabase-config.js
-         عشان window.supabase يتعرّف قبل ما الملف ده يحاول يستخدمه (نفس
-         السطر الموجود في index.html بالظبط - كان ناقص من admin.html
-         الأصلي، وده سبب ظهور الصفحة فاضية مع خطأ "window.supabase is
-         undefined" في الكونسول) -->
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.2/cropper.min.js"></script>
+    <!-- ============================================================= -->
+    <!-- دروج التنقل الشامل المصنف للموبايل (Mobile Categorized Navigation Drawer) -->
+    <!-- ============================================================= -->
+    <div id="adminMobileDrawer" class="hidden fixed inset-0 z-[100] bg-lux-950/80 backdrop-blur-md flex flex-col justify-end">
+        <div class="bg-lux-900 border-t border-gold-500/20 rounded-t-3xl max-h-[85vh] flex flex-col shadow-2xl overflow-hidden">
+            <!-- رأس الدروج -->
+            <div class="px-5 py-4 border-b border-lux-800/80 flex items-center justify-between shrink-0 bg-lux-950/50">
+                <div class="flex items-center gap-2.5">
+                    <div class="w-8 h-8 rounded-xl bg-gold-500/10 border border-gold-500/30 flex items-center justify-center text-gold-400">
+                        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+                    </div>
+                    <div>
+                        <h3 class="text-sm font-black text-lux-50">أقسام لوحة التحكم</h3>
+                        <p class="text-[10px] text-lux-400 font-bold">اختر القسم المطلوب للتنقل السريع</p>
+                    </div>
+                </div>
+                <button type="button" id="btnCloseAdminMobileDrawer" class="w-8 h-8 rounded-full bg-lux-800/80 text-lux-400 hover:text-lux-100 flex items-center justify-center transition">
+                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+            </div>
+
+            <!-- محتوى الأقسام المصنفة -->
+            <div class="overflow-y-auto p-4 space-y-4">
+                <!-- قطاع 1 -->
+                <div class="space-y-1.5">
+                    <span class="text-[10px] font-black text-emerald-400 uppercase tracking-wider px-2">التحليلات والمؤشرات</span>
+                    <div class="grid grid-cols-1 gap-1">
+                        <button type="button" class="admin-nav-tab admin-nav-tab--side is-active text-right w-full" data-tab-target="tabPanelVisitors">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="w-4 h-4 text-emerald-400 shrink-0"><rect x="4" y="12" width="4" height="8" rx="1"></rect><rect x="10" y="7" width="4" height="13" rx="1"></rect><rect x="16" y="3" width="4" height="17" rx="1"></rect></svg>
+                            <span>الزوار والنشاط وساعات الذروة</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- قطاع 2 -->
+                <div class="space-y-1.5">
+                    <span class="text-[10px] font-black text-amber-400 uppercase tracking-wider px-2">النظام والتحكم العام</span>
+                    <div class="grid grid-cols-2 gap-1.5">
+                        <button type="button" class="admin-nav-tab admin-nav-tab--side text-right w-full" data-tab-target="tabPanelMaster">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="w-4 h-4 text-amber-400 shrink-0"><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/><circle cx="12" cy="12" r="3"/></svg>
+                            <span>التحكم الشامل</span>
+                        </button>
+                        <button type="button" class="admin-nav-tab admin-nav-tab--side text-right w-full" data-tab-target="tabPanelGeofence">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="w-4 h-4 text-cyan-400 shrink-0"><circle cx="12" cy="9" r="4"></circle><path d="M12 21c4-4.5 7-8.5 7-12a7 7 0 1 0-14 0c0 3.5 3 7.5 7 12z"></path></svg>
+                            <span>النطاق الجغرافي</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- قطاع 3 -->
+                <div class="space-y-1.5">
+                    <span class="text-[10px] font-black text-blue-400 uppercase tracking-wider px-2">المستخدمين ومكافحة الغش</span>
+                    <div class="grid grid-cols-2 gap-1.5">
+                        <button type="button" class="admin-nav-tab admin-nav-tab--side text-right w-full" data-tab-target="tabPanelUsers">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="w-4 h-4 text-blue-400 shrink-0"><circle cx="9" cy="8" r="3.5"></circle><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"></path><circle cx="18" cy="9" r="2.5"></circle><path d="M15.5 14.2c2.6.4 4.5 2.7 4.5 5.3"></path></svg>
+                            <span>سجل الحسابات</span>
+                        </button>
+                        <button type="button" class="admin-nav-tab admin-nav-tab--side text-right w-full" data-tab-target="tabPanelBadges">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="w-4 h-4 text-yellow-400 shrink-0"><path d="M12 3l2.2 4.5 5 .7-3.6 3.5.9 5-4.5-2.4-4.5 2.4.9-5-3.6-3.5 5-.7z"></path></svg>
+                            <span>الأوسمة والشارات</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- قطاع 4 -->
+                <div class="space-y-1.5">
+                    <span class="text-[10px] font-black text-purple-400 uppercase tracking-wider px-2">المحتوى والأنشطة</span>
+                    <div class="grid grid-cols-1 gap-1.5">
+                        <button type="button" class="admin-nav-tab admin-nav-tab--side text-right w-full" data-tab-target="tabPanelPosts">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="w-4 h-4 text-purple-400 shrink-0"><rect x="3" y="4" width="18" height="16" rx="2"></rect><line x1="7" y1="9" x2="17" y2="9"></line><line x1="7" y1="13" x2="14" y2="13"></line><path d="M7 17h4"></path></svg>
+                            <span>المنشورات والقصص وهويتها</span>
+                        </button>
+                        <button type="button" class="admin-nav-tab admin-nav-tab--side text-right w-full" data-tab-target="tabPanelQuestions">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="w-4 h-4 text-indigo-400 shrink-0"><circle cx="12" cy="12" r="9"></circle><path d="M9.5 9a2.5 2.5 0 0 1 4.7-1.2c.5.9.2 1.7-.6 2.4-.9.8-1.6 1.3-1.6 2.6"></path><circle cx="12" cy="17" r="0.75" fill="currentColor" stroke="none"></circle></svg>
+                            <span>بنك الأسئلة اليومية</span>
+                        </button>
+                        <button type="button" class="admin-nav-tab admin-nav-tab--side text-right w-full" data-tab-target="tabPanelBanner">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="w-4 h-4 text-amber-400 shrink-0"><rect x="3" y="5" width="18" height="14" rx="2"></rect><circle cx="8.5" cy="10" r="1.5"></circle><path d="M3 16l5-4 4 3 3-2.5 6 5"></path></svg>
+                            <span>البانر الترويجي</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- قطاع 5 -->
+                <div class="space-y-1.5">
+                    <span class="text-[10px] font-black text-rose-400 uppercase tracking-wider px-2">التواصل والدعم</span>
+                    <div class="grid grid-cols-2 gap-1.5">
+                        <button type="button" class="admin-nav-tab admin-nav-tab--side text-right w-full" data-tab-target="tabPanelNotifications">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="w-4 h-4 text-rose-400 shrink-0"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
+                            <span>مركز الإشعارات</span>
+                        </button>
+                        <button type="button" class="admin-nav-tab admin-nav-tab--side text-right w-full" data-tab-target="tabPanelSupport">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="w-4 h-4 text-emerald-400 shrink-0"><rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="m3 7 9 6 9-6"></path></svg>
+                            <span>صندوق الدعم الفني</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    
+    <!-- نافذة إجراءات تحكم المستخدم (مكافحة الغش والتعويضات) -->
+    <div id="userAdminActionModal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden flex items-center justify-center p-4">
+        <div class="bg-lux-900 border border-lux-800 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl space-y-4 p-5 max-h-[90vh] overflow-y-auto">
+            <div class="flex items-center justify-between border-b border-lux-800 pb-3">
+                <div class="flex items-center gap-3">
+                    <img id="userModalAvatar" src="" class="w-10 h-10 rounded-full border border-lux-700 object-cover" alt="">
+                    <div>
+                        <h3 id="userModalName" class="text-sm font-bold text-lux-100">—</h3>
+                        <p id="userModalUsername" class="text-xs text-lux-400 font-mono">—</p>
+                    </div>
+                </div>
+                <button type="button" id="btnCloseUserActionModal" class="w-8 h-8 rounded-full bg-lux-800 hover:bg-lux-700 text-lux-300 flex items-center justify-center font-bold">
+                    x
+                </button>
+            </div>
+
+            <!-- ملخص الحساب -->
+            <div class="grid grid-cols-3 gap-2 bg-lux-950 p-3 rounded-xl border border-lux-800/60 text-center">
+                <div>
+                    <div class="text-[10px] text-lux-400 font-bold">رصيد النقاط</div>
+                    <div id="userModalPoints" class="text-sm font-mono font-bold text-gold-400">—</div>
+                </div>
+                <div>
+                    <div class="text-[10px] text-lux-400 font-bold">سلسلة الأيام</div>
+                    <div id="userModalStreak" class="text-sm font-mono font-bold text-teal-400">—</div>
+                </div>
+                <div>
+                    <div class="text-[10px] text-lux-400 font-bold">خطوات اليوم</div>
+                    <div id="userModalTodaySteps" class="text-sm font-mono font-bold text-emerald-400">—</div>
+                </div>
+            </div>
+
+            <p id="userModalStatus" class="admin-status-text" role="status" aria-live="polite"></p>
+
+            <div class="space-y-4">
+                <!-- 1. تصفير خطوات اليوم (مكافحة الغش) -->
+                <div class="p-3.5 rounded-xl bg-lux-950/60 border border-lux-800/80 space-y-2">
+                    <div>
+                        <div class="text-xs font-bold text-lux-100">تصفير خطوات اليوم</div>
+                        <div class="text-[10px] text-lux-400">إلغاء خطوات اليوم وحذف نقاطها وسجل نشاطها المشبوه فوراً</div>
+                    </div>
+                    <input type="text" id="inputResetStepsReason" class="w-full bg-lux-900 border border-lux-800 rounded-lg px-3 py-1.5 text-xs text-lux-100" placeholder="سبب التصفير (مثال: تلاعب أو هزاز)...">
+                    <button type="button" id="btnExecuteResetSteps" class="w-full py-1.5 rounded-lg bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-600/40 text-xs font-bold transition">
+                        تنفيذ تصفير خطوات اليوم
+                    </button>
+                </div>
+
+                <!-- 2. استبعاد من دوري الأسبوع -->
+                <div class="p-3.5 rounded-xl bg-lux-950/60 border border-lux-800/80 space-y-2">
+                    <div>
+                        <div class="text-xs font-bold text-lux-100">استبعاد من دوري الأسبوع الحالي</div>
+                        <div class="text-[10px] text-lux-400">تصفير نقاط الأسبوع واستبعاد المستخدم من المنافسة الأسبوعية</div>
+                    </div>
+                    <input type="text" id="inputDisqualifyReason" class="w-full bg-lux-900 border border-lux-800 rounded-lg px-3 py-1.5 text-xs text-lux-100" placeholder="سبب الاستبعاد...">
+                    <button type="button" id="btnExecuteDisqualifyWeekly" class="w-full py-1.5 rounded-lg bg-amber-600/20 hover:bg-amber-600/30 text-amber-300 border border-amber-600/40 text-xs font-bold transition">
+                        تنفيذ الاستبعاد من الأسبوع
+                    </button>
+                </div>
+
+                <!-- 3. تعديل النقاط (مكافأة / خصم تعويضي) -->
+                <div class="p-3.5 rounded-xl bg-lux-950/60 border border-lux-800/80 space-y-2">
+                    <div>
+                        <div class="text-xs font-bold text-lux-100">تعديل النقاط (مكافأة أو خصم)</div>
+                        <div class="text-[10px] text-lux-400">أدخل رقماً موجباً للإضافة (مثلاً 100) أو سالباً للخصم (مثلاً -50) مع السبب وإشعار فوري</div>
+                    </div>
+                    <div class="grid grid-cols-3 gap-2">
+                        <input type="number" id="inputAdjustPointsDelta" class="bg-lux-900 border border-lux-800 rounded-lg px-3 py-1.5 text-xs font-mono text-lux-100" placeholder="+100 أو -50">
+                        <input type="text" id="inputAdjustPointsReason" class="col-span-2 bg-lux-900 border border-lux-800 rounded-lg px-3 py-1.5 text-xs text-lux-100" placeholder="سبب التعديل أو التعويض...">
+                    </div>
+                    <button type="button" id="btnExecuteAdjustPoints" class="w-full py-1.5 rounded-lg bg-gold-500/20 hover:bg-gold-500/30 text-gold-300 border border-gold-500/40 text-xs font-bold transition">
+                        تطبيق تعديل النقاط
+                    </button>
+                </div>
+
+                <!-- 4. استعادة سلسلة الأيام (Streak Restoration) -->
+                <div class="p-3.5 rounded-xl bg-lux-950/60 border border-lux-800/80 space-y-2">
+                    <div>
+                        <div class="text-xs font-bold text-lux-100">استعادة سلسلة الأيام المتتالية (Streak)</div>
+                        <div class="text-[10px] text-lux-400">تعويض المستخدم وإعادة عداد الأيام المتتالية في حال انقطاعه لعطل فني</div>
+                    </div>
+                    <div class="grid grid-cols-3 gap-2">
+                        <input type="number" id="inputRestoreStreakDays" min="1" max="365" class="bg-lux-900 border border-lux-800 rounded-lg px-3 py-1.5 text-xs font-mono text-lux-100" placeholder="عدد الأيام">
+                        <input type="text" id="inputRestoreStreakReason" class="col-span-2 bg-lux-900 border border-lux-800 rounded-lg px-3 py-1.5 text-xs text-lux-100" placeholder="السبب (مثال: تعويض عطل فني)...">
+                    </div>
+                    <button type="button" id="btnExecuteRestoreStreak" class="w-full py-1.5 rounded-lg bg-teal-600/20 hover:bg-teal-600/30 text-teal-300 border border-teal-600/40 text-xs font-bold transition">
+                        استعادة السلسلة المتتالية
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- نافذة إرسال إشعار للحسابات الخاملة -->
+    <div id="notifyInactiveModal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden flex items-center justify-center p-4">
+        <div class="bg-lux-900 border border-lux-800 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl space-y-4 p-5">
+            <div class="flex items-center justify-between border-b border-lux-800 pb-3">
+                <h3 class="text-sm font-bold text-lux-100">إرسال إشعار للحسابات الخاملة</h3>
+                <button type="button" id="btnCloseNotifyInactiveModal" class="w-8 h-8 rounded-full bg-lux-800 hover:bg-lux-700 text-lux-300 flex items-center justify-center font-bold">
+                    x
+                </button>
+            </div>
+
+            <div class="space-y-3">
+                <div>
+                    <label for="notifyInactiveDaysSelect" class="block text-xs font-bold text-lux-300 mb-1">فترة الخمول المستهدفة</label>
+                    <select id="notifyInactiveDaysSelect" class="w-full bg-lux-950 border border-lux-800 rounded-xl px-3 py-2 text-xs text-lux-100">
+                        <option value="7">مستخدمين لم يفتحوا التطبيق منذ أكثر من 7 أيام</option>
+                        <option value="14">مستخدمين لم يفتحوا التطبيق منذ أكثر من 14 يوماً</option>
+                        <option value="30">مستخدمين لم يفتحوا التطبيق منذ أكثر من 30 يوماً</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label for="notifyInactiveTitle" class="block text-xs font-bold text-lux-300 mb-1">عنوان الإشعار</label>
+                    <input type="text" id="notifyInactiveTitle" maxlength="100" class="w-full bg-lux-950 border border-lux-800 rounded-xl px-3 py-2 text-xs text-lux-100" placeholder="مكانك في سِكّاوي بانتظارك!">
+                </div>
+
+                <div>
+                    <label for="notifyInactiveBody" class="block text-xs font-bold text-lux-300 mb-1">نص الرسالة</label>
+                    <textarea id="notifyInactiveBody" rows="3" maxlength="300" class="w-full bg-lux-950 border border-lux-800 rounded-xl px-3 py-2 text-xs text-lux-100 focus:outline-none" placeholder="مكانك محفوظ في بطولة نزلة عبيد، افتح التطبيق واستكمل خطواتك اليوم..."></textarea>
+                </div>
+
+                <p id="notifyInactiveStatus" class="admin-status-text" role="status" aria-live="polite"></p>
+
+                <div class="flex items-center gap-2 pt-2">
+                    <button type="button" id="btnConfirmSendInactiveNotify" class="flex-1 py-2 rounded-xl bg-gold-500 hover:bg-gold-400 text-lux-950 text-xs font-bold transition">
+                        إرسال الإشعار فوراً
+                    </button>
+                    <button type="button" id="btnCancelSendInactiveNotify" class="px-4 py-2 rounded-xl bg-lux-800 hover:bg-lux-700 text-lux-300 text-xs font-bold transition">
+                        إلغاء
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- استخدام مكتبة Supabase ومكتبة Cropper من vendor المحلي للعمل أوفلاين ودون الاعتماد على الـ CDN -->
+    <script src="vendor/supabase.js"></script>
+    <script src="vendor/cropper.min.js"></script>
     <!-- js/supabase-config.js: نفس ملف تهيئة عميل Supabase المستخدم في
          باقي التطبيق (auth.js / geofence.js) - نفس الـ URL والـ anon key -->
     <script type="module" src="js/supabase-config.js"></script>

@@ -1257,6 +1257,11 @@
              تحت الهيدر (شوف #headerSpacer تحت). لو غيّرت أي حاجة بتأثر
              على ارتفاع الهيدر (بادينج، حجم الأفتار...) لازم تحدّث ارتفاع
              الـ Spacer معاها بنفس القيمة بالظبط. -->
+        <!-- تنبيه عائم للأدمن أثناء تصفحه في وضع الصيانة -->
+        <div id="maintenanceAdminNotice" class="hidden fixed top-0 inset-x-0 z-40 bg-amber-500 text-lux-950 text-[11px] font-black text-center py-1 shadow-md">
+            وضع الصيانة مفعّل للمستخدمين العاديين
+        </div>
+
         <header class="fixed top-0 left-1/2 -translate-x-1/2 z-30 w-full max-w-md md:max-w-2xl lg:max-w-4xl bg-lux-900/90 backdrop-blur-md border-b border-gold-500/10 px-4 pt-[max(1rem,calc(env(safe-area-inset-top,0px)+0.85rem))] pb-3.5 shadow-sm transition-all duration-300">
             <div class="flex items-center justify-between gap-3">
                 <!-- User Profile Info (الجانب الأيمن) - بقت كلها زرار واحد
@@ -1273,64 +1278,69 @@
                         <!-- (تصحيح): الأيقونة العامة بقت هي الحالة الافتراضية الأكيدة
                              (ظاهرة من الأول في الـ HTML نفسه)، والصورة الحقيقية بقت
                              مخفية افتراضيًا (hidden) - متظهرش إلا لما renderProfileHeader
-                             تتأكد فعليًا إن فيه صورة حقيقية جاهزة. قبل كده كانت الصورة
-                             الوهمية (Unsplash) هي الافتراضية، فعلى نت بطيء كانت تفضل
-                             ظاهرة لثواني (أو للأبد لزائر) قبل ما الـ JS يوصل يبدّلها -->
-                        <img id="headerAvatar" src="data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%20100%20100%27%3E%3Ccircle%20cx%3D%2750%27%20cy%3D%2750%27%20r%3D%2750%27%20fill%3D%27%2314171F%27%2F%3E%3Ccircle%20cx%3D%2750%27%20cy%3D%2738%27%20r%3D%2716%27%20fill%3D%27none%27%20stroke%3D%27%239A96A0%27%20stroke-width%3D%277%27%2F%3E%3Cpath%20d%3D%27M20%2084c0-18%2013.5-30%2030-30s30%2012%2030%2030%27%20fill%3D%27none%27%20stroke%3D%27%239A96A0%27%20stroke-width%3D%277%27%20stroke-linecap%3D%27round%27%2F%3E%3C%2Fsvg%3E"
-                             alt="صورة البطل"
-                             class="hidden w-11 h-11 rounded-full object-cover ring-2 ring-brand-500 p-0.5 shadow-sm"
-                             onerror="this.src='data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%20100%20100%27%3E%3Ccircle%20cx%3D%2750%27%20cy%3D%2750%27%20r%3D%2750%27%20fill%3D%27%2314171F%27%2F%3E%3Ccircle%20cx%3D%2750%27%20cy%3D%2738%27%20r%3D%2716%27%20fill%3D%27none%27%20stroke%3D%27%239A96A0%27%20stroke-width%3D%277%27%2F%3E%3Cpath%20d%3D%27M20%2084c0-18%2013.5-30%2030-30s30%2012%2030%2030%27%20fill%3D%27none%27%20stroke%3D%27%239A96A0%27%20stroke-width%3D%277%27%20stroke-linecap%3D%27round%27%2F%3E%3C%2Fsvg%3E'">
-                        <!-- أيقونة عامة (زائر / لسه من غير صورة حقيقية وصلت) - نفس
-                             أيقونة الشخص المستخدمة في #profileGuestView تمامًا -->
+                             تتأكد إن فيه avatar_url حقيقي فعلاً. الاتنين موجودين في الـ
+                             DOM في نفس اللحظة وجوه نفس الـ wrapper ونفس الأبعاد، و
+                             toggleAvatarPair في profiles.js بتخفي دي وتظهر دي بـ
+                             class="hidden" البسيط -->
                         <div id="headerAvatarGuestIcon"
-                             class="w-11 h-11 rounded-full ring-2 ring-brand-500 p-0.5 shadow-sm bg-lux-800 border border-lux-700 flex items-center justify-center">
-                            <svg class="w-6 h-6 text-lux-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                                <circle cx="12" cy="8" r="4"></circle>
-                                <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"></path>
+                             class="w-11 h-11 rounded-full bg-lux-800 border-2 border-lux-700 flex items-center justify-center text-lux-400">
+                            <svg class="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                                <circle cx="12" cy="7" r="4"/>
                             </svg>
                         </div>
-                        <!-- نقطة "أونلاين الآن" لصورتي أنا - شوف js/presence.js -
-                             renderProfileHeader في profiles.js هي اللي بتحط
-                             data-presence-avatar وتنادي loadAndApplyPresence -->
-                        <span class="presence-dot" id="headerAvatarPresenceDot" aria-hidden="true"></span>
+                        <img id="headerAvatar"
+                             src=""
+                             alt=""
+                             class="hidden w-11 h-11 rounded-full object-cover border-2 border-gold-500/50 shadow-sm"
+                             loading="eager"
+                             decoding="async">
+                        <!-- نقطة "أونلاين الآن" في الهيدر العلوي - مربوطة
+                             بالمستخدم الحالي نفسه ومحدثة من profiles.js
+                             (renderProfileHeader) بنفس منطق كارت البروفايل -->
+                        <span id="headerAvatarPresenceDot"
+                              class="presence-avatar-dot"
+                              aria-hidden="true"></span>
                     </div>
                     <div class="min-w-0">
-                        <!-- الاسم واللقب هنا "قيمة أولية" بس (Placeholder) لحد ما
-                             renderProfileHeader() في js/profiles.js يستبدلهم
-                             بالبيانات الحقيقية من Supabase (profile.full_name
-                             و profile.title)، أو بـ"زائر" من غير لقب لو مفيش حساب -->
-                        <h1 id="headerUserName" class="text-base font-extrabold text-lux-50 tracking-tight leading-none truncate">زائر</h1>
-                        <p id="headerUserTitle" class="text-xs text-gold-400 font-bold mt-1 leading-none truncate flex items-center gap-1 hidden"><svg class="w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="currentColor"><path d="M3 8l4 3 5-6 5 6 4-3-2 10H5L3 8z"/></svg><span id="headerUserTitleText"></span></p>
+                        <h1 id="headerUserName" class="text-sm font-black text-lux-50 truncate">
+                            <span class="header-name-skeleton"></span>
+                        </h1>
+                        <!-- عنصر اللقب تحت الاسم في الهيدر العلوي - مربوط
+                             بـ profile.title الحقيقي ومحدث من profiles.js
+                             (renderProfileHeader) بنفس منطق #profileTitle -->
+                        <p id="headerUserTitle" class="hidden text-[10px] text-lux-400 truncate flex items-center gap-1">
+                            <svg class="w-3 h-3 text-gold-400 shrink-0" viewBox="0 0 24 24" fill="currentColor"><path d="m12 3 2.5 5.5 6 .9-4.3 4.2 1 6-5.2-2.8L6.8 19.6l1-6L3.5 9.4l6-.9L12 3z"/></svg>
+                            <span id="headerUserTitleText"></span>
+                        </p>
                     </div>
                 </button>
 
-                <!-- Notifications Bell (الجانب الأيسر) - أيقونة هادئة (SVG
-                     بتاخد لونها من currentColor عشان تتماشى تلقائياً مع
-                     المود الداكن/الفاتح) + شارة حمراء صغيرة لعدد الإشعارات
-                     غير المقروءة. الشارة بتتخفي تلقائياً لو العداد صفر
-                     (يُدار من JS بإضافة/إزالة كلاس "hidden" على
-                     #headerNotificationBadge، أو بتحديث النص جوه
-                     #headerNotificationCount) -->
-                <button type="button" id="notificationBellBtn"
-                        aria-label="الإشعارات"
-                        class="relative shrink-0 w-10 h-10 flex items-center justify-center rounded-full text-lux-300 hover:text-gold-400 hover:bg-lux-800/70 active:scale-95 transition-all duration-200">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                         stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"
-                         class="w-5 h-5">
-                        <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
-                        <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-                    </svg>
-                    <!-- شارة عدد الإشعارات غير المقروءة - مخفية افتراضياً
-                         (class="hidden") وعلى صفر لحد ما notifications.js
-                         يجيب العدد الحقيقي من قاعدة البيانات (updateUnreadBadges)
-                         بعد ما يتأكد من هوية المستخدم فعلياً. متسيبش رقم/حالة
-                         وهمية هنا تاني - ده كان سبب ظهور شارة "3" وهمية لحظة
-                         فتح التطبيق حتى قبل ما JS يشتغل -->
-                    <span id="headerNotificationBadge"
-                          class="hidden absolute top-1 right-1 min-w-[16px] h-4 px-1 flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-black leading-none ring-2 ring-lux-900 shadow-sm">
-                        <span id="headerNotificationCount">0</span>
-                    </span>
-                </button>
+                <div class="flex items-center gap-2">
+                    <!-- شارة مضاعفة النقاط الحية (Double XP) -->
+                    <span id="pointsMultiplierBadge" class="hidden text-[10px] font-black px-2.5 py-0.5 rounded-full bg-gradient-to-r from-amber-500/20 to-yellow-500/20 border border-amber-500/40 text-amber-300 animate-pulse"></span>
+
+                    <!-- زرار الإشعارات - بيفتح مودال الإشعارات (#notificationsModal) -->
+                    <button type="button" id="headerNotificationsBtn"
+                            data-notif-trigger
+                            aria-label="الإشعارات"
+                            class="relative w-10 h-10 rounded-full bg-lux-800 border border-lux-700 flex items-center justify-center text-lux-300 hover:text-gold-400 hover:border-gold-500/40 transition active:scale-95">
+                        <svg class="w-5 h-5 shrink-0 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
+                            <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                        </svg>
+                        <!-- شارة عدد الإشعارات غير المقروءة - مخفية افتراضياً
+                             (class="hidden") وعلى صفر لحد ما notifications.js
+                             يجيب العدد الحقيقي من قاعدة البيانات (updateUnreadBadges)
+                             بعد ما يتأكد من هوية المستخدم فعلياً. متسيبش رقم/حالة
+                             وهمية هنا تاني - ده كان سبب ظهور شارة "3" وهمية لحظة
+                             فتح التطبيق حتى قبل ما JS يشتغل -->
+                        <span id="headerNotificationBadge"
+                              class="hidden pointer-events-none absolute top-1 right-1 min-w-[16px] h-4 px-1 flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-black leading-none ring-2 ring-lux-900 shadow-sm">
+                            <span id="headerNotificationCount">0</span>
+                        </span>
+                    </button>
+                </div>
             </div>
         </header>
 
@@ -1801,10 +1811,10 @@
                 <div id="leaderboardGuestNotice" class="hidden relative overflow-hidden bg-gradient-to-l from-gold-500/15 via-lux-900 to-lux-900 border border-gold-500/25 rounded-3xl p-4 shadow-soft-card flex items-center justify-between gap-3">
                     <div class="flex items-center gap-3 min-w-0">
                         <div class="w-10 h-10 rounded-2xl bg-gold-500/20 border border-gold-500/30 flex items-center justify-center shrink-0 text-xl shadow-inner">
-                            🔥
+                            
                         </div>
                         <div class="min-w-0">
-                            <h4 class="text-xs font-black text-lux-50 truncate">أنت تتابع السباق كزائر 🏆</h4>
+                            <h4 class="text-xs font-black text-lux-50 truncate">أنت تتابع السباق كزائر </h4>
                             <p class="text-[11px] font-bold text-lux-400 truncate">سجّل خطواتك الآن وادخل المنافسة على درع البطولة!</p>
                         </div>
                     </div>
@@ -1959,7 +1969,7 @@
                 </div>
 
                 <!-- =========================================================
-                     (إضافة) "(رقم) بطل تاني داخلين في السباق على مركزك 🏆" - جملة
+                     (إضافة) "(رقم) بطل تاني داخلين في السباق على مركزك " - جملة
                      الحماس تحت القائمة. العنصر ده كان ناقص من الأصل، مع إن
                      js/leaderboard.js (renderRemainingParticipantsCount)
                      بيدوّر عليه بمعرفه ده بالظبط ويحدّث نصه ويشيل/يضيف
@@ -2031,6 +2041,16 @@
                 <!-- Profile Hero Card -->
                 <div class="bg-lux-900 rounded-3xl p-5 shadow-soft-card border border-gold-500/10 text-center relative overflow-hidden">
                     <div class="absolute top-0 right-0 left-0 h-20 bg-gradient-to-r from-gold-600 to-brand-600"></div>
+
+                    <!-- زر مشاركة بروفايلي -->
+                    <button type="button" id="btnShareMyProfile" 
+                            class="absolute top-3 left-3 z-20 w-8 h-8 flex items-center justify-center rounded-full bg-lux-950/70 hover:bg-lux-950 text-gold-400 hover:text-gold-300 border border-gold-500/20 shadow-md active:scale-95 transition-all" 
+                            aria-label="مشاركة بروفايلي" title="مشاركة بروفايلي">
+                        <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
+                            <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+                        </svg>
+                    </button>
                     
                     <div class="relative z-10 pt-6">
                         <div class="relative inline-block">
@@ -2059,9 +2079,9 @@
                             </button>
                         </div>
 
-                        <h2 id="profileName" class="text-lg font-black text-lux-50 mt-2">أحمد كابو</h2>
-                        <p id="profileTitle" class="text-xs text-gold-400 font-bold">لقب الشرف: بطل المطرية</p>
-                        <p id="profileJoinedText" class="text-[11px] text-lux-500 font-medium mt-1">انضم لـ "سِكّاوي" من 3 شهور</p>
+                        <h2 id="profileName" class="text-lg font-black text-lux-50 mt-2 header-name-skeleton"></h2>
+                        <p id="profileTitle" class="text-xs text-gold-400 font-bold hidden"></p>
+                        <p id="profileJoinedText" class="text-[11px] text-lux-500 font-medium mt-1"></p>
                     </div>
 
                     <!-- Personal Quick Stats Grid (تُملأ ديناميكياً من js/profiles.js) -->
@@ -2077,12 +2097,24 @@
                             <span class="text-[10px] text-lux-500 font-bold">إجمالي الخطوات</span>
                         </div>
                         <div class="bg-lux-800 p-2.5 rounded-2xl">
-                            <span id="statCorrectAnswers" class="block text-base font-black text-brand-500">—</span>
-                            <span class="text-[10px] text-lux-500 font-bold">سؤال صح</span>
+                            <span id="statBestDailySteps" class="block text-base font-black text-gold-400">—</span>
+                            <span class="text-[10px] text-lux-500 font-bold">الرقم القياسي</span>
+                        </div>
+                        <div class="bg-lux-800 p-2.5 rounded-2xl">
+                            <span id="statBurnedCalories" class="block text-base font-black text-orange-400">—</span>
+                            <span class="text-[10px] text-lux-500 font-bold">السعرات</span>
                         </div>
                         <div class="bg-lux-800 p-2.5 rounded-2xl">
                             <span id="statBestStreak" class="block text-base font-black text-gold-500">—</span>
                             <span class="text-[10px] text-lux-500 font-bold">أطول ستريك</span>
+                        </div>
+                        <div class="bg-lux-800 p-2.5 rounded-2xl">
+                            <span id="statCorrectAnswers" class="block text-base font-black text-brand-500">—</span>
+                            <span class="text-[10px] text-lux-500 font-bold">سؤال صح</span>
+                        </div>
+                        <div class="bg-lux-800 p-2.5 rounded-2xl">
+                            <span id="statQuizAccuracy" class="block text-base font-black text-cyan-400">—</span>
+                            <span class="text-[10px] text-lux-500 font-bold">دقة الأسئلة</span>
                         </div>
                     </div>
                 </div>
@@ -2090,9 +2122,12 @@
                 <!-- Championship Wins - عدد مرات الفوز بالبطولة اليومية/الأسبوعية/الشهرية
                      (تُملأ ديناميكياً من js/profiles.js عبر renderChampionshipWins()) -->
                 <div class="bg-lux-900 rounded-3xl p-5 shadow-soft-card border border-gold-500/10 space-y-3">
-                    <div class="flex items-center gap-2">
-                        <span class="text-xl flex items-center"><svg class="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 21h8M12 17v4M7 4h10v4a5 5 0 0 1-10 0V4Z"/><path d="M7 5H4a2 2 0 0 0 0 4h1M17 5h3a2 2 0 0 1 0 4h-1"/></svg></span>
-                        <h3 class="font-extrabold text-lux-50 text-sm">بطولاتي</h3>
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                            <span class="text-xl flex items-center"><svg class="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 21h8M12 17v4M7 4h10v4a5 5 0 0 1-10 0V4Z"/><path d="M7 5H4a2 2 0 0 0 0 4h1M17 5h3a2 2 0 0 1 0 4h-1"/></svg></span>
+                            <h3 class="font-extrabold text-lux-50 text-sm">بطولاتي</h3>
+                        </div>
+                        <span id="statTotalPodiums" class="text-xs font-black text-gold-400 bg-gold-500/10 border border-gold-500/20 px-2.5 py-0.5 rounded-lg">—</span>
                     </div>
 
                     <!-- (فحص - المرحلة 3، من غير تغيير): نفس سبب الإحصائيات فوق - 3 عناصر ثابتة (يومي/أسبوعي/شهري) -->
@@ -2212,6 +2247,15 @@
                          القديم كله محفوظ في تاريخ الـ Git، مش محتاجين نعيد بناءه
                          من الصفر -->
 
+                    <button id="btnOpenAdminPanel" 
+                            class="hidden w-full text-right py-3 px-3 flex items-center justify-between text-xs font-bold text-amber-300 hover:bg-amber-500/10 rounded-xl transition-colors">
+                        <div class="flex items-center gap-2.5">
+                            <span class="text-base flex items-center text-amber-400"><svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></span>
+                            <span>لوحة تحكم الأدمن</span>
+                        </div>
+                        <span class="text-amber-400/60">‹</span>
+                    </button>
+
                     <button id="btnAccountSettings" 
                             class="w-full text-right py-3 px-3 flex items-center justify-between text-xs font-bold text-lux-200 hover:bg-lux-800 rounded-xl transition-colors">
                         <div class="flex items-center gap-2.5">
@@ -2271,15 +2315,25 @@
                 <div class="bg-lux-900 rounded-3xl p-5 shadow-soft-card border border-gold-500/10 text-center relative overflow-hidden">
                     <div class="absolute top-0 right-0 left-0 h-20 bg-gradient-to-r from-gold-600 to-brand-600"></div>
 
+                    <!-- زر مشاركة بروفايل البطل -->
+                    <button type="button" id="btnSharePublicProfile" 
+                            class="absolute top-3 left-3 z-20 w-8 h-8 flex items-center justify-center rounded-full bg-lux-950/70 hover:bg-lux-950 text-gold-400 hover:text-gold-300 border border-gold-500/20 shadow-md active:scale-95 transition-all" 
+                            aria-label="مشاركة البروفايل" title="مشاركة البروفايل">
+                        <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
+                            <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+                        </svg>
+                    </button>
+
                     <div class="relative z-10 pt-6">
                         <!-- الصورة بقت زرار - الضغط عليها بيفتح lightbox بيعرضها
-                             مكبّرة وواضحة (شوف openAvatarLightbox تحت) -->
-                        <button type="button" id="publicProfileAvatarBtn" class="relative inline-block group" aria-label="تكبير صورة البطل">
+                             مكبّرة وواضحة (أو خيارات الاستوري لو عنده استوري نشطة) -->
+                        <button type="button" id="publicProfileAvatarBtn" class="relative inline-block group" aria-label="صورة البطل">
                             <img id="publicProfileAvatar"
-                                 src="data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%20100%20100%27%3E%3Ccircle%20cx%3D%2750%27%20cy%3D%2750%27%20r%3D%2750%27%20fill%3D%27%2314171F%27%2F%3E%3Ccircle%20cx%3D%2750%27%20cy%3D%2738%27%20r%3D%2716%27%20fill%3D%27none%27%20stroke%3D%27%239A96A0%27%20stroke-width%3D%277%27%2F%3E%3Cpath%20d%3D%27M20%2084c0-18%2013.5-30%2030-30s30%2012%2030%2030%27%20fill%3D%27none%27%20stroke%3D%27%239A96A0%27%20stroke-width%3D%277%27%20stroke-linecap%3D%27round%27%2F%3E%3C%2Fsvg%3E"
-                                 alt="صورة البطل"
-                                 class="w-20 h-20 rounded-full object-cover ring-4 ring-lux-950 shadow-md mx-auto group-hover:opacity-90 transition-opacity"
-                                 onerror="this.src='data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%20100%20100%27%3E%3Ccircle%20cx%3D%2750%27%20cy%3D%2750%27%20r%3D%2750%27%20fill%3D%27%2314171F%27%2F%3E%3Ccircle%20cx%3D%2750%27%20cy%3D%2738%27%20r%3D%2716%27%20fill%3D%27none%27%20stroke%3D%27%239A96A0%27%20stroke-width%3D%277%27%2F%3E%3Cpath%20d%3D%27M20%2084c0-18%2013.5-30%2030-30s30%2012%2030%2030%27%20fill%3D%27none%27%20stroke%3D%27%239A96A0%27%20stroke-width%3D%277%27%20stroke-linecap%3D%27round%27%2F%3E%3C%2Fsvg%3E'">
+                                  src="data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%20100%20100%27%3E%3Ccircle%20cx%3D%2750%27%20cy%3D%2750%27%20r%3D%2750%27%20fill%3D%27%2314171F%27%2F%3E%3Ccircle%20cx%3D%2750%27%20cy%3D%2738%27%20r%3D%2716%27%20fill%3D%27none%27%20stroke%3D%27%239A96A0%27%20stroke-width%3D%277%27%2F%3E%3Cpath%20d%3D%27M20%2084c0-18%2013.5-30%2030-30s30%2012%2030%2030%27%20fill%3D%27none%27%20stroke%3D%27%239A96A0%27%20stroke-width%3D%277%27%20stroke-linecap%3D%27round%27%2F%3E%3C%2Fsvg%3E"
+                                  alt="صورة البطل"
+                                  class="w-20 h-20 rounded-full object-cover ring-4 ring-lux-950 shadow-md mx-auto group-hover:opacity-90 transition-opacity"
+                                  onerror="this.src='data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%20100%20100%27%3E%3Ccircle%20cx%3D%2750%27%20cy%3D%2750%27%20r%3D%2750%27%20fill%3D%27%2314171F%27%2F%3E%3Ccircle%20cx%3D%2750%27%20cy%3D%2738%27%20r%3D%2716%27%20fill%3D%27none%27%20stroke%3D%27%239A96A0%27%20stroke-width%3D%277%27%2F%3E%3Cpath%20d%3D%27M20%2084c0-18%2013.5-30%2030-30s30%2012%2030%2030%27%20fill%3D%27none%27%20stroke%3D%27%239A96A0%27%20stroke-width%3D%277%27%20stroke-linecap%3D%27round%27%2F%3E%3C%2Fsvg%3E'">
                             <span class="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-white"><svg class="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></span>
                             <!-- نقطة "أونلاين الآن" لصاحب البروفايل العام ده - بتتحط
                                  وتتفعّل من fetchPublicProfileRow/openPublicProfile في
@@ -2290,18 +2344,17 @@
 
                         <h2 id="publicProfileName" class="text-lg font-black text-lux-50 mt-2">—</h2>
 
-                        <!-- (تعديل بناءً على طلب المستخدم): لقب الشرف بتاع صاحب
-                             البروفايل ده - نفس فكرة/تنسيق #profileTitle بتاع
-                             بروفايلي بالظبط. مخفي (hidden) افتراضيًا في الـ HTML
-                             نفسه عشان ميبانش فاضي للحظة قبل ما renderPublicProfileContent
-                             يشتغل - لو مفيش لقب أصلاً بيفضل مخفي تمامًا (مفيش أي
-                             نص بديل)، ولو فيه بيتشال hidden ويتحط النص -->
+                        <!-- لقب الشرف بتاع صاحب البروفايل ده -->
                         <p id="publicProfileTitle" class="text-xs text-gold-400 font-bold mt-0.5 hidden"></p>
+                        <!-- تاريخ انضمام صاحب البروفايل ده لـ "سِكّاوي" -->
+                        <p id="publicProfileJoinedText" class="text-[11px] text-lux-500 font-medium mt-1 hidden"></p>
 
-                        <div class="flex items-center justify-center gap-3 mt-1">
+                        <div class="flex items-center justify-center gap-3 mt-1 flex-wrap">
                             <span id="publicProfilePoints" class="text-xs font-black text-gold-400">— نقطة</span>
                             <span class="text-lux-700">•</span>
                             <span id="publicProfileStreakCount" class="text-xs font-black text-teal-400">— يوم ستريك حالي</span>
+                            <span id="publicProfileFriendsSeparator" class="text-lux-700 hidden">•</span>
+                            <span id="publicProfileFriendsBadge" class="text-xs font-black text-lux-300 hidden"><span id="publicProfileFriendsCount">—</span> صديق</span>
                         </div>
                     </div>
 
@@ -2314,12 +2367,24 @@
                             <span class="text-[10px] text-lux-500 font-bold">إجمالي الخطوات</span>
                         </div>
                         <div class="bg-lux-800 p-2.5 rounded-2xl">
-                            <span id="publicProfileCorrectAnswers" class="block text-base font-black text-brand-500">—</span>
-                            <span class="text-[10px] text-lux-500 font-bold">سؤال صح</span>
+                            <span id="publicProfileBestDailySteps" class="block text-base font-black text-gold-400">—</span>
+                            <span class="text-[10px] text-lux-500 font-bold">الرقم القياسي</span>
+                        </div>
+                        <div class="bg-lux-800 p-2.5 rounded-2xl">
+                            <span id="publicProfileBurnedCalories" class="block text-base font-black text-orange-400">—</span>
+                            <span class="text-[10px] text-lux-500 font-bold">السعرات</span>
                         </div>
                         <div class="bg-lux-800 p-2.5 rounded-2xl">
                             <span id="publicProfileBestStreak" class="block text-base font-black text-gold-500">—</span>
                             <span class="text-[10px] text-lux-500 font-bold">أطول ستريك</span>
+                        </div>
+                        <div class="bg-lux-800 p-2.5 rounded-2xl">
+                            <span id="publicProfileCorrectAnswers" class="block text-base font-black text-brand-500">—</span>
+                            <span class="text-[10px] text-lux-500 font-bold">سؤال صح</span>
+                        </div>
+                        <div class="bg-lux-800 p-2.5 rounded-2xl">
+                            <span id="publicProfileQuizAccuracy" class="block text-base font-black text-cyan-400">—</span>
+                            <span class="text-[10px] text-lux-500 font-bold">دقة الأسئلة</span>
                         </div>
                     </div>
 
@@ -2340,9 +2405,12 @@
                      الأسبوعية/الشهرية (تُملأ ديناميكياً من renderPublicProfileContent()
                      في js/profiles.js) -->
                 <div class="bg-lux-900 rounded-3xl p-5 shadow-soft-card border border-gold-500/10 space-y-3">
-                    <div class="flex items-center gap-2">
-                        <span class="text-xl flex items-center"><svg class="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 21h8M12 17v4M7 4h10v4a5 5 0 0 1-10 0V4Z"/><path d="M7 5H4a2 2 0 0 0 0 4h1M17 5h3a2 2 0 0 1 0 4h-1"/></svg></span>
-                        <h3 class="font-extrabold text-lux-50 text-sm">البطولة</h3>
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                            <span class="text-xl flex items-center"><svg class="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 21h8M12 17v4M7 4h10v4a5 5 0 0 1-10 0V4Z"/><path d="M7 5H4a2 2 0 0 0 0 4h1M17 5h3a2 2 0 0 1 0 4h-1"/></svg></span>
+                            <h3 class="font-extrabold text-lux-50 text-sm">البطولة</h3>
+                        </div>
+                        <span id="publicProfileTotalPodiums" class="text-xs font-black text-gold-400 bg-gold-500/10 border border-gold-500/20 px-2.5 py-0.5 rounded-lg">—</span>
                     </div>
 
                     <!-- (فحص - المرحلة 3، من غير تغيير): نفس سبب "بطولاتي" فوق -->
@@ -2781,7 +2849,7 @@
             <!-- وضع الزائر: شريط تحفيزي عائم فاخر للانضمام والمنافسة -->
             <div id="selfRankBarGuestContent" class="self-rank-bar-inner self-rank-bar-guest hidden">
                 <div class="self-rank-guest-badge">
-                    <span class="text-xl" aria-hidden="true">🏆</span>
+                    <span class="text-xl" aria-hidden="true"></span>
                 </div>
                 <div class="self-rank-guest-text">
                     <p class="self-rank-guest-title">عايز تشوف اسمك ورتبتك هنا؟</p>
@@ -3543,7 +3611,7 @@
             <!-- زر إغلاق الاستوري - متمركز على اليسار بمحاذاة صاحب الاستوري وبعيداً عن أشرطة النظام -->
             <button id="storyCloseBtn"
                     class="absolute top-[max(4.25rem,calc(env(safe-area-inset-top,0px)+2.25rem))] left-3.5 z-30 w-8 h-8 flex items-center justify-center rounded-full bg-black/40 hover:bg-black/60 text-white/90 hover:text-white text-sm leading-none backdrop-blur-sm transition-colors"
-                    aria-label="إغلاق الاستوري">✕</button>
+                    aria-label="إغلاق الاستوري">x</button>
         </div>
     </div>
 
@@ -3561,7 +3629,7 @@
                 <h2 class="text-base font-extrabold text-lux-50 tracking-tight">
                     <span class="inline-flex items-center gap-1.5"><svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg> شافها <span id="storyViewersModalCount">0</span></span>
                 </h2>
-                <button type="button" id="btnCloseStoryViewers" class="text-lux-400 hover:text-lux-100 text-lg leading-none">✕</button>
+                <button type="button" id="btnCloseStoryViewers" class="text-lux-400 hover:text-lux-100 text-lg leading-none">x</button>
             </div>
 
             <div id="storyViewersList" class="space-y-2 overflow-y-auto flex-1 min-h-[80px]">
@@ -3604,6 +3672,60 @@
                 </button>
             </div>
 
+        </div>
+    </div>
+
+    <!-- ================================================================= -->
+    <!-- مودال تأكيد حذف التعليق - js/posts.js                             -->
+    <!-- بديل عصري وراقٍ لـ window.confirm() ومتكامل مع زر الرجوع بالهاتف  -->
+    <!-- ================================================================= -->
+    <div id="commentDeleteConfirmModal"
+         class="hidden fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-lux-950/90 backdrop-blur-sm">
+        <div class="w-full max-w-xs bg-lux-900 rounded-3xl p-5 shadow-soft-card border border-gold-500/10 space-y-4 text-center">
+
+            <div class="w-12 h-12 mx-auto rounded-full bg-rose-500/10 flex items-center justify-center text-rose-400">
+                <svg class="w-6 h-6 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6h16Z"/><path d="M10 11v6M14 11v6"/></svg>
+            </div>
+
+            <div class="space-y-1">
+                <h3 class="text-sm font-extrabold text-lux-50">حذف التعليق</h3>
+                <p class="text-xs text-lux-400 font-medium">متأكد إنك عايز تحذف التعليق ده؟ الخطوة دي نهائية ومش هترجع.</p>
+            </div>
+
+            <div class="flex items-center gap-2 pt-1">
+                <button type="button" id="btnCancelDeleteComment"
+                        class="flex-1 text-xs font-extrabold text-lux-300 bg-lux-800 hover:bg-lux-700 rounded-2xl py-3 transition-colors">
+                    إلغاء
+                </button>
+                <button type="button" id="btnConfirmDeleteComment"
+                        class="flex-1 text-xs font-extrabold text-white bg-rose-500 hover:bg-rose-600 rounded-2xl py-3 transition-colors">
+                    حذف
+                </button>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- ================================================================= -->
+    <!-- مودال معاينة صورة المنشور بالشاشة الكاملة - js/posts.js           -->
+    <!-- متكامل مع زر الرجوع بالهاتف (Hardware Back Button)                 -->
+    <!-- ================================================================= -->
+    <div id="postImageViewerModal"
+         class="hidden fixed inset-0 z-[10000] flex flex-col items-center justify-center bg-black/95 backdrop-blur-md p-4 select-none"
+         role="dialog" aria-modal="true" aria-label="معاينة الصورة">
+        <button type="button" id="postImageViewerCloseBtn"
+                class="absolute top-4 right-4 z-10 w-11 h-11 rounded-full bg-white/10 hover:bg-white/20 active:scale-95 text-white flex items-center justify-center transition-all focus:outline-none"
+                aria-label="إغلاق">
+            <svg class="w-6 h-6 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+        </button>
+        <div class="relative max-w-full max-h-[85vh] flex items-center justify-center overflow-hidden">
+            <img id="postImageViewerImg"
+                 src=""
+                 alt="معاينة الصورة"
+                 class="max-w-full max-h-[85vh] object-contain rounded-2xl shadow-2xl transition-transform duration-200">
         </div>
     </div>
 
@@ -3772,9 +3894,75 @@
          class="hidden fixed inset-0 z-[95] bg-black/90 backdrop-blur-sm flex items-center justify-center p-6">
         <button type="button" id="btnCloseAvatarLightbox"
                 class="absolute top-[max(2.75rem,calc(env(safe-area-inset-top,0px)+1.5rem))] left-1/2 -translate-x-1/2 z-10 w-9 h-9 flex items-center justify-center rounded-full bg-black/40 hover:bg-black/60 text-white/90 hover:text-white text-base leading-none transition-colors"
-                aria-label="إغلاق">✕</button>
+                aria-label="إغلاق">x</button>
         <img id="avatarLightboxImage" src="" alt="صورة مكبّرة"
              class="max-w-full max-h-full rounded-2xl object-contain shadow-2xl">
+    </div>
+
+    <!-- ================================================================= -->
+    <!-- مودال تفاصيل الوسام والشارة (Badge Details Modal)                 -->
+    <!-- يفتح عند النقر على أي وسام في دولاب الأوسمة أو صفحة الأوسمة الكاملة  -->
+    <!-- ================================================================= -->
+    <div id="badgeDetailsModal"
+         class="hidden fixed inset-0 z-[96] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+        <div class="bg-lux-900 border border-gold-500/20 rounded-3xl p-6 w-full max-w-sm text-center shadow-2xl space-y-4 animate-in fade-in zoom-in duration-200">
+            <div id="badgeDetailsIconWrapper" class="w-20 h-20 mx-auto rounded-3xl flex items-center justify-center text-4xl shadow-inner border bg-lux-800/80 border-gold-500/20">
+                <span id="badgeDetailsIcon"></span>
+            </div>
+            
+            <div class="space-y-1">
+                <div class="flex items-center justify-center gap-2">
+                    <h3 id="badgeDetailsTitle" class="text-lg font-black text-lux-50"></h3>
+                    <span id="badgeDetailsTierBadge" class="text-[10px] font-bold px-2.5 py-0.5 rounded-full"></span>
+                </div>
+                <p id="badgeDetailsDescription" class="text-xs text-lux-400 leading-relaxed pt-1"></p>
+            </div>
+
+            <!-- قسم حالة الوسام (مفتوح / مقفول / مؤقت) -->
+            <div id="badgeDetailsStatusContainer" class="bg-lux-800/70 border border-gold-500/10 rounded-2xl p-3 text-xs space-y-1">
+                <div class="flex items-center justify-center gap-1.5 font-bold">
+                    <span id="badgeDetailsStatusIcon" class="flex items-center"></span>
+                    <span id="badgeDetailsStatusText"></span>
+                </div>
+                <p id="badgeDetailsExtraInfo" class="text-[10px] text-lux-400 font-medium"></p>
+            </div>
+
+            <button type="button" id="btnCloseBadgeDetailsModal"
+                    class="w-full text-xs font-extrabold text-lux-200 hover:text-lux-50 bg-lux-800 hover:bg-lux-700/80 border border-lux-700 rounded-2xl py-3 transition-colors">
+                إغلاق
+            </button>
+        </div>
+    </div>
+
+    <!-- ================================================================= -->
+    <!-- قائمة خيارات الأفاتار/الاستوري للبروفايل العام                     -->
+    <!-- تظهر عندما يمتلك صاحب البروفايل العام استوري نشطة ونضغط على صورته   -->
+    <!-- ================================================================= -->
+    <div id="publicProfileStoryActionModal"
+         class="hidden fixed inset-0 z-[96] bg-black/75 backdrop-blur-sm flex items-end sm:items-center justify-center p-4">
+        <div class="bg-lux-900 border border-gold-500/20 rounded-3xl p-5 w-full max-w-sm text-center shadow-2xl space-y-3 animate-in fade-in slide-in-from-bottom duration-200">
+            <h3 class="text-sm font-black text-lux-100">خيارات البطل</h3>
+            <div class="space-y-2 pt-1">
+                <button type="button" id="btnActionViewUserStory"
+                        class="w-full flex items-center justify-center gap-2.5 py-3 px-4 rounded-2xl text-xs font-black text-lux-950 bg-gradient-to-r from-gold-400 to-amber-500 shadow-glow-amber active:scale-98 transition-all">
+                    <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/>
+                    </svg>
+                    <span>مشاهدة الاستوري</span>
+                </button>
+                <button type="button" id="btnActionViewUserAvatar"
+                        class="w-full flex items-center justify-center gap-2.5 py-3 px-4 rounded-2xl text-xs font-black text-lux-200 bg-lux-800 hover:bg-lux-750 border border-gold-500/15 active:scale-98 transition-all">
+                    <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/>
+                    </svg>
+                    <span>عرض الصورة الشخصية</span>
+                </button>
+                <button type="button" id="btnActionCancelStoryChoice"
+                        class="w-full py-2.5 text-xs font-bold text-lux-400 hover:text-lux-200 transition-colors">
+                    إلغاء
+                </button>
+            </div>
+        </div>
     </div>
 
     <!-- ================================================================= -->
@@ -3820,7 +4008,7 @@
                     </button>
                     <button type="button" id="btnCloseNotifications"
                             aria-label="إغلاق الإشعارات"
-                            class="text-lux-400 hover:text-lux-100 text-lg leading-none transition-colors">✕</button>
+                            class="text-lux-400 hover:text-lux-100 text-lg leading-none transition-colors">x</button>
                 </div>
             </div>
 
@@ -3912,7 +4100,7 @@
                  كانوا بيعملوا نفس المهمة فعلياً وبيلخبطوا. #btnCloseSupportChat
                  دلوقتي بيتلبس شكلين حسب الوضع (setHeaderExitMode في
                  support-chat.js): "→" لما يكون فيه "قائمة" ترجعله ليها
-                 (الأدمن جوه محادثة)، أو "✕" لما يبقى المفروض يقفل الشاشة
+                 (الأدمن جوه محادثة)، أو "x" لما يبقى المفروض يقفل الشاشة
                  كلها (قائمة المحادثات، أو ثريد المستخدم العادي). -->
             <div class="flex items-center justify-between gap-3 px-4 pt-[max(1.5rem,calc(env(safe-area-inset-top,0px)+1rem))] pb-3.5 shrink-0 border-b border-gold-500/10 bg-lux-900/95 backdrop-blur-xl">
                 <div class="flex items-center gap-2 min-w-0">
@@ -3939,7 +4127,7 @@
                 </div>
                 <button type="button" id="btnCloseSupportChat"
                         aria-label="إغلاق"
-                        class="shrink-0 w-8 h-8 flex items-center justify-center rounded-full text-lux-400 hover:text-lux-100 hover:bg-lux-800/70 text-lg leading-none transition-colors">✕</button>
+                        class="shrink-0 w-8 h-8 flex items-center justify-center rounded-full text-lux-400 hover:text-lux-100 hover:bg-lux-800/70 text-lg leading-none transition-colors">x</button>
             </div>
 
             <!-- قائمة المحادثات - الأدمن بس (initListSupportConversations) -->
@@ -4080,8 +4268,62 @@
          (#homeBanner) - قراءة + اشتراك Realtime على جدول home_banner،
          مستقل بالكامل ومسجّل نفسه على DOMContentLoaded زي guest-banner.js
          بالظبط. لازم type="module" لأنه بيستورد supabaseClient -->
-    <script type="module" src="js/banner.js"></script>
+    <!-- نافذة وضع الصيانة المؤقتة الشاملة (غير قابلة للإغلاق إلا للأدمن) -->
+    <div id="maintenanceOverlay" class="hidden fixed inset-0 z-[9999] bg-lux-950 flex flex-col items-center justify-center p-6 text-center select-none overflow-y-auto">
+        <div class="max-w-sm w-full space-y-5">
+            <div class="w-20 h-20 mx-auto rounded-3xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center p-4">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-10 h-10 text-amber-400"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+            </div>
+            <div class="space-y-2">
+                <h2 class="text-xl font-black text-lux-50">وضع الصيانة والتحديث</h2>
+                <p id="maintenanceMessageText" class="text-xs text-lux-400 leading-relaxed font-medium">
+                    التطبيق في وضع الصيانة المؤقتة لتطوير وتحديث التجربة، سنعود قريباً.
+                </p>
+            </div>
+            <div id="maintenanceCountdownText" class="text-xs font-bold text-amber-400/90 font-mono tracking-wide min-h-[1.25rem]"></div>
+            <button type="button" onclick="location.reload()" class="w-full py-3 rounded-2xl bg-gradient-to-r from-amber-500 to-yellow-600 text-lux-950 text-xs font-black shadow-lg hover:brightness-110 active:scale-95 transition">
+                إعادة المحاولة
+            </button>
+        </div>
+    </div>
 
+    <!-- نافذة الإجبار على التحديث (Force Update) -->
+    <div id="forceUpdateOverlay" class="hidden fixed inset-0 z-[9998] bg-lux-950 flex flex-col items-center justify-center p-6 text-center select-none overflow-y-auto">
+        <div class="max-w-sm w-full space-y-5">
+            <div class="w-20 h-20 mx-auto rounded-3xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center p-4">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-10 h-10 text-cyan-400"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            </div>
+            <div class="space-y-2">
+                <h2 class="text-xl font-black text-lux-50">تحديث جديد متوفر</h2>
+                <p id="forceUpdateMessageText" class="text-xs text-lux-400 leading-relaxed font-medium">
+                    يرجى تحديث التطبيق إلى أحدث إصدار للمتابعة والاستفادة من الميزات الجديدة.
+                </p>
+            </div>
+            <a id="forceUpdateBtn" href="#" target="_blank" class="block w-full py-3 rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-600 text-lux-950 text-xs font-black shadow-lg hover:brightness-110 active:scale-95 transition">
+                تحميل التحديث الآن
+            </a>
+        </div>
+    </div>
+
+    <!-- مودال الإعلان العام (In-App Announcement Modal) -->
+    <div id="announcementModal" class="hidden fixed inset-0 z-[9990] bg-lux-950/80 backdrop-blur-md flex items-center justify-center p-4">
+        <div class="bg-lux-900 border border-gold-500/20 rounded-3xl max-w-sm w-full p-5 space-y-4 shadow-2xl relative">
+            <button id="announcementModalCloseBtn" type="button" class="absolute top-4 left-4 text-lux-400 hover:text-lux-100 transition p-1">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+            <img id="announcementModalImage" src="" alt="إعلان" class="hidden w-full max-h-56 object-contain rounded-2xl border border-lux-800 bg-lux-950/60">
+            <div class="space-y-1.5 pt-1">
+                <h3 id="announcementModalTitle" class="text-base font-black text-lux-50"></h3>
+                <p id="announcementModalBody" class="text-xs text-lux-300 leading-relaxed whitespace-pre-line"></p>
+            </div>
+            <button id="announcementModalActionBtn" type="button" class="w-full py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-600 text-lux-950 text-xs font-black shadow-md hover:brightness-110 transition">
+                حسناً
+            </button>
+        </div>
+    </div>
+
+    <script type="module" src="js/banner.js"></script>
+    <script type="module" src="js/master-control.js"></script>
     <script type="module" src="js/app.js"></script>
 </body>
 </html>

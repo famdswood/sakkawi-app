@@ -370,7 +370,11 @@ export function showAuthModal(mode, options = {}) {
 
     // نفس الفكرة لرابط "سجّل دلوقتي" - نحدّث ظهوره فور فتح المودال مش
     // بس لما المستخدم يضغط toggleAuthMode بنفسه (شوف updateAuthToggleVisibility)
-    updateAuthToggleVisibility();
+    if (isGuestAreaAllowed !== true) {
+        ensureGuestAreaCheckedForToggle({ force: true });
+    } else {
+        updateAuthToggleVisibility();
+    }
 }
 
 /**
@@ -441,14 +445,13 @@ function updateAuthToggleVisibility() {
  * أي مصدر تاني (تسجيل الدخول مبقاش بيعمل أي فحص جغرافي خالص، شوف
  * اختيار 2 في app.js).
  *
- * لو فيه فحص شغال بالفعل، أو لو عندنا نتيجة أكيدة فعلاً (true أو false
- * صراحةً - مش null)، بنطلع فورًا من غير ما نكرر الفحص. لو الفحص فشل
- * لأي سبب (رفض إذن GPS، Timeout، تعذّر الاتصال..إلخ)، بنعتبر
- * isGuestAreaAllowed = false احترازيًا (Fail-safe) بدل ما تفضل null
- * وتخلي updateAuthToggleVisibility() تحاول تعيد الفحص من غير نهاية.
+ * تدعم معامل force: true لإعادة المحاولة (مثلاً إذا كان الـ GPS مغلقاً
+ * في المرة الأولى ثم قام المستخدم بتشغيله عند إعادة فتح الشاشة).
  */
-async function ensureGuestAreaCheckedForToggle() {
-    if (isCheckingGuestAreaForToggle || isGuestAreaAllowed !== null) return;
+async function ensureGuestAreaCheckedForToggle(options = {}) {
+    const { force = false } = options;
+    if (isCheckingGuestAreaForToggle) return;
+    if (!force && isGuestAreaAllowed !== null) return;
 
     isCheckingGuestAreaForToggle = true;
     try {
@@ -964,6 +967,10 @@ async function signUpWithUsername(username, password, extraProfileData) {
         throw new Error('اسم المستخدم لازم يكون حروف إنجليزية وأرقام و "_" بس، من 3 لـ20 حرف');
     }
 
+    if (!password || password.length < 6) {
+        throw new Error('كلمة المرور لازم تكون 6 حروف/أرقام على الأقل');
+    }
+
     validateSignupExtraFields(extraProfileData);
 
     const internalEmail = usernameToInternalEmail(username);
@@ -974,6 +981,8 @@ async function signUpWithUsername(username, password, extraProfileData) {
     isCustomSignUpInProgress = true;
 
     try {
+        const fullName = `${extraProfileData.firstName} ${extraProfileData.lastName}`.trim();
+
         const { data, error } = await supabaseClient.auth.signUp({
             email: internalEmail,
             password,
@@ -982,6 +991,7 @@ async function signUpWithUsername(username, password, extraProfileData) {
                     username: username.trim(),
                     first_name: extraProfileData.firstName,
                     last_name: extraProfileData.lastName,
+                    full_name: fullName,
                 },
             },
         });
@@ -1010,13 +1020,54 @@ async function signUpWithUsername(username, password, extraProfileData) {
             throw new Error('اتسجل حسابك، بس محتاجين تأكيد إضافي قبل ما نكمل - كلّم الدعم الفني');
         }
 
+        // تجهيز رابط صورة البروفايل: صورة رفعها المستخدم، أو أفاتار
+        // افتراضي حسب النوع لو مرفعش حاجة (أو لو فشل الرفع لأي سبب)
+        let avatarUrl = getDefaultAvatarForGender(extraProfileData.gender);
+
+        if (extraProfileData.avatarFile) {
+            try {
+                avatarUrl = await uploadSignupAvatarFile(newUser.id, extraProfileData.avatarFile);
+            } catch (uploadErr) {
+                console.error('فشل رفع صورة البروفايل وقت التسجيل، هنستخدم الأفاتار الافتراضي:', uploadErr.message);
+                dispatchToast('تعذّر رفع الصورة، اتحطلك أفاتار افتراضي بدالها', 'info');
+            }
+        }
+
+        const { error: insertError } = await supabaseClient
+            .from('profiles')
+            // upsert بدل insert: لو الـ Trigger الاحتياطي في الداتابيز
+            // سبق واتعمل صف مبدئي للمستخدم ده أول ما اتسجل في auth.users،
+            // insert العادي كان هيفشل بخطأ تكرار المفتاح الأساسي (duplicate key).
+            // upsert بيتعامل مع الحالتين بأمان: لو الصف مش موجود بينشئه، ولو
+            // موجود بيكمّله/يحدّثه بالبيانات الكاملة من فورم التسجيل.
+            // ملاحظة: أعمدة الإحصائيات (الخطوات والنقاط) محذوفة عمداً من هنا
+            // لأنها محمية على السيرفر ولا يصح للعميل محاولة تعديلها.
+            .upsert({
+                id: newUser.id,
+                username: username.trim(),
+                full_name: fullName,
+                first_name: extraProfileData.firstName,
+                last_name: extraProfileData.lastName,
+                birth_date: extraProfileData.birthDate,
+                gender: extraProfileData.gender,
+                phone: extraProfileData.phone || null,
+                avatar_url: avatarUrl,
+            }, { onConflict: 'id' });
+
+        if (insertError) {
+            console.error('خطأ في حفظ بروفايل المستخدم بعد التسجيل:', insertError.message);
+            // بنضيف رسالة Supabase الخام في الخطأ المرمي عشان تبان في
+            // الـ Toast مباشرة (زي مشكلة RLS Policy مثلاً) من غير ما
+            // نحتاج نفتح الـ Console كل مرة نشخّص فيها مشكلة حفظ
+            throw new Error(`اتسجل حسابك، بس حصلت مشكلة في حفظ البيانات (${insertError.message}) - كلّم الدعم الفني`);
+        }
+
         // تحقق فعلي وحيد من الموقع الجغرافي على مستوى السيرفر (الدالة
         // نفسها بتحسب المسافة، مش بتصدّق بوليان جاي من العميل) - ده اللي
-        // بيكتب is_inside_bounds الحقيقي في صف البروفايل. checkLocationForSignup
-        // في onboarding.js كانت بس بوابة UI قبل ما نوصل هنا أصلاً (تمنع
-        // زرار "إنشاء حساب" يظهر)، مش كتابة فعلية - فمن غير النداء ده،
-        // الـ trigger الاحتياطي (trg_enforce_geofence_defaults) هيسيب
-        // is_inside_bounds = false للأبد حتى لو الشخص فعلاً جوه النطاق.
+        // بيكتب is_inside_bounds الحقيقي في صف البروفايل. تم وضعه بعد نجاح
+        // حفظ البروفايل (upsert) لضمان وجود صف المستخدم في جدول profiles.
+        // checkLocationForSignup في onboarding.js كانت بس بوابة UI قبل ما
+        // نوصل هنا أصلاً (تمنع زرار "إنشاء حساب" يظهر)، مش كتابة فعلية.
         //
         // فشل تحديد الموقع هنا (رفض إذن GPS، Timeout..إلخ) ما بيوقفش
         // التسجيل نفسه - بس بيسيب is_inside_bounds على الافتراضي false
@@ -1034,60 +1085,6 @@ async function signUpWithUsername(username, password, extraProfileData) {
             }
         } catch (locationError) {
             console.warn('تعذّر تحديد موقع المستخدم وقت التسجيل (RPC verify_signup_location):', locationError.message);
-        }
-
-        // تجهيز رابط صورة البروفايل: صورة رفعها المستخدم، أو أفاتار
-        // افتراضي حسب النوع لو مرفعش حاجة (أو لو فشل الرفع لأي سبب)
-        let avatarUrl = getDefaultAvatarForGender(extraProfileData.gender);
-
-        if (extraProfileData.avatarFile) {
-            try {
-                avatarUrl = await uploadSignupAvatarFile(newUser.id, extraProfileData.avatarFile);
-            } catch (uploadErr) {
-                console.error('فشل رفع صورة البروفايل وقت التسجيل، هنستخدم الأفاتار الافتراضي:', uploadErr.message);
-                dispatchToast('تعذّر رفع الصورة، اتحطلك أفاتار افتراضي بدالها', 'info');
-            }
-        }
-
-        const fullName = `${extraProfileData.firstName} ${extraProfileData.lastName}`.trim();
-
-        const { error: insertError } = await supabaseClient
-            .from('profiles')
-            // upsert بدل insert: لو الـ Trigger الاحتياطي في الداتابيز
-            // (شوف fix_profiles_rls_and_trigger.sql) سبق واتعمل صف مبدئي
-            // للمستخدم ده أول ما اتسجل في auth.users، insert العادي كان
-            // هيفشل بخطأ تكرار المفتاح الأساسي (duplicate key). upsert
-            // بيتعامل مع الحالتين بأمان: لو الصف مش موجود بينشئه، ولو
-            // موجود بيكمّله/يحدّثه بالبيانات الكاملة من فورم التسجيل.
-            .upsert({
-                id: newUser.id,
-                username: username.trim(),
-                full_name: fullName,
-                first_name: extraProfileData.firstName,
-                last_name: extraProfileData.lastName,
-                birth_date: extraProfileData.birthDate,
-                gender: extraProfileData.gender,
-                phone: extraProfileData.phone || null,
-                avatar_url: avatarUrl,
-                // (إصلاح - نظام "لقب الشرف" بقى مرتبط بالأوسمة): مبقاش
-                // فيه قايمة ألقاب ثابتة (زي "ابن البلد") يتحط أي حساب
-                // جديد عليها افتراضيًا. اللقب دلوقتي لازم يكون عنوان
-                // وسام حقيقي فتحه المستخدم بنفسه (شوف editTitleSelect
-                // في js/profiles.js: openAccountSettingsPage/
-                // handleEditProfileSubmit) - فحساب جديد لسه معندوش أي
-                // وسام يفضل من غير لقب (null) لحد ما يفتح أول وسام
-                // ويختاره بنفسه من صفحة "إعدادات الحساب".
-                total_steps: 0,
-                daily_steps: 0,
-                points: 0,
-            }, { onConflict: 'id' });
-
-        if (insertError) {
-            console.error('خطأ في حفظ بروفايل المستخدم بعد التسجيل:', insertError.message);
-            // بنضيف رسالة Supabase الخام في الخطأ المرمي عشان تبان في
-            // الـ Toast مباشرة (زي مشكلة RLS Policy مثلاً) من غير ما
-            // نحتاج نفتح الـ Console كل مرة نشخّص فيها مشكلة حفظ
-            throw new Error(`اتسجل حسابك، بس حصلت مشكلة في حفظ البيانات (${insertError.message}) - كلّم الدعم الفني`);
         }
 
         currentUser = newUser;
@@ -1122,7 +1119,7 @@ async function signUpWithUsername(username, password, extraProfileData) {
  * @param {string} password
  */
 async function signInWithUsername(username, password) {
-    if (!isValidUsername(username)) {
+    if (!username || !isValidUsername(username) || !password) {
         throw new Error('اسم المستخدم أو كلمة المرور غلط');
     }
 
@@ -1668,16 +1665,14 @@ async function checkSingleSessionSlotBeforeSignIn(userId) {
     if (!data || !data.active_session_id) return true;
     if (data.active_session_id === deviceSessionId) return true;
 
-    // المقعد ماسكه جهاز تاني - قبل ما نرفض، نتأكد هل لسه "حي" فعلاً
-    // (نبضة حديثة) ولا عالق من غير ما حد يقدر يفضّيه (شوف بند 6 فوق) -
-    // لو حي فعلاً، الرفض هنا مؤقت بس: handleSignedInSession هيحول
-    // الموضوع لطلب موافقة فعلي بدل الرفض النهائي المباشر (شوف قسم
-    // "موافقة تسجيل الدخول من جهاز تاني")
-    if (data.active_session_updated_at) {
-        const lastHeartbeatAt = new Date(data.active_session_updated_at).getTime();
-        if (Number.isFinite(lastHeartbeatAt) && Date.now() - lastHeartbeatAt > STALE_SESSION_THRESHOLD_MS) {
-            return true;
-        }
+    // المقعد ماسكه جهاز تاني - لو مفيش نبضة مسجلة أصلاً، نعتبره عالق ونسمح بالدخول
+    // عشان الحساب ما يفضلش مقفول للأبد لو توقيت النبضة مكنش مسجل
+    if (!data.active_session_updated_at) return true;
+
+    // قبل ما نرفض، نتأكد هل لسه "حي" فعلاً (نبضة حديثة) ولا عالق
+    const lastHeartbeatAt = new Date(data.active_session_updated_at).getTime();
+    if (Number.isFinite(lastHeartbeatAt) && Date.now() - lastHeartbeatAt > STALE_SESSION_THRESHOLD_MS) {
+        return true;
     }
 
     return false;
@@ -1897,6 +1892,17 @@ async function finalizeSignedInSession(user, session, event) {
  * @returns {Promise<string|null>} id الطلب، أو null لو فشل الإنشاء
  */
 async function createLoginApprovalRequest(userId, deviceSessionId) {
+    // إنهاء أي طلبات موافقة سابقة معلقة لنفس المستخدم قبل إنشاء طلب جديد
+    try {
+        await supabaseClient
+            .from('login_approval_requests')
+            .update({ status: 'expired', responded_at: new Date().toISOString() })
+            .eq('user_id', userId)
+            .eq('status', 'pending');
+    } catch (cleanupErr) {
+        console.warn('تعذر تنظيف طلبات الموافقة السابقة:', cleanupErr?.message);
+    }
+
     const { data, error } = await supabaseClient
         .from('login_approval_requests')
         .insert({ user_id: userId, requesting_device_id: deviceSessionId, status: 'pending' })
@@ -2427,6 +2433,19 @@ function bindAuthModalEvents() {
 
             const username = document.getElementById('authUsernameInput').value.trim();
             const password = document.getElementById('authPasswordInput').value;
+
+            if (!username) {
+                showAuthError('من فضلك اكتب اسم المستخدم');
+                return;
+            }
+            if (!password) {
+                showAuthError('من فضلك اكتب كلمة المرور');
+                return;
+            }
+            if (currentAuthMode === 'signup' && password.length < 6) {
+                showAuthError('كلمة المرور لازم تكون 6 حروف/أرقام على الأقل');
+                return;
+            }
 
             setAuthFormLoading(true);
 

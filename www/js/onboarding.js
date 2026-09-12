@@ -38,7 +38,7 @@ async function evaluateSignupLocationGate() {
 
         return {
             allowed: false,
-            message: 'التطبيق ده مخصص حصريًا لأهالي قرية نزلة عبيد. موقعك الحالي طلع برّه النطاق المسموح بيه، فمش هينفع تعملي حساب جديد من هنا. لو إنت فعلاً من أهالي القرية ومسافر دلوقتي، كلّمي الدعم الفني للمغتربين.',
+            message: 'التطبيق مخصص حصريًا لأهالي قرية نزلة عبيد. موقعك الحالي خارج النطاق المسموح به، لذلك لا يمكن إنشاء حساب جديد من هنا. إذا كنت من أهالي القرية وتتواجد بالخارج، يمكنك التواصل مع الدعم الفني للمغتربين.',
         };
     } catch (error) {
         const isLocationError = error instanceof GeofenceLocationError;
@@ -47,7 +47,7 @@ async function evaluateSignupLocationGate() {
             allowed: false,
             message: isLocationError
                 ? error.message
-                : 'تعذّر التحقق من موقعك الجغرافي حاليًا. جرّبي تاني كمان شوية.',
+                : 'تعذّر التحقق من موقعك الجغرافي حاليًا. يرجى المحاولة مرة أخرى بعد قليل.',
         };
     }
 }

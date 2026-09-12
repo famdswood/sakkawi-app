@@ -228,6 +228,26 @@ export class GeofenceLocationError extends Error {
 }
 
 
+function getFriendlyLocationErrorMessage(err) {
+    const msg = String(err?.message || '').toLowerCase();
+    if (msg.includes('disabled') || msg.includes('provider') || msg.includes('service')) {
+        return {
+            message: 'خدمة تحديد الموقع (GPS) مغلقة في هاتفك. يرجى تشغيل الـ GPS من شريط الإشعارات أو إعدادات الهاتف والمحاولة مجدداً.',
+            code: 2,
+        };
+    }
+    if (msg.includes('denied') || msg.includes('permission')) {
+        return { message: GEOLOCATION_ERROR_MESSAGES[1], code: 1 };
+    }
+    if (msg.includes('timeout') || err?.code === 3 || err?.code === '3') {
+        return { message: GEOLOCATION_ERROR_MESSAGES[3], code: 3 };
+    }
+    return {
+        message: GEOLOCATION_ERROR_MESSAGES[err?.code] || GEOLOCATION_ERROR_MESSAGES[2] || GEOLOCATION_ERROR_MESSAGES.UNKNOWN,
+        code: err?.code || 2,
+    };
+}
+
 /**
  * (إصلاح - باج حقيقي "التطبيق مش بيطلب إذن الموقع"): طلب الموقع عن
  * طريق navigator.geolocation الخام (Web API عادي) جوه WebView تطبيق
@@ -246,44 +266,55 @@ export class GeofenceLocationError extends Error {
  * الخام شغال كـ fallback وقت التطوير العادي في المتصفح (لما
  * window.Capacitor مش موجود أو مش تطبيق أصلي).
  *
- * ⚠️ متطلب خارج الكود ده: لازم يتضاف @capacitor/geolocation فعليًا
- * للمشروع (npm install @capacitor/geolocation && npx cap sync)،
- * وتتضاف صلاحيات الموقع (ACCESS_FINE_LOCATION/ACCESS_COARSE_LOCATION)
- * في AndroidManifest.xml (والمكافئ في iOS Info.plist) - من غيرهم
- * الطلب هيفضل يفشل حتى مع الكود ده.
+ * (تحسين متقدم): فحص الصلاحية أولاً دون إعادة طلب متكرر، مع التمييز
+ * بين "رفض الإذن" و"خدمة الـ GPS مقفولة بالهاتف"، وتوفير بديل تلقائي
+ * سريع (coarse location) إذا تعذّر الاتصال بالأقمار الصناعية داخل المنازل.
  */
 async function getNativeUserCoordinates() {
     const Geolocation = window.Capacitor?.Plugins?.Geolocation;
 
     if (!Geolocation) {
-        // البلجن مش متضاف للمشروع أصلاً (شوف الملحوظة فوق) - نرجع نفس
-        // خطأ "غير مدعوم" بدل ما نكسر التطبيق بخطأ غامض
         throw new GeofenceLocationError(GEOLOCATION_ERROR_MESSAGES.UNSUPPORTED, 'UNSUPPORTED');
     }
 
-    // (1) طلب الإذن صراحة الأول - ده اللي فعليًا بيطلع نافذة إذن
-    // الموقع الأصلية لأندرويد/iOS، بعكس navigator.geolocation الخام
-    // اللي كان بيرفض من غير ما يسأل خالص
-    let permissionStatus;
+    // (1) فحص حالة الإذن الحالية أولاً لتجنب إظهار نوافذ متكررة لو كانت ممنوحة
+    let permissionStatus = null;
     try {
-        permissionStatus = await Geolocation.requestPermissions();
-    } catch (err) {
-        console.warn('فشل طلب إذن الموقع من Capacitor Geolocation:', err);
-        throw new GeofenceLocationError(GEOLOCATION_ERROR_MESSAGES[1], 1);
+        permissionStatus = await Geolocation.checkPermissions();
+    } catch (checkErr) {
+        console.warn('تحذير عند فحص إذن الموقع:', checkErr);
+        const friendly = getFriendlyLocationErrorMessage(checkErr);
+        if (friendly.code === 2) {
+            throw new GeofenceLocationError(friendly.message, friendly.code);
+        }
     }
 
-    const isGranted =
+    const isAlreadyGranted =
         permissionStatus?.location === 'granted' || permissionStatus?.coarseLocation === 'granted';
 
-    if (!isGranted) {
-        throw new GeofenceLocationError(GEOLOCATION_ERROR_MESSAGES[1], 1);
+    if (!isAlreadyGranted) {
+        try {
+            permissionStatus = await Geolocation.requestPermissions();
+        } catch (err) {
+            console.warn('فشل طلب إذن الموقع من Capacitor Geolocation:', err);
+            const friendly = getFriendlyLocationErrorMessage(err);
+            throw new GeofenceLocationError(friendly.message, friendly.code);
+        }
+
+        const isGranted =
+            permissionStatus?.location === 'granted' || permissionStatus?.coarseLocation === 'granted';
+
+        if (!isGranted) {
+            throw new GeofenceLocationError(GEOLOCATION_ERROR_MESSAGES[1], 1);
+        }
     }
 
-    // (2) بعد التأكد من الإذن، نجيب الإحداثيات الفعلية
+    // (2) جلب الإحداثيات: المحاولة الأولى بأعلى دقة ممكنة (GPS)
     try {
         const position = await Geolocation.getCurrentPosition({
             enableHighAccuracy: true,
-            timeout: 15000,
+            timeout: 12000,
+            maximumAge: 5000,
         });
 
         return {
@@ -291,11 +322,32 @@ async function getNativeUserCoordinates() {
             longitude: position.coords.longitude,
             accuracyMeters: position.coords.accuracy,
         };
-    } catch (err) {
-        const errorCode = err?.code || 'UNKNOWN';
-        const arabicMessage = GEOLOCATION_ERROR_MESSAGES[errorCode] || GEOLOCATION_ERROR_MESSAGES.UNKNOWN;
-        console.warn('فشل جلب الموقع من Capacitor Geolocation:', err);
-        throw new GeofenceLocationError(arabicMessage, errorCode);
+    } catch (primaryErr) {
+        console.warn('فشلت محاولة GPS عالي الدقة، جاري محاولة التقريب عبر الشبكة:', primaryErr);
+
+        const primaryFriendly = getFriendlyLocationErrorMessage(primaryErr);
+        if (primaryFriendly.code === 2) {
+            throw new GeofenceLocationError(primaryFriendly.message, primaryFriendly.code);
+        }
+
+        // محاولة بديلة سريعة للأماكن المغلقة عبر شبكات الاتصال والواي فاي
+        try {
+            const fallbackPosition = await Geolocation.getCurrentPosition({
+                enableHighAccuracy: false,
+                timeout: 8000,
+                maximumAge: 10000,
+            });
+
+            return {
+                latitude: fallbackPosition.coords.latitude,
+                longitude: fallbackPosition.coords.longitude,
+                accuracyMeters: fallbackPosition.coords.accuracy,
+            };
+        } catch (fallbackErr) {
+            console.warn('فشلت محاولة التقريب عبر الشبكة أيضاً:', fallbackErr);
+            const fallbackFriendly = getFriendlyLocationErrorMessage(fallbackErr || primaryErr);
+            throw new GeofenceLocationError(fallbackFriendly.message, fallbackFriendly.code);
+        }
     }
 }
 
@@ -324,35 +376,49 @@ export function getUserCoordinates() {
             return;
         }
 
+        const handleSuccess = (position) => {
+            resolve({
+                latitude: position.coords.latitude,
+                longitude: position.coords.longitude,
+                accuracyMeters: position.coords.accuracy,
+            });
+        };
+
+        const tryFallback = () => {
+            navigator.geolocation.getCurrentPosition(
+                handleSuccess,
+                (positionError) => {
+                    const arabicMessage =
+                        GEOLOCATION_ERROR_MESSAGES[positionError.code] || GEOLOCATION_ERROR_MESSAGES.UNKNOWN;
+                    reject(new GeofenceLocationError(arabicMessage, positionError.code));
+                },
+                {
+                    enableHighAccuracy: false,
+                    timeout: 8000,
+                    maximumAge: 10000,
+                }
+            );
+        };
+
         navigator.geolocation.getCurrentPosition(
-            // معالج النجاح
-            (position) => {
-                resolve({
-                    latitude: position.coords.latitude,
-                    longitude: position.coords.longitude,
-                    accuracyMeters: position.coords.accuracy,
-                });
-            },
-
-            // معالج الخطأ
+            handleSuccess,
             (positionError) => {
-                const arabicMessage =
-                    GEOLOCATION_ERROR_MESSAGES[positionError.code] || GEOLOCATION_ERROR_MESSAGES.UNKNOWN;
-
-                console.warn(
-                    `فشل تحديد الموقع الجغرافي (كود ${positionError.code}):`,
-                    positionError.message
-                );
-
-                reject(new GeofenceLocationError(arabicMessage, positionError.code));
+                // لو انتهت المهلة أو تعذر، نحاول التقريب بالشبكة بدلاً من الرفض الفوري
+                if (positionError.code === 3 || positionError.code === 2) {
+                    tryFallback();
+                } else {
+                    const arabicMessage =
+                        GEOLOCATION_ERROR_MESSAGES[positionError.code] || GEOLOCATION_ERROR_MESSAGES.UNKNOWN;
+                    console.warn(
+                        `فشل تحديد الموقع الجغرافي (كود ${positionError.code}):`,
+                        positionError.message
+                    );
+                    reject(new GeofenceLocationError(arabicMessage, positionError.code));
+                }
             },
-
-            // إعدادات الطلب: أعلى دقة ممكنة، مع مهلة معقولة ومنع استخدام
-            // موقع قديم مخزّن في المتصفح لمدة طويلة (maximumAge: 0 يجبر
-            // المتصفح يجيب قراءة جديدة بدل ما يرجّع آخر قراءة مخزّنة).
             {
                 enableHighAccuracy: true,
-                timeout: 15000,
+                timeout: 10000,
                 maximumAge: 0,
             }
         );
@@ -585,8 +651,12 @@ export async function checkLocationForSignup() {
         )
     );
 
+    // هامش أمان طفيف (حتى 100م) لامتصاص انحراف دقة الـ GPS الطبيعي على أطراف القرية
+    const accuracyBuffer = Math.min(Math.round(userCoordinates.accuracyMeters || 0), 100);
+    const effectiveRadius = zoneSettings.radiusMeters + accuracyBuffer;
+
     return {
-        isInsideBounds: distanceMeters <= zoneSettings.radiusMeters,
+        isInsideBounds: distanceMeters <= effectiveRadius,
         distanceMeters,
     };
 }

@@ -75,6 +75,9 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
 
     <!-- [جديد] لازم على أندرويد 10+ (API 29+) عشان نقدر نوصل لحساس عدّ الخطوات -->
     <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
@@ -109,6 +112,11 @@
          رسمية من نظام أندرويد نفسه - مش حيلة/API غير موثق). من غير
          الصلاحية دي، الـ Intent هيرمي SecurityException على أي جهاز -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+
+    <!-- Features: required="false" حتى لا يحجب متجر Google Play التطبيق عن الأجهزة التي لا تحتوي هذه الحساسات -->
+    <uses-feature android:name="android.hardware.location.gps" android:required="false" />
+    <uses-feature android:name="android.hardware.sensor.stepcounter" android:required="false" />
+    <uses-feature android:name="android.hardware.sensor.stepdetector" android:required="false" />
 
     <!-- [جديد - Autostart] شاشات "التشغيل التلقائي" الخاصة بشركات
          شاومي/هواوي/هونر/أوبو/فيفو/ميزو..إلخ بنفتحها بـ Intent صريح

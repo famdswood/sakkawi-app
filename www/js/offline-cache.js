@@ -44,6 +44,10 @@ function openDatabase() {
             return;
         }
 
+        const timer = setTimeout(() => {
+            reject(new Error('IndexedDB استغرق وقتا طويلا للفتح'));
+        }, 3000);
+
         const request = window.indexedDB.open(DB_NAME, DB_VERSION);
 
         request.onupgradeneeded = () => {
@@ -55,8 +59,18 @@ function openDatabase() {
             }
         };
 
-        request.onsuccess = () => resolve(request.result);
-        request.onerror = () => reject(request.error);
+        request.onsuccess = () => {
+            clearTimeout(timer);
+            resolve(request.result);
+        };
+        request.onerror = () => {
+            clearTimeout(timer);
+            reject(request.error);
+        };
+        request.onblocked = () => {
+            clearTimeout(timer);
+            reject(new Error('IndexedDB محجوب بواسطة اتصال آخر'));
+        };
     });
 
     // لو فتح القاعدة فشل، منسيبش dbPromise متعلّقة بخطأ قديم لأي محاولة
@@ -78,15 +92,28 @@ export async function getCached(key) {
     try {
         const db = await openDatabase();
         return await new Promise((resolve, reject) => {
+            const timer = setTimeout(() => resolve(null), 2000);
             const tx = db.transaction(STORE_NAME, 'readonly');
             const store = tx.objectStore(STORE_NAME);
             const request = store.get(key);
 
             request.onsuccess = () => {
+                clearTimeout(timer);
                 const record = request.result;
                 resolve(record ? record.data : null);
             };
-            request.onerror = () => reject(request.error);
+            request.onerror = () => {
+                clearTimeout(timer);
+                reject(request.error);
+            };
+            tx.onabort = () => {
+                clearTimeout(timer);
+                resolve(null);
+            };
+            tx.onerror = () => {
+                clearTimeout(timer);
+                resolve(null);
+            };
         });
     } catch (err) {
         console.warn(`[offline-cache.js] فشل قراءة الكاش (${key}):`, err.message || err);
@@ -104,12 +131,23 @@ export async function setCached(key, data) {
     try {
         const db = await openDatabase();
         await new Promise((resolve, reject) => {
+            const timer = setTimeout(() => resolve(), 3000);
             const tx = db.transaction(STORE_NAME, 'readwrite');
             const store = tx.objectStore(STORE_NAME);
             store.put({ data, savedAt: Date.now() }, key);
 
-            tx.oncomplete = () => resolve();
-            tx.onerror = () => reject(tx.error);
+            tx.oncomplete = () => {
+                clearTimeout(timer);
+                resolve();
+            };
+            tx.onerror = () => {
+                clearTimeout(timer);
+                reject(tx.error);
+            };
+            tx.onabort = () => {
+                clearTimeout(timer);
+                resolve();
+            };
         });
     } catch (err) {
         // فشل الحفظ مش مشكلة كبيرة - الشاشة هتشتغل عادي بس من غير
@@ -129,10 +167,21 @@ export async function clearCached(key) {
     try {
         const db = await openDatabase();
         await new Promise((resolve, reject) => {
+            const timer = setTimeout(() => resolve(), 3000);
             const tx = db.transaction(STORE_NAME, 'readwrite');
             tx.objectStore(STORE_NAME).delete(key);
-            tx.oncomplete = () => resolve();
-            tx.onerror = () => reject(tx.error);
+            tx.oncomplete = () => {
+                clearTimeout(timer);
+                resolve();
+            };
+            tx.onerror = () => {
+                clearTimeout(timer);
+                reject(tx.error);
+            };
+            tx.onabort = () => {
+                clearTimeout(timer);
+                resolve();
+            };
         });
     } catch (err) {
         console.warn(`[offline-cache.js] فشل مسح الكاش (${key}):`, err.message || err);

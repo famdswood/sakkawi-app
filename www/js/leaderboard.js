@@ -70,7 +70,7 @@ import { restoreSession } from './auth.js';
 // (جديد - كاش الأوفلاين) fetchWithCache بتنفذ نمط Stale-While-Revalidate:
 // تعرض آخر نسخة محفوظة فوراً، وتحدّثها في الخلفية لو النت شغال - شوف
 // js/offline-cache.js للتفاصيل الكاملة
-import { fetchWithCache } from './offline-cache.js';
+import { fetchWithCache, getCached } from './offline-cache.js';
 // أيقونة "مفيش صورة" الموحّدة المستخدمة في كل مكان تاني بالمشروع (auth.js
 // وprofiles.js) - بدل الاعتماد القديم على placehold.co?text=بطل، اللي كان
 // بيتكسر ويظهر "؟؟؟" لأن خدمة placehold.co مابتعرفش ترندر الحروف العربية
@@ -112,7 +112,7 @@ const CHAMPIONSHIP_PERIODS = Object.freeze({
     month: {
         key: 'month',
         tabId: 'filter-month',
-        metric: 'total_steps',
+        metric: 'points',
         countdownLabel: 'الوقت المتبقي على نهاية البطولة الشهرية',
         podiumSubtitle: 'أعلى 3 أبطال الشهر ده',
         winnerTitle: 'بطل الشهر',
@@ -573,6 +573,9 @@ function bindLeaderboardRefreshButton() {
             refreshIcon.classList.add('animate-spin');
         }
         try {
+            if (typeof window.syncOfflineStepsToServerIfNeeded === 'function') {
+                await window.syncOfflineStepsToServerIfNeeded();
+            }
             await loadAndRenderPeriod(activePeriod);
         } finally {
             setTimeout(() => {
@@ -653,9 +656,15 @@ let leaderboardRows = [];
 let leaderboardBadgesCatalogCache = null;
 let leaderboardBadgesCatalogLoadPromise = null;
 
-/** بترجع كاش كتالوج الأوسمة، وتجيبه من Supabase أول مرة بس */
+/** بترجع كاش كتالوج الأوسمة، مع قراءة سريعة من كاش الأوفلاين أولاً */
 async function ensureLeaderboardBadgesCatalogCache() {
     if (leaderboardBadgesCatalogCache) return leaderboardBadgesCatalogCache;
+
+    const cached = await getCached('cached_badges_catalog');
+    if (cached && Array.isArray(cached) && cached.length > 0) {
+        leaderboardBadgesCatalogCache = new Map(cached.map((badge) => [badge.id, { icon: badge.icon, title: badge.title }]));
+        return leaderboardBadgesCatalogCache;
+    }
 
     if (!leaderboardBadgesCatalogLoadPromise) {
         leaderboardBadgesCatalogLoadPromise = supabaseClient
@@ -663,8 +672,8 @@ async function ensureLeaderboardBadgesCatalogCache() {
             .select('id, icon, title')
             .then(({ data, error }) => {
                 if (error) {
-                    console.error('خطأ في جلب كتالوج الأوسمة (ليدربورد):', error.message);
-                    leaderboardBadgesCatalogCache = new Map();
+                    console.warn('[leaderboard.js] خطأ في جلب كتالوج الأوسمة (ليدربورد):', error.message);
+                    leaderboardBadgesCatalogCache = leaderboardBadgesCatalogCache || new Map();
                 } else {
                     leaderboardBadgesCatalogCache = new Map((data || []).map((badge) => [badge.id, { icon: badge.icon, title: badge.title }]));
                 }
@@ -675,6 +684,35 @@ async function ensureLeaderboardBadgesCatalogCache() {
 
     return leaderboardBadgesCatalogLoadPromise;
 }
+
+/** قائمة معرّفات الأوسمة التي تتوفر لها رسومات ثلاثية الأبعاد مخصصة بدون دوائر */
+const LEADERBOARD_CUSTOM_3D_ASSETS = new Set([
+    'first_steps',
+    'first_correct',
+    'streak_3',
+    'first_friend',
+    'committed',
+    'steps_50k',
+    'genius',
+    'streak_7',
+    'daily_champion',
+    'friends_10',
+    'runner',
+    'steps_250k',
+    'correct_200',
+    'blaze',
+    'weekly_champion',
+    'monthly_champion',
+    'legend_10_wins',
+    'streak_100',
+    'million_steps',
+    'top3_leaderboard',
+    'champion',
+    'veteran_1_year',
+    'champion_daily',
+    'champion_weekly',
+    'champion_monthly',
+]);
 
 /**
  * تجهيز/تحديث أيقونة "الشارة المميزة" جنب اسم صاحب مركز في الليدربورد -
@@ -703,7 +741,11 @@ function renderFeaturedBadgeInline(nameEl, featuredBadgeId) {
         nameEl.insertAdjacentElement('afterend', badgeEl);
     }
 
-    badgeEl.textContent = badge.icon;
+    if (LEADERBOARD_CUSTOM_3D_ASSETS.has(featuredBadgeId)) {
+        badgeEl.innerHTML = `<img src="images/badges/${escapeHtml(featuredBadgeId)}.png" alt="" class="w-4 h-4 inline-block object-contain align-middle">`;
+    } else {
+        badgeEl.textContent = badge.icon;
+    }
     badgeEl.title = badge.title;
 }
 
@@ -897,13 +939,13 @@ function metricUnitLabel(metric) {
 }
 
 /**
- * بترجع جملة "(رقم) بطل تاني داخلين في السباق على مركزك 🏆" بصيغة عربية
+ * بترجع جملة "(رقم) بطل تاني داخلين في السباق على مركزك" بصيغة عربية
  * سليمة حسب قواعد عدد/معدود العربي (١ مفرد، ٢ مثنى، ٣-١٠ جمع "أبطال"،
  * ١١+ مفرد "بطل" - نفس قاعدة "أعلى 3 أبطال" المستخدمة في نص
  * podiumSubtitle فوق).
- * [تعديل - طلب صريح]: الأسلوب القديم كان "تحذير/استعجال" (بينافسوك
- * عليها 🔥)، واتغيّر لأسلوب "إحصائية فخمة" بيوصف حجم السباق نفسه بدل ما
- * يحذّر المستخدم - نفس الفكرة بس نبرة أرقى تناسب شكل الـ chip الجديد.
+ * [تعديل - طلب صريح]: الأسلوب القديم كان "تحذير/استعجال"، واتغيّر لأسلوب
+ * "إحصائية فخمة" بيوصف حجم السباق نفسه بدل ما يحذّر المستخدم - نفس الفكرة
+ * بس نبرة أرقى تناسب شكل الـ chip الجديد.
  * الدالة دي بترجع الجملة كاملة جاهزة للعرض، أو null لو count <= 0 (يبقى
  * المفروض العنصر يتخفي تمامًا مش يتحط له نص فاضي)
  * @param {number} count - عدد "الأبطال" (المشاركين الفعليين) بره أول 10
@@ -911,10 +953,10 @@ function metricUnitLabel(metric) {
  */
 function buildRemainingParticipantsPhrase(count) {
     if (!count || count <= 0) return null;
-    if (count === 1) return 'و بطل واحد تاني داخل في السباق على مركزك 🏆';
-    if (count === 2) return 'و بطلين تانيين داخلين في السباق على مركزك 🏆';
-    if (count <= 10) return `و ${count} أبطال تانيين داخلين في السباق على مركزك 🏆`;
-    return `و ${count} بطل تاني داخلين في السباق على مركزك 🏆`;
+    if (count === 1) return 'و بطل واحد تاني داخل في السباق على مركزك';
+    if (count === 2) return 'و بطلين تانيين داخلين في السباق على مركزك';
+    if (count <= 10) return `و ${count} أبطال تانيين داخلين في السباق على مركزك`;
+    return `و ${count} بطل تاني داخلين في السباق على مركزك`;
 }
 
 /**
@@ -939,8 +981,8 @@ function renderRemainingParticipantsCount(totalUsersCount) {
     if (isGuest) {
         const count = totalUsersCount || 0;
         el.textContent = count > 0 
-            ? `🔥 ${count} بطل مسجلين في سِكّاوي — سجّل مكانك بينهم!`
-            : '🏆 ابدأ المنافسة وكن أول الأبطال!';
+            ? `${count} بطل مسجلين في سِكّاوي — سجّل مكانك بينهم!`
+            : 'ابدأ المنافسة وكن أول الأبطال!';
         el.classList.remove('hidden');
         return;
     }
@@ -983,6 +1025,9 @@ function escapeHtml(text) {
 function featuredBadgeIconHtml(featuredBadgeId) {
     const badge = featuredBadgeId ? leaderboardBadgesCatalogCache?.get(featuredBadgeId) : null;
     if (!badge) return '';
+    if (LEADERBOARD_CUSTOM_3D_ASSETS.has(featuredBadgeId)) {
+        return `<span class="featured-badge-icon" title="${escapeHtml(badge.title)}" style="margin-inline-start:0.25rem;"><img src="images/badges/${escapeHtml(featuredBadgeId)}.png" alt="" class="w-4 h-4 inline-block object-contain align-middle"></span>`;
+    }
     return `<span class="featured-badge-icon" title="${escapeHtml(badge.title)}" style="margin-inline-start:0.25rem;">${escapeHtml(badge.icon)}</span>`;
 }
 
@@ -1088,16 +1133,15 @@ function renderLeaderboardPodium(rows, shouldAnimate = true) {
         if (stepsEl) stepsEl.textContent = row ? formatCompactNumber(row.total_steps) : '—';
         if (avatarEl) avatarEl.src = row?.avatar_url || slot.fallback;
 
-        // نقطة "أونلاين الآن" لصاحب المركز ده - شوف js/presence.js. لو
-        // مفيش صف أصلاً في المركز ده بنشيل الـ data attribute عشان
-        // النقطة تفضل مخفية (مش هتتفعّل لأي id قديم متسيب من رسمة فاتت)
+        // نقطة "أونلاين الآن" لصاحب المركز ده - شوف js/presence.js.
+        // بنشيل is-online فوراً لمنع وميض حالة المستخدم السابق أثناء جلب البيانات
         if (presenceEl) {
+            presenceEl.classList.remove('is-online');
             if (row?.id) {
                 presenceEl.setAttribute('data-presence-avatar', row.id);
                 podiumUserIds.push(row.id);
             } else {
                 presenceEl.removeAttribute('data-presence-avatar');
-                presenceEl.classList.remove('is-online');
             }
         }
 
@@ -1327,8 +1371,8 @@ function renderSelfRankBar(rows, metric) {
             const unit = metricUnitLabel(metric);
             const rivalName = aboveRow.full_name ? aboveRow.full_name.trim().split(' ')[0] : `المركز ${aboveRow.rank}`;
             gapTextEl.textContent = gapValue > 0
-                ? `فاضلك ${gapValue.toLocaleString()} ${unit} وتسبق ${rivalName} (مركز ${aboveRow.rank})! 🔥`
-                : `متساوي مع ${rivalName}! أي ${unit} زيادة هتخليك تسبقه! 🔥`;
+                ? `فاضلك ${gapValue.toLocaleString()} ${unit} وتسبق ${rivalName} (مركز ${aboveRow.rank})!`
+                : `متساوي مع ${rivalName}! أي ${unit} زيادة هتخليك تسبقه!`;
         } else {
             gapTextEl.textContent = 'كمّل نشاطك عشان تتقدم في الترتيب!';
         }
@@ -1479,7 +1523,7 @@ async function loadAndRenderPeriod(periodKey) {
                     <p class="text-xs text-lux-400 font-bold">تعذر جلب بيانات الترتيب حالياً. تأكد من اتصالك بالإنترنت.</p>
                     <button type="button" onclick="window.refreshActiveLeaderboard ? window.refreshActiveLeaderboard() : location.reload()"
                             class="py-2 px-5 rounded-2xl bg-gold-500/20 text-gold-400 hover:bg-gold-500/30 text-xs font-black transition active:scale-95 border border-gold-500/30">
-                        إعادة المحاولة 🔄
+                        إعادة المحاولة
                     </button>
                 </div>
             `;
@@ -1535,19 +1579,6 @@ function renderLeaderboardResult(rows, config, shouldAnimate = true) {
     renderLeaderboardPodium(rows, shouldAnimate);
     renderLeaderboardRemainingList(rows, shouldAnimate);
     renderSelfRankBar(rows, config.metric);
-
-    // (تحديث - إصلاح باج أمان + باج "وسام قدوة بيتفتح لحساب صفر
-    // إنجاز"): الشرط اتنقل بالكامل لدالة SQL آمنة (check_and_unlock_top3_badge
-    // في js/profiles.js -> unlockBadge) بتتحقق فعليًا من ترتيبك
-    // الحقيقي all-time (عمود points في profiles) قبل أي INSERT - مش
-    // من بيانات الفرونت إند (rows هنا) اللي أي حد يقدر يتلاعب فيها من
-    // الـ Console (كان ده بالظبط سبب فتح الوسام لحساب صفر إنجاز).
-    // مفيش داعي نحسب أي شرط رتبة هنا خالص، ولا نربطه بمقياس/فترة
-    // معينة (يومي/أسبوعي/شهري) - "قدوة" إنجاز دائم all-time، والدالة
-    // بتتأكد بنفسها إنك مش مستحقه أصلاً أو مفتوح بالفعل وترجع بسرعة
-    // من غير أي تأثير - آمنة تتنادى في كل مرة الليدربورد يتحمّل (حتى
-    // لو مرتين بسبب كاش الأوفلاين فوق - unlockBadge/الدالة idempotent)
-    import('./profiles.js').then(({ unlockBadge }) => unlockBadge?.('top3_leaderboard'));
 }
 
 

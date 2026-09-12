@@ -3246,6 +3246,24 @@ input[type="date"].admin-text-input {
     border-radius: 0.85rem;
     margin-bottom: 0.75rem;
     border: 1px solid var(--lux-800);
+    cursor: pointer;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+}
+.post-card-image:active {
+    opacity: 0.9;
+    transform: scale(0.995);
+}
+
+@keyframes heartPop {
+    0% { transform: scale(1); }
+    40% { transform: scale(1.35); }
+    70% { transform: scale(0.92); }
+    100% { transform: scale(1); }
+}
+
+.post-like-btn.is-liked svg,
+.post-comment-like-btn.is-liked svg {
+    animation: heartPop 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
 /* شريط اللايك/الكومنت */
@@ -3749,4 +3767,41 @@ input[type="date"].admin-text-input {
 .podium-avatar-wrap {
     position: relative;
     display: inline-block;
+}
+
+/* ==================================================================
+   17) حلقة الاستوري النشطة وتفاعل الأوسمة في البروفايل
+   ================================================================== */
+.story-ring-active {
+    position: relative;
+}
+.story-ring-active::after {
+    content: '';
+    position: absolute;
+    inset: -4px;
+    border-radius: 9999px;
+    padding: 3px;
+    background: linear-gradient(135deg, #d4af37, #f59e0b, #eab308, #10b981);
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    animation: storyRingPulse 3s ease-in-out infinite;
+    pointer-events: none;
+}
+@keyframes storyRingPulse {
+    0%, 100% {
+        opacity: 0.9;
+        filter: drop-shadow(0 0 4px rgba(212, 175, 55, 0.4));
+    }
+    50% {
+        opacity: 1;
+        filter: drop-shadow(0 0 8px rgba(212, 175, 55, 0.7));
+    }
+}
+
+.badge-card-btn {
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.badge-card-btn:active {
+    transform: scale(0.95);
 }

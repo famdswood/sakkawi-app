@@ -221,6 +221,7 @@ public class StepCounterForegroundService extends Service implements SensorEvent
                 .setContentTitle("سِكّاوي بيتابع خطواتك")
                 .setContentText("التتبع شغّال في الخلفية")
                 .setSmallIcon(getNotificationIcon())
+                .setColor(ContextCompat.getColor(this, R.color.notification_accent))
                 .setContentIntent(getOpenAppPendingIntent())
                 .setOngoing(true)
                 .build();
@@ -231,6 +232,7 @@ public class StepCounterForegroundService extends Service implements SensorEvent
                 .setContentTitle("سِكّاوي بيتابع خطواتك")
                 .setContentText("خطوات النهاردة: " + stepsToday)
                 .setSmallIcon(getNotificationIcon())
+                .setColor(ContextCompat.getColor(this, R.color.notification_accent))
                 .setContentIntent(getOpenAppPendingIntent())
                 .setOngoing(true)
                 .build();
@@ -245,6 +247,7 @@ public class StepCounterForegroundService extends Service implements SensorEvent
                 .setContentTitle("سِكّاوي")
                 .setContentText(message)
                 .setSmallIcon(getNotificationIcon())
+                .setColor(ContextCompat.getColor(this, R.color.notification_accent))
                 .setContentIntent(getOpenAppPendingIntent())
                 .setOngoing(true)
                 .build();

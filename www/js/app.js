@@ -50,6 +50,7 @@ import { supabaseClient } from './supabase-config.js';
 // (خطة الأوفلاين - القسم 5) مراقبة رجوع النت + إطلاق حدث app:online
 // عالمي لأي ملف محتاج يعرف - شوف initApp() تحت
 import { initNetworkStatusWatcher } from './network-status.js';
+import { refreshCurrentPresence } from './presence.js';
 import {
     initSmartNotifications,
     evaluateAndScheduleDailyTargetReminder,
@@ -179,7 +180,22 @@ function switchTab(tabId, { fromPopState = false } = {}) {
     // وفي حالة الانتقال لأي تبويب آخر، يتم إخفاء شريط الترتيب/شريط الزائر العائم فوراً
     const selfRankBar = document.getElementById('selfRankBar');
     if (tabId === 'leaderboard') {
-        refreshActiveLeaderboard();
+        if (typeof window.syncOfflineStepsToServerIfNeeded === 'function') {
+            window.syncOfflineStepsToServerIfNeeded().then(() => {
+                refreshActiveLeaderboard();
+            }).catch(() => {
+                refreshActiveLeaderboard();
+            });
+        } else {
+            refreshActiveLeaderboard();
+        }
+    } else if (tabId === 'profile') {
+        if (typeof window.syncOfflineStepsToServerIfNeeded === 'function') {
+            window.syncOfflineStepsToServerIfNeeded();
+        }
+        if (selfRankBar) {
+            selfRankBar.classList.add('hidden');
+        }
     } else if (selfRankBar) {
         selfRankBar.classList.add('hidden');
     }
@@ -521,7 +537,7 @@ function handleStepsIncrease(delta) {
  * البروفايل (بعد تسجيل الدخول من أي جهاز)، عشان لو المستخدم سجّل
  * خطوات النهاردة من جهاز تاني، العداد هنا يبدأ من نفس تقدمه الحقيقي
  * بدل ما يبدأ من صفر.
- * ⚠️ بعكس handleStepsIncrease، الدالة دي *مبتبعتش* حدث 'steps:progress'
+ * (تنبيه) بعكس handleStepsIncrease، الدالة دي *مبتبعتش* حدث 'steps:progress'
  * عن قصد - الخطوات دي أصلاً محفوظة في Supabase (هي مصدرها الأساسي)،
  * فلو بعتناها تاني كـ"جديدة" لـ profiles.js كانت هتتضاف فوق نفسها في
  * total_steps/points (تضاعف حقيقي) في كل مرة يتفتح فيها جهاز جديد.
@@ -902,6 +918,26 @@ async function registerVisitorSession(userId) {
     }
 }
 
+/** مؤقت تسجيل الزيارة الفعلي - لا تُحسب الزيارة إلا لمن قضى أكثر من 30 ثانية */
+let visitorRegistrationTimerId = null;
+
+/**
+ * جدولة تسجيل الزيارة بعد إكمال 30 ثانية من التواجد الفعلي في التطبيق.
+ * إذا خرج المستخدم قبل 30 ثانية لا تُسجل الزيارة.
+ * @param {string|null} userId
+ */
+function scheduleVisitorSessionRegistration(userId) {
+    if (visitorRegistrationTimerId) {
+        window.clearTimeout(visitorRegistrationTimerId);
+        visitorRegistrationTimerId = null;
+    }
+
+    visitorRegistrationTimerId = window.setTimeout(() => {
+        registerVisitorSession(userId);
+        visitorRegistrationTimerId = null;
+    }, 30000);
+}
+
 /**
  * تحدّث last_seen_at/is_online لصف المستخدم الحالي - تحديث مباشر
  * (مش RPC) لأن العمودين دول مش من ضمن الأعمدة المحمية في
@@ -909,6 +945,7 @@ async function registerVisitorSession(userId) {
  * @param {string} userId
  */
 async function updatePresenceHeartbeat(userId) {
+    if (!userId) return;
     const { error } = await supabaseClient
         .from('profiles')
         .update({ last_seen_at: new Date().toISOString(), is_online: true })
@@ -955,6 +992,7 @@ function stopPresenceHeartbeat() {
  * @param {string} userId
  */
 function markUserOffline(userId) {
+    if (!userId) return;
     supabaseClient
         .from('profiles')
         .update({ is_online: false })
@@ -966,16 +1004,43 @@ function markUserOffline(userId) {
 
 /**
  * تربط استماع visibilitychange (تحديث فوري لما المستخدم يرجع للتاب
- * بعد ما كان في الخلفية) - نبضة الـ interval الدورية نفسها متكفلة
- * بالتحديثات وهو فاتح التاب باستمرار
+ * بعد ما كان في الخلفية) + حدث Capacitor الأصلي (appStateChange) +
+ * استعادة النت (app:online) لإنعاش الحضور فوراً
  */
 function initVisitorPresenceTracking() {
+    // 1) تحديث عند عودة التاب للمقدمة في المتصفح والويب فيو
     document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible' && presenceCurrentUserId) {
             updatePresenceHeartbeat(presenceCurrentUserId);
+            refreshCurrentPresence();
         }
     });
 
+    // 2) ربط دورة حياة التطبيق على أندرويد عبر Capacitor
+    if (window.Capacitor?.isNativePlatform?.()) {
+        const CapApp = window.Capacitor?.Plugins?.App;
+        if (CapApp?.addListener) {
+            CapApp.addListener('appStateChange', ({ isActive }) => {
+                if (isActive && presenceCurrentUserId) {
+                    updatePresenceHeartbeat(presenceCurrentUserId);
+                    refreshCurrentPresence();
+                } else if (!isActive && presenceCurrentUserId) {
+                    // توثيق لحظة الخروج بدقة بالثانية عند الانتقال للخلفية
+                    updatePresenceHeartbeat(presenceCurrentUserId);
+                }
+            });
+        }
+    }
+
+    // 3) استعادة الاتصال بالإنترنت فوراً بعد انقطاعه
+    document.addEventListener('app:online', () => {
+        if (presenceCurrentUserId) {
+            updatePresenceHeartbeat(presenceCurrentUserId);
+            refreshCurrentPresence();
+        }
+    });
+
+    // 4) محاولة أفضل جهد عند الإغلاق التام
     window.addEventListener('beforeunload', () => {
         if (presenceCurrentUserId) {
             markUserOffline(presenceCurrentUserId);
@@ -1024,10 +1089,8 @@ function initSharedUIBridge() {
     document.addEventListener('app:enter-guest-browsing', () => {
         applyGuestModeRestrictions(false);
 
-        // زائر عابر (مالوش صف في profiles) - نسجّل الزيارة بس، من غير
-        // أي نبضة حضور (heartbeat) لأنه مفيش last_seen_at/is_online
-        // نحدّثهم أصلاً لزائر من غير حساب
-        registerVisitorSession(null);
+        // زائر عابر (مالوش صف في profiles) - نسجّل الزيارة بعد قضاء 30 ثانية
+        scheduleVisitorSessionRegistration(null);
     });
 
     // (إصلاح - باج حقيقي): لغاية دلوقتي مكانش فيه أي مستمع لحدث
@@ -1056,20 +1119,30 @@ function initSharedUIBridge() {
         }
         stopPresenceHeartbeat();
         presenceCurrentUserId = null;
+
+        const headerPresenceDotEl = document.getElementById('headerAvatarPresenceDot');
+        const profilePresenceDotEl = document.getElementById('profileAvatarPresenceDot');
+        if (headerPresenceDotEl) {
+            headerPresenceDotEl.removeAttribute('data-presence-avatar');
+            headerPresenceDotEl.classList.remove('is-online');
+        }
+        if (profilePresenceDotEl) {
+            profilePresenceDotEl.removeAttribute('data-presence-avatar');
+            profilePresenceDotEl.classList.remove('is-online');
+        }
     });
 
     // (المرحلة 1) auth:signed-in بتتطلق من auth.js في الحالتين: تسجيل
     // دخول فعلي جديد (SIGNED_IN) *و* استرجاع جلسة محفوظة من زيارة
     // سابقة (INITIAL_SESSION) - وده بالظبط اللي محتاجينه هنا: كل مرة
-    // مستخدم مسجل يفتح التطبيق، تتسجل زيارة (upsert يوم واحد بيتجاهل
-    // التكرار لو الجهاز فتح التطبيق أكتر من مرة في نفس اليوم) وتبدأ
-    // نبضة الحضور. مش بنستخدم 'auth:login' هنا (رغم إنه بيتطلق في نفس
+    // مستخدم مسجل يفتح التطبيق، تتسجل زيارة (بعد قضاء 30 ثانية في التطبيق)
+    // وتبدأ نبضة الحضور. مش بنستخدم 'auth:login' هنا (رغم إنه بيتطلق في نفس
     // اللحظة تقريباً) عشان نفصل منطق "الزيارة/الحضور" عن منطق "تحديث
     // واجهة البروفايل" اللي auth:login مخصص له أصلاً تحت
     document.addEventListener('auth:signed-in', (event) => {
         const user = event.detail && event.detail.user;
         if (user && user.id) {
-            registerVisitorSession(user.id);
+            scheduleVisitorSessionRegistration(user.id);
             startPresenceHeartbeat(user.id);
         }
     });
@@ -1292,7 +1365,7 @@ function initApp() {
 }
 
 /* ==================================================================
-   🔋 [جديد] بانر "استثناء توفير البطارية" (صفحة إعدادات الحساب)
+   [جديد] بانر "استثناء توفير البطارية" (صفحة إعدادات الحساب)
    ------------------------------------------------------------------
    js/sensors.js بيبعت 'sensors:battery-optimization-needed' لو
    الـ Plugin الأصلي اكتشف إن التطبيق مش مستثنى من توفير البطارية على
@@ -1326,7 +1399,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 /* ==================================================================
-   🚀 [جديد] بانر "التشغيل التلقائي" (Autostart) - صفحة إعدادات الحساب
+   [جديد] بانر "التشغيل التلقائي" (Autostart) - صفحة إعدادات الحساب
    ------------------------------------------------------------------
    نفس فلسفة بانر توفير البطارية فوق بالظبط: js/sensors.js بيبعت
    'sensors:autostart-needed' لو الجهاز من الشركات المعروفة بتقييد

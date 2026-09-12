@@ -72,7 +72,7 @@
 import { supabaseClient } from './supabase-config.js';
 import { getCurrentUser } from './auth.js';
 import { openPublicProfile, DEFAULT_AVATAR_URI } from './profiles.js';
-import { pushModalState, closeModal } from './modal-history.js';
+import { pushModalState, closeModal, replaceModalState } from './modal-history.js';
 // (جديد - كاش الأوفلاين) شوف js/offline-cache.js للتفاصيل الكاملة
 import { fetchWithCache, setCached } from './offline-cache.js';
 // (المرحلة 4-أ) ملصق الإنجاز الحي (Live Stat Sticker) - بنقرأ عدد خطوات
@@ -565,8 +565,8 @@ async function enrichStoriesWithFreshProfileData(stories) {
 
     try {
         const { data, error } = await supabaseClient
-            .from('profiles')
-            .select('id, full_name, first_name, last_name, avatar_url')
+            .from('public_profiles')
+            .select('id, full_name, avatar_url')
             .in('id', uniqueUserIds);
         if (error) throw error;
 
@@ -575,8 +575,7 @@ async function enrichStoriesWithFreshProfileData(stories) {
             const profile = profileById.get(story.userId);
             if (!profile) return;
 
-            const freshName = profile.full_name
-                || [profile.first_name, profile.last_name].filter(Boolean).join(' ').trim();
+            const freshName = profile.full_name;
             if (freshName) story.userName = freshName;
             if (profile.avatar_url) story.avatar = profile.avatar_url;
         });
@@ -1145,7 +1144,7 @@ async function toggleStoryLike() {
 
             if (currentUser?.id) {
                 const { data: likerProfile } = await supabaseClient
-                    .from('profiles')
+                    .from('public_profiles')
                     .select('full_name, avatar_url')
                     .eq('id', currentUser.id)
                     .maybeSingle();
@@ -1615,12 +1614,14 @@ function renderCurrentStory() {
 }
 
 /**
- * فتح مودال مشاهدة الستوريز بدءاً من ستوري معينة - بيحدد مجموعة
- * (currentGroupStoryIndices) ستوريز نفس صاحب الستوري دي بس، عشان
+ * فتح عارض الستوريز على ستوري معينة، مع حصر التنقل في ستوريز صاحب
+ * الستوري دي فقط (نفس فكرة انستجرام بالظبط) - أزرار وحركات اللمس بتاعة
  * التنقل والتقسيمة يفضلوا محصورين في ستوريز الشخص ده لوحده
  * @param {number} index - ترتيب الستوري المطلوب فتحها
+ * @param {object} [options]
+ * @param {boolean} [options.replaceHistory]
  */
-export function openStory(index) {
+export function openStory(index, options = {}) {
     if (index < 0 || index >= storiesData.length) return;
 
     const story = storiesData[index];
@@ -1641,7 +1642,11 @@ export function openStory(index) {
     // تسجيل خطوة في تاريخ المتصفح عشان زرار رجوع الموبايل يقفل مودال
     // الاستوري بس (بدل ما يخرج المستخدم بره الصفحة) - شوف js/modal-history.js
     if (!wasAlreadyOpen) {
-        pushModalState(hideStoryViewerModal);
+        if (options?.replaceHistory) {
+            replaceModalState(hideStoryViewerModal);
+        } else {
+            pushModalState(hideStoryViewerModal);
+        }
     }
 }
 
@@ -1817,7 +1822,7 @@ export async function initStoriesUI() {
     if (user?.id) {
         try {
             const { data: myProfile } = await supabaseClient
-                .from('profiles')
+                .from('public_profiles')
                 .select('full_name, avatar_url')
                 .eq('id', user.id)
                 .maybeSingle();
@@ -1837,12 +1842,12 @@ export async function initStoriesUI() {
             || loggedInUser?.user_metadata?.username || null;
 
         // نفس الإصلاح فوق بالظبط: نجيب avatar_url/full_name الحقيقيين من
-        // جدول profiles بعد تسجيل الدخول، مش من user_metadata اللي فاضية
+        // جدول public_profiles بعد تسجيل الدخول، مش من user_metadata اللي فاضية
         // منهم دايمًا
         if (loggedInUser?.id) {
             try {
                 const { data: myProfile } = await supabaseClient
-                    .from('profiles')
+                    .from('public_profiles')
                     .select('full_name, avatar_url')
                     .eq('id', loggedInUser.id)
                     .maybeSingle();
@@ -1874,6 +1879,15 @@ export async function initStoriesUI() {
         currentUserAvatar = null;
         currentUserName = null;
         renderStoriesBar();
+    });
+
+    document.addEventListener('profile:updated', (event) => {
+        const updated = event.detail?.profile;
+        if (updated) {
+            if (updated.avatar_url !== undefined) currentUserAvatar = updated.avatar_url;
+            if (updated.full_name) currentUserName = updated.full_name;
+            renderStoriesBar();
+        }
     });
 
     // (تعديل - كاش الأوفلاين): هنا (أول فتح للتطبيق) هو المكان الصح
@@ -2699,6 +2713,22 @@ async function publishStory() {
             detail: { message: `نص الاستوري لا يجب أن يتجاوز ${STORY_MAX_CHARS} حرفاً` },
         }));
         return;
+    }
+    if (window.currentMasterSettings?.feature_stories_enabled === false) {
+        document.dispatchEvent(new CustomEvent('app:toast', {
+            detail: { message: 'نشر القصص متوقف مؤقتاً بقرار إداري', type: 'error' },
+        }));
+        return;
+    }
+
+    if (window.checkProfanity) {
+        const { hasProfanity } = window.checkProfanity(content);
+        if (hasProfanity) {
+            document.dispatchEvent(new CustomEvent('app:toast', {
+                detail: { message: 'نص القصة يحتوي على كلمات غير مسموح بنشرها', type: 'error' },
+            }));
+            return;
+        }
     }
 
     const currentUser = await getCurrentUser();

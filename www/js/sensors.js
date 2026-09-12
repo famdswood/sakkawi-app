@@ -1,7 +1,7 @@
 /* ==================================================================
    سِكّاوي | js/sensors.js
    ------------------------------------------------------------------
-   ⚠️ (قرار منتج) الاعتماد بقى 100% على حساس الخطوات الأصلي بالموبايل
+   (قرار منتج) الاعتماد بقى 100% على حساس الخطوات الأصلي بالموبايل
    (TYPE_STEP_COUNTER عبر StepCounterForegroundService.java + StepCounterPlugin) -
    نفس الحساس اللي Google Fit وتطبيقات اللياقة التانية بتقرا منه. اتشال
    نهائياً أي "بديل" تاني (كان فيه هنا قبل كده خوارزمية Peak Detection
@@ -19,7 +19,7 @@
    3) دمج (Reconcile) الرقم المحلي مع رقم Supabase لو المستخدم فتح
       التطبيق من جهاز جديد بنفس الحساب - راجع reconcileWithServerSteps().
 
-   ⚠️ التطبيق ده دايمًا شغّال جوه Capacitor (APK حقيقي) - مفيش نسخة
+   التطبيق ده دايمًا شغّال جوه Capacitor (APK حقيقي) - مفيش نسخة
    PWA/متصفح بتعتمد على الملف ده في الإنتاج، فمفيش داعي لأي مسار بديل
    هنا أصلاً.
    ================================================================== */
@@ -193,7 +193,7 @@ export function getStepsCount() {
  * بنـ"دمج" (ناخد الأكبر بين الاتنين) بدل الاستبدال المباشر، عشان لو
  * كان المستخدم مشى شوية على *نفس* الجهاز ده قبل ما بيانات البروفايل
  * توصل من الشبكة (اللي ممكن تاخد ثانية أو اتنين)، الخطوات دي متتفقدش.
- * ⚠️ مهم: الدالة دي بتبعت حدث مختلف تماماً ('sensors:steps-resynced')
+ * مهم: الدالة دي بتبعت حدث مختلف تماماً ('sensors:steps-resynced')
  * مش 'sensors:steps-update' العادي بتاع الحساس الحقيقي - عشان
  * profiles.js ميفهمهاش غلط كـ"خطوات جديدة" ويحاول يبعتها تاني لـ
  * Supabase (ده كان هيسبب تضاعف حقيقي في total_steps/points في كل مرة
@@ -277,7 +277,7 @@ export function syncActiveUser(userId) {
 }
 
 /* ==================================================================
-   🚀 Auto Start
+   Auto Start
    ------------------------------------------------------------------
    بمجرد ما الملف ده يتحمّل (import)، بنقرا/بنهيّئ حالة اليوم من
    localStorage بس (Daily Reset Check) - مفيش أي "تشغيل تتبّع" هنا
@@ -291,7 +291,7 @@ function autoInit() {
 }
 
 /* ==================================================================
-   🔗 [جديد] تكامل مع StepCounter Plugin الأصلي (تتبّع الخلفية الحقيقي)
+   [جديد] تكامل مع StepCounter Plugin الأصلي (تتبّع الخلفية الحقيقي)
    ------------------------------------------------------------------
    بيشتغل بس جوه تطبيق Capacitor الحقيقي (مش في المتصفح وقت التطوير).
    بيدمج عدد الخطوات اللي اتسجل من الحساس الأصلي في الخلفية مع نفس
@@ -318,7 +318,7 @@ function autoInit() {
 // شوية على أي حال)
 let isSyncingFromNative = false;
 
-async function syncFromNativeStepCounter() {
+export async function syncFromNativeStepCounter() {
     ensureStillSameDay();
     if (!window.Capacitor?.isNativePlatform?.()) return;
     if (isSyncingFromNative) return; // فيه مزامنة شغّالة بالفعل - نرفض عشان نمنع التضاعف
@@ -553,9 +553,11 @@ function stopNativeSyncPolling() {
     nativeSyncIntervalId = null;
 }
 
-// نشغّل البولينج فورًا لو الصفحة أصلاً ظاهرة وقت التحميل (مش لازم
-// ننتظر أول visibilitychange)
-if (document.visibilityState === 'visible') {
+if (typeof window !== 'undefined') {
+    window.syncFromNativeStepCounter = syncFromNativeStepCounter;
+}
+
+if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
     startNativeSyncPolling();
 }
 

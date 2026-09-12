@@ -106,9 +106,12 @@ function handleGuestBannerSupportClick() {
     window.open(GUEST_SUPPORT_CONTACT_URL, '_blank', 'noopener,noreferrer');
 }
 
+// تتبع ما إذا كان المستخدم أغلق الشريط يدوياً في الجلسة الحالية
+let isDismissedThisSession = false;
+
 function handleGuestBannerCloseClick() {
-    // إخفاء الشريط للجلسة الحالية فقط (من غير ما نغيّر isGuestMode
-    // نفسها - لو المستخدم عمل Refresh، الشريط هيظهر تاني لو لسه زائر)
+    // إخفاء الشريط للجلسة الحالية فقط وعدم إعادة فتحه مع الفحوصات الدورية
+    isDismissedThisSession = true;
     hideGuestBanner();
 }
 
@@ -138,7 +141,7 @@ function initGuestBanner() {
     // الإظهار المبدئي بناءً على القيمة الحالية لـ isGuestMode وقت تحميل
     // الصفحة (قيمة "متفائلة" مؤقتة قبل ما الفحص الجغرافي الفعلي يخلّص -
     // شوف المستمع تحت لتحديثها ديناميكياً بمجرد ما geofence.js يرد فعليًا)
-    if (window.isGuestMode) {
+    if (window.isGuestMode && !isDismissedThisSession) {
         showGuestBanner();
     } else {
         hideGuestBanner();
@@ -150,15 +153,23 @@ function initGuestBanner() {
     // استدعاء check_and_update_user_location في Supabase) يخلّص لاحقًا
     // بشكل Async. يعني حتى لو الفحص اشتغل صح وحدد إن المستخدم برّه النطاق،
     // الشريط مكانش بيظهر أبدًا لأنه شاف القيمة الأولية (false غالبًا) بدري
-    // قوي وسكت. المستمع ده بيخلي الشريط يستجيب فورًا لأي تحديث حقيقي لاحق،
+    // قوي وسكت. المستمع ده بيخلي الشريط يستجيب فوراً لأي تحديث حقيقي لاحق،
     // سواء بعد أول فحص عند فتح التطبيق أو بعد أي retryGeofenceVerification
     // يدوي (زرار "حاول التحقق من موقعي تاني" لو موجود).
     document.addEventListener('geofence:guest-mode-change', (event) => {
         if (event.detail?.isGuestMode) {
-            showGuestBanner();
+            if (!isDismissedThisSession) {
+                showGuestBanner();
+            }
         } else {
+            isDismissedThisSession = false;
             hideGuestBanner();
         }
+    });
+
+    document.addEventListener('auth:login', () => {
+        isDismissedThisSession = false;
+        hideGuestBanner();
     });
 }
 

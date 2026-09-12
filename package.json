@@ -23,6 +23,7 @@
     "@capacitor/push-notifications": "^8.1.2"
   },
   "devDependencies": {
+    "pg": "^8.23.0",
     "typescript": "^7.0.2"
   }
 }

@@ -57,6 +57,8 @@ import { getStories, openStory } from './stories.js';
 // يفضل بلا أي فعل عند الضغط عليه
 import { openSupportChatWithAdmin, openSupportChatAsAdminWithUser } from './support-chat.js';
 import { pushModalState, closeModal, hasOpenModal } from './modal-history.js';
+// (كاش الأوفلاين) حفظ واسترجاع الإشعارات بدون إنترنت
+import { fetchWithCache, setCached } from './offline-cache.js';
 
 /* ------------------------------------------------------------------
    1) حالة الموديول (Module State)
@@ -185,11 +187,19 @@ const NOTIFICATIONS_MAX_COUNT = 10;
  * شغال من غير ما نحتاج نرجع نعدّله تاني في كل مرة
  */
 const BELL_TRIGGER_SELECTOR = [
+    '#headerNotificationsBtn',
     '#notificationBellBtn',
     '#notification-btn',
     '.notification-btn-trigger',
     '[data-notif-trigger]',
 ].join(', ');
+
+/** الحصول على عنصر زرار جرس الإشعارات بأي من المعرفات المحتملة */
+function getBellButton() {
+    return document.getElementById('headerNotificationsBtn')
+        || document.getElementById('notificationBellBtn')
+        || document.querySelector(BELL_TRIGGER_SELECTOR);
+}
 
 /** كل الـ ids المحتملة لعنصر مودال الإشعارات نفسه - نفس فلسفة BELL_TRIGGER_SELECTOR فوق */
 const NOTIFICATIONS_MODAL_IDS = ['notificationsModal', 'notification-modal'];
@@ -373,6 +383,7 @@ export function dismissNotificationLocally(matcher = {}) {
 
     notificationsCache = notificationsCache.filter((n) => !matches(n));
     updateUnreadBadges();
+    persistNotificationsCache();
 
     // إزالة الكروت من الـ DOM مع أنيميشن ناعم
     removedItems.forEach((item) => {
@@ -526,6 +537,15 @@ function bindStaticListeners() {
     }
     bellTriggers.forEach((btn) => btn.addEventListener('click', openNotificationsModal));
 
+    // استماع مفوّض احتياطي لضمان عمل النقر دائماً
+    document.addEventListener('click', (e) => {
+        const trigger = e.target.closest(BELL_TRIGGER_SELECTOR);
+        if (trigger) {
+            e.preventDefault();
+            openNotificationsModal();
+        }
+    });
+
     if (!modal) {
         console.warn(
             '[notifications.js] مفيش عنصر مودال إشعارات اتلقى في الصفحة. '
@@ -638,7 +658,7 @@ function handleUserSignedOut() {
     if (bellAnimationTimeoutId) {
         clearTimeout(bellAnimationTimeoutId);
         bellAnimationTimeoutId = null;
-        document.getElementById('notificationBellBtn')?.classList.remove('bell-shake');
+        getBellButton()?.classList.remove('bell-shake');
     }
 
     closeNotificationsModal();
@@ -661,6 +681,9 @@ export async function openNotificationsModal() {
     const modal = getNotificationsModalEl();
     if (!modal) {
         console.warn('[notifications.js] تعذّر فتح لوحة الإشعارات: عنصر المودال مش موجود في الصفحة.');
+        return;
+    }
+    if (modal.classList.contains('is-open')) {
         return;
     }
 
@@ -758,40 +781,38 @@ function setActiveFilter(filter) {
  * يجيب كل صفوف notifications الخاصة بالمستخدم الحالي من الأحدث
  * للأقدم، يخزّنها في notificationsCache، ويعيد رسم القائمة والشارات
  */
-async function fetchAndRenderNotifications() {
-    if (!currentUser) return;
+/** حفظ الإشعارات الحالية في كاش الأوفلاين */
+function persistNotificationsCache() {
+    if (currentUser && currentUser.id) {
+        setCached(`cached_notifications:${currentUser.id}`, notificationsCache);
+    }
+}
 
-    let data = null;
-    let error = null;
+/** جلب الإشعارات من سيرفر Supabase مباشرة (يرجع null عند فشل الاتصال) */
+async function fetchUserNotificationsFromServer(userId) {
     try {
-        ({ data, error } = await supabaseClient
+        const { data, error } = await supabaseClient
             .from('notifications')
             .select('*')
-            .eq('user_id', currentUser.id)
+            .eq('user_id', userId)
             .order('created_at', { ascending: false })
-            .limit(NOTIFICATIONS_MAX_COUNT));
+            .limit(NOTIFICATIONS_MAX_COUNT);
+
+        if (error) {
+            console.warn('[notifications.js] خطأ في جلب الإشعارات من السيرفر:', error.message || error);
+            return null;
+        }
+        return data || [];
     } catch (err) {
-        // احتياطي: لو فشل الاتصال نفسه (مثلاً المستخدم Offline) رمى استثناء
-        // بدل ما يرجّع {error} عادي زي باقي حالات Supabase - بنمسكه هنا
-        // عشان الصفحة متتجمدش بـ Promise مرفوض من غير معالجة
-        error = err;
+        console.warn('[notifications.js] استثناء أثناء جلب الإشعارات:', err.message || err);
+        return null;
     }
+}
 
-    if (error) {
-        console.error('خطأ في جلب الإشعارات:', error.message || error);
-        document.dispatchEvent(new CustomEvent('app:toast', {
-            detail: { message: 'تعذّر تحميل الإشعارات، حاول تاني', type: 'error' },
-        }));
-        return;
-    }
-
-    const serverNotifications = data || [];
+/** تنظيف الإشعارات المحذوفة سابقاً وإشعارات الصداقة الملغاة على السيرفر */
+async function cleanupDismissedAndInvalidNotifications(serverNotifications) {
+    if (!currentUser) return;
     const dismissedIds = getDismissedNotificationIds();
-
-    // فلترة أي إشعارات قام المستخدم بحذفها/مشاهدتها مسبقاً لضمان عدم عودتها إطلاقاً عند إعادة فتح التطبيق
-    notificationsCache = serverNotifications.filter((n) => !dismissedIds.has(String(n.id)));
-
-    // في الخلفية: محاولة تنظيف وحذف هذه الإشعارات من Supabase لضمان مزامنة السيرفر
     const lingeringDismissed = serverNotifications
         .filter((n) => dismissedIds.has(String(n.id)))
         .map((n) => n.id);
@@ -810,8 +831,6 @@ async function fetchAndRenderNotifications() {
             .catch(() => {});
     }
 
-    // فحص ذاتي ذكي وتنظيف تلقائي (Self-Healing / Auto-Purge):
-    // فحص إشعارات طلبات الصداقة المعلقة للتأكد من أنها ما زالت صالحة ولم تُقبل أو تُلغى في الخلفية
     const pendingFriendNotifs = notificationsCache.filter((n) => n.type === 'friend_request' && n.data?.request_id);
     if (pendingFriendNotifs.length > 0) {
         const requestIds = pendingFriendNotifs.map((n) => n.data.request_id);
@@ -834,6 +853,9 @@ async function fetchAndRenderNotifications() {
             if (deadNotifs.length > 0) {
                 const deadIds = deadNotifs.map((n) => n.id);
                 notificationsCache = notificationsCache.filter((n) => !deadIds.includes(n.id));
+                persistNotificationsCache();
+                renderNotificationsList();
+                updateUnreadBadges();
                 supabaseClient
                     .from('notifications')
                     .delete()
@@ -844,11 +866,43 @@ async function fetchAndRenderNotifications() {
             console.warn('[notifications.js] فحص التحقق الذاتي للطلبات المعلقة:', sweepErr);
         }
     }
+}
 
-    hasFetchedOnce = true;
+/**
+ * يجيب كل صفوف notifications الخاصة بالمستخدم الحالي، بنمط Stale-While-Revalidate:
+ * يعرض النسخة المخزنة محلياً فوراً حتى لو الجهاز بدون إنترنت، ويحدثها في الخلفية عند توفر الشبكة
+ */
+async function fetchAndRenderNotifications() {
+    if (!currentUser) return;
 
-    renderNotificationsList();
-    updateUnreadBadges();
+    let hasRenderedAnyData = false;
+
+    await fetchWithCache(
+        `cached_notifications:${currentUser.id}`,
+        () => fetchUserNotificationsFromServer(currentUser.id),
+        (serverNotifications, source) => {
+            const dismissedIds = getDismissedNotificationIds();
+            notificationsCache = (serverNotifications || []).filter((n) => !dismissedIds.has(String(n.id)));
+            hasRenderedAnyData = true;
+            hasFetchedOnce = true;
+
+            renderNotificationsList();
+            updateUnreadBadges();
+
+            if (source === 'network') {
+                persistNotificationsCache();
+                if (serverNotifications && serverNotifications.length > 0) {
+                    cleanupDismissedAndInvalidNotifications(serverNotifications);
+                }
+            }
+        }
+    );
+
+    if (!hasRenderedAnyData && !hasFetchedOnce) {
+        document.dispatchEvent(new CustomEvent('app:toast', {
+            detail: { message: 'تعذّر تحميل الإشعارات، حاول تاني', type: 'error' },
+        }));
+    }
 }
 
 
@@ -1589,6 +1643,7 @@ async function removeNotificationCard(card) {
 
     notificationsCache = notificationsCache.filter((n) => String(n.id) !== String(notifId));
     updateUnreadBadges();
+    persistNotificationsCache();
 
     if (!notifId || !currentUser) return;
 
@@ -1624,6 +1679,7 @@ async function markNotificationAsRead(notificationId) {
 
     notification.is_read = true;
     updateUnreadBadges();
+    persistNotificationsCache();
 
     const card = document.querySelector(`.notif-card[data-notif-id="${notificationId}"]`);
     if (card) card.classList.remove('is-unread');
@@ -1657,6 +1713,7 @@ async function markAllNotificationsAsRead() {
 
     notificationsCache.forEach((n) => { n.is_read = true; });
     updateUnreadBadges();
+    persistNotificationsCache();
     document.querySelectorAll('#notificationsList .notif-card.is-unread')
         .forEach((card) => card.classList.remove('is-unread'));
 
@@ -1791,6 +1848,7 @@ function handleIncomingNotification(newNotification) {
     }
 
     updateUnreadBadges();
+    persistNotificationsCache();
 
     const matchesCurrentFilter = currentFilter === 'all' || !newNotification.is_read;
     if (matchesCurrentFilter) {
@@ -1950,7 +2008,7 @@ function playNewNotificationFeedback() {
     // (playSound الحالية بترجع من غير خطأ لو النوع مش معروف)
     document.dispatchEvent(new CustomEvent('app:sound', { detail: { type: 'notify' } }));
 
-    const bellBtn = document.getElementById('notificationBellBtn');
+    const bellBtn = getBellButton();
     if (!bellBtn) return;
 
     if (bellAnimationTimeoutId) {

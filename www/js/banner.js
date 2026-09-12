@@ -18,7 +18,7 @@
 
 import { supabaseClient } from './supabase-config.js';
 // (جديد - كاش الأوفلاين) شوف js/offline-cache.js للتفاصيل الكاملة
-import { fetchWithCache } from './offline-cache.js';
+import { fetchWithCache, setCached } from './offline-cache.js';
 
 /** اشتراك Realtime الحالي (لو شغال) - محفوظ عشان نقدر نلغيه لو الصفحة اتقفلت */
 let bannerRealtimeChannel = null;
@@ -57,12 +57,18 @@ function renderHomeBanner(row) {
 
     if (imageEl) {
         if (hasImage) {
+            imageEl.onerror = () => {
+                imageEl.classList.add('hidden');
+                bannerEl.classList.add('is-text-only');
+                if (overlayEl) overlayEl.style.backgroundColor = 'transparent';
+            };
             imageEl.src = row.image_url;
             imageEl.classList.remove('hidden');
             // [تعديل] الجزء الظاهر من الصورة - القيمة جاية من الأدمن
             // (object-position جاهزة، شوف admin.html/#bannerPositionGrid)
             imageEl.style.objectPosition = row.image_position || BANNER_DEFAULT_POSITION;
         } else {
+            imageEl.onerror = null;
             imageEl.removeAttribute('src');
             imageEl.classList.add('hidden');
         }
@@ -142,7 +148,11 @@ function bindHomeBannerRealtimeSubscription() {
         .on(
             'postgres_changes',
             { event: '*', schema: 'public', table: 'home_banner' },
-            (payload) => renderHomeBanner(payload.new),
+            (payload) => {
+                const newRow = payload.new || null;
+                renderHomeBanner(newRow);
+                setCached('cached_home_banner', { row: newRow });
+            },
         )
         .subscribe((status, err) => {
             if (err) {
