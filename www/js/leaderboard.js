@@ -82,6 +82,7 @@ import { DEFAULT_AVATAR_URI } from './profiles.js';
 // نسخة الليدربورد الجديدة (get_leaderboard) بعد ما بقت هي المسؤولة عن
 // الرسم بدل النسخة القديمة في profiles.js.
 import { presenceDotHtml, loadAndApplyPresence } from './presence.js';
+import { getStepsCount } from './sensors.js';
 
 const CAIRO_TIME_ZONE = 'Africa/Cairo';
 
@@ -1365,30 +1366,47 @@ function renderSelfRankBar(rows, metric) {
     if (guestContent) guestContent.classList.add('hidden');
 
     const myRow = currentUserId ? rows.find((row) => row.id === currentUserId) : null;
-    const shouldShowBar = Boolean(myRow && myRow.rank > LEADERBOARD_DISPLAY_LIMIT);
+    const isInsideTop10 = Boolean(myRow && myRow.rank <= LEADERBOARD_DISPLAY_LIMIT);
+    const shouldShowBar = !isInsideTop10;
 
     barEl.classList.toggle('hidden', !shouldShowBar);
     if (userContent) userContent.classList.toggle('hidden', !shouldShowBar);
 
-    if (!shouldShowBar || !myRow) return;
+    if (!shouldShowBar) return;
 
-    if (avatarEl && myRow.avatar_url) avatarEl.src = myRow.avatar_url;
-    if (rankNumberEl) rankNumberEl.textContent = `ترتيبك (${myRow.rank.toLocaleString()})`;
-    if (pointsEl) pointsEl.textContent = myRow.points.toLocaleString();
-    if (stepsEl) stepsEl.textContent = formatCompactNumber(myRow.total_steps);
+    const todaySteps = typeof getStepsCount === 'function' ? (getStepsCount() || 0) : 0;
+    const currentSteps = myRow ? myRow.total_steps : todaySteps;
+    const currentPoints = myRow ? myRow.points : (Number(window.profileStats?.points) || 0);
+
+    if (avatarEl) {
+        const avatarSrc = myRow?.avatar_url || window.currentProfileRow?.avatar_url || DEFAULT_AVATAR_URI;
+        avatarEl.src = avatarSrc;
+    }
+    if (rankNumberEl) {
+        rankNumberEl.textContent = myRow ? `ترتيبك (${myRow.rank.toLocaleString()})` : 'ترتيبك (—)';
+    }
+    if (pointsEl) pointsEl.textContent = currentPoints.toLocaleString();
+    if (stepsEl) stepsEl.textContent = formatCompactNumber(currentSteps);
 
     if (gapTextEl) {
-        const aboveRow = rows.find((row) => row.rank === myRow.rank - 1);
+        if (myRow) {
+            const aboveRow = rows.find((row) => row.rank === myRow.rank - 1);
 
-        if (aboveRow) {
-            const gapValue = Math.max(0, metricValueOf(aboveRow, metric) - metricValueOf(myRow, metric));
-            const unit = metricUnitLabel(metric);
-            const rivalName = aboveRow.full_name ? aboveRow.full_name.trim().split(' ')[0] : `المركز ${aboveRow.rank}`;
-            gapTextEl.textContent = gapValue > 0
-                ? `فاضلك ${gapValue.toLocaleString()} ${unit} وتسبق ${rivalName} (مركز ${aboveRow.rank})!`
-                : `متساوي مع ${rivalName}! أي ${unit} زيادة هتخليك تسبقه!`;
+            if (aboveRow) {
+                const gapValue = Math.max(0, metricValueOf(aboveRow, metric) - metricValueOf(myRow, metric));
+                const unit = metricUnitLabel(metric);
+                const rivalName = aboveRow.full_name ? aboveRow.full_name.trim().split(' ')[0] : `المركز ${aboveRow.rank}`;
+                gapTextEl.textContent = gapValue > 0
+                    ? `فاضلك ${gapValue.toLocaleString()} ${unit} وتسبق ${rivalName} (مركز ${aboveRow.rank})!`
+                    : `متساوي مع ${rivalName}! أي ${unit} زيادة هتخليك تسبقه!`;
+            } else {
+                gapTextEl.textContent = 'كمّل نشاطك عشان تتقدم في الترتيب!';
+            }
         } else {
-            gapTextEl.textContent = 'كمّل نشاطك عشان تتقدم في الترتيب!';
+            // مستخدم أوفلاين أو جديد لم يُدرج بعد في السيرفر
+            gapTextEl.textContent = todaySteps > 0
+                ? `خطواتك (${todaySteps.toLocaleString()} خطوة) مسجلة ومحفوظة وسيتم إدراجك في الترتيب فور الاتصال!`
+                : 'امشِ وسجّل خطواتك للدخول في المنافسة والترتيب!';
         }
     }
 
@@ -1532,9 +1550,11 @@ async function loadAndRenderPeriod(periodKey) {
         clearLeaderboardLoadingState();
         const list = document.getElementById('leaderboardList');
         if (list) {
+            const todaySteps = typeof getStepsCount === 'function' ? getStepsCount() : 0;
             list.innerHTML = `
                 <div class="col-span-full bg-lux-900 border border-gold-500/15 rounded-3xl p-6 text-center space-y-3">
-                    <p class="text-xs text-lux-400 font-bold">تعذر جلب بيانات الترتيب حالياً. تأكد من اتصالك بالإنترنت.</p>
+                    <p class="text-xs text-lux-400 font-bold">أنت حالياً بدون اتصال بالإنترنت.</p>
+                    <p class="text-xs text-gold-400 font-bold">خطواتك اليوم (${formatCompactNumber(todaySteps)} خطوة) مسجلة ومحفوظة محلياً، وسيتم تحديث الترتيب والبطولة فور الاتصال.</p>
                     <button type="button" onclick="window.refreshActiveLeaderboard ? window.refreshActiveLeaderboard() : location.reload()"
                             class="py-2 px-5 rounded-2xl bg-gold-500/20 text-gold-400 hover:bg-gold-500/30 text-xs font-black transition active:scale-95 border border-gold-500/30">
                         إعادة المحاولة
@@ -1542,7 +1562,17 @@ async function loadAndRenderPeriod(periodKey) {
                 </div>
             `;
         }
+        renderSelfRankBar([], config.metric);
     }
+}
+
+if (typeof document !== 'undefined') {
+    document.addEventListener('sensors:steps-update', () => {
+        const stepsEl = document.getElementById('selfRankSteps');
+        if (stepsEl && typeof getStepsCount === 'function') {
+            stepsEl.textContent = formatCompactNumber(getStepsCount());
+        }
+    });
 }
 
 /** آخر توقيع (Signature) لقائمة الليدربورد المرئية - لمنع وميض الشاشة وإعادة بناء الـ DOM إذا لم تتغير البيانات */

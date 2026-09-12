@@ -396,25 +396,41 @@ export async function syncFromNativeStepCounter() {
 
         ensureStillSameDay();
 
-        // نحتسب فقط الزيادة الحقيقية التي حدثت أثناء نشاط هذا الحساب
+        // نحتسب الخطوات اليومية المأخوذة من الحساس الأصلي
         if (nativeDate === currentDayKey && typeof nativeSteps === 'number' && Number.isFinite(nativeSteps)) {
-            if (resetNativeBaselineOnNextSync || (lastNativeStepsSeen <= 0 && stepCount <= 0) || nativeSteps < lastNativeStepsSeen) {
-                // أول قراءة لحساب جديد تماما بدون خطوات سابقة، أو بعد إعادة تشغيل الهاتف، أو بعد إعادة ضبط صريحة
+            if (resetNativeBaselineOnNextSync) {
+                // تبديل صريح بين حسابين مختلفين أثناء التشغيل - يبدأ الحساب الجديد بعدّ الخطوات من هذه النقطة
                 lastNativeStepsSeen = nativeSteps;
                 resetNativeBaselineOnNextSync = false;
                 persistDailyState();
-            } else if (lastNativeStepsSeen <= 0 && stepCount > 0) {
-                // الحساب مسجل خطوات سابقة ولكن لم يكن لديه قراءة حساس مسجلة
+            } else if (nativeSteps < lastNativeStepsSeen) {
+                // إعادة تشغيل الجهاز أو إعادة تعيين التاريخ
                 lastNativeStepsSeen = nativeSteps;
                 persistDailyState();
-            } else if (nativeSteps > lastNativeStepsSeen) {
-                const delta = nativeSteps - lastNativeStepsSeen;
+            } else {
+                // الحالة الطبيعية: حساب جديد، فتح بعد مشوار في الخلفية، أو حركة لحظية
+                let delta = 0;
+                if (lastNativeStepsSeen > 0 && nativeSteps >= lastNativeStepsSeen) {
+                    delta = nativeSteps - lastNativeStepsSeen;
+                } else if (lastNativeStepsSeen <= 0) {
+                    // أول قراءة على هذا الحساب أو بعد فتح التطبيق
+                    delta = Math.max(0, nativeSteps - stepCount);
+                }
+
                 lastNativeStepsSeen = nativeSteps;
-                stepCount += delta;
+
+                // تحديث رصيد الخطوات: نتأكد أن stepCount يعكس على الأقل خطوات الحساس الأصلي لليوم
+                const newStepCount = Math.max(stepCount + delta, nativeSteps);
+                const stepCountChanged = newStepCount !== stepCount;
+                stepCount = newStepCount;
+
                 persistDailyState();
-                document.dispatchEvent(new CustomEvent('sensors:steps-update', {
-                    detail: { steps: stepCount, delta, date: currentDayKey, source: 'native' }
-                }));
+
+                if (stepCountChanged || delta > 0) {
+                    document.dispatchEvent(new CustomEvent('sensors:steps-update', {
+                        detail: { steps: stepCount, delta: Math.max(delta, 0), date: currentDayKey, source: 'native' }
+                    }));
+                }
             }
         }
     } catch (err) {

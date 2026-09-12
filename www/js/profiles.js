@@ -976,6 +976,11 @@ document.addEventListener('steps:progress', (event) => {
     recordStepsProgress(event.detail?.addedSteps ?? 0, event.detail?.pointsEarned ?? 0);
 });
 
+// تحديث إحصائيات البروفايل فوراً مع كل تحديث خطوات من الحساس (حتى أوفلاين)
+document.addEventListener('sensors:steps-update', () => {
+    updateProfileStats();
+});
+
 // الاستماع لتحديث الرقم القياسي من السيرفر/المحلي لمزامنة كارت "الرقم القياسي" فوراً
 document.addEventListener('sensors:best-steps-resynced', (event) => {
     const serverBest = event.detail?.bestSteps;
@@ -1429,8 +1434,13 @@ export function renderProfileHeader(profile, user) {
  */
 export function updateProfileStats(newStats = {}) {
     profileStats = { ...profileStats, ...newStats };
+    if (typeof window !== 'undefined') {
+        window.profileStats = profileStats;
+        window.currentProfileRow = currentProfileRow;
+    }
 
     const totalStepsEl = document.getElementById('statTotalSteps');
+    const todayStepsEl = document.getElementById('statTodaySteps');
     const bestDailyStepsEl = document.getElementById('statBestDailySteps');
     const burnedCaloriesEl = document.getElementById('statBurnedCalories');
     const bestStreakEl = document.getElementById('statBestStreak');
@@ -1443,7 +1453,17 @@ export function updateProfileStats(newStats = {}) {
     const monthlyWinsEl = document.getElementById('statMonthlyWins');
     const totalPodiumsEl = document.getElementById('statTotalPodiums');
 
-    const totalSteps = Number(profileStats.totalSteps) || 0;
+    let todaySteps = 0;
+    try {
+        todaySteps = typeof getStepsCount === 'function' ? (getStepsCount() || 0) : 0;
+    } catch (e) {
+        // تجاهل
+    }
+
+    if (todayStepsEl) todayStepsEl.textContent = formatCompactNumber(todaySteps);
+
+    const serverTotal = Number(profileStats.totalSteps) || 0;
+    const totalSteps = Math.max(serverTotal, serverTotal + todaySteps);
     if (totalStepsEl) totalStepsEl.textContent = formatCompactNumber(totalSteps);
 
     // الرقم القياسي اليومي (أعلى عدد خطوات في يوم واحد - ديناميكي ومباشر)
@@ -1454,12 +1474,6 @@ export function updateProfileStats(newStats = {}) {
             if (hist && typeof hist === 'object') {
                 localHistoryBest = Object.values(hist).reduce((max, val) => Math.max(max, Number(val) || 0), 0);
             }
-        } catch (e) {
-            // تجاهل
-        }
-        let todaySteps = 0;
-        try {
-            todaySteps = getStepsCount?.() || 0;
         } catch (e) {
             // تجاهل
         }

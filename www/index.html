@@ -2092,6 +2092,23 @@
                         <p id="profileJoinedText" class="text-[11px] text-lux-500 font-medium mt-1"></p>
                     </div>
 
+                    <!-- عداد خطوات اليوم في البروفايل -->
+                    <div class="mt-4 p-3 rounded-2xl bg-lux-800/80 border border-gold-500/20 flex items-center justify-between shadow-sm">
+                        <div class="flex items-center gap-2.5">
+                            <div class="w-8 h-8 rounded-xl bg-gold-500/15 border border-gold-500/25 flex items-center justify-center text-gold-400 shrink-0">
+                                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+                            </div>
+                            <div class="text-right">
+                                <span class="block text-xs font-bold text-lux-200">خطوات اليوم</span>
+                                <span class="block text-[10px] text-lux-500 font-medium">النشاط اليومي المباشر</span>
+                            </div>
+                        </div>
+                        <div class="text-left flex items-baseline gap-1">
+                            <span id="statTodaySteps" class="text-xl font-black text-gold-400">0</span>
+                            <span class="text-[10px] text-lux-500 font-bold">خطوة</span>
+                        </div>
+                    </div>
+
                     <!-- Personal Quick Stats Grid (تُملأ ديناميكياً من js/profiles.js) -->
                     <!-- (فحص - المرحلة 3، من غير تغيير عن قصد): الشبكة دي فيها
                          دايمًا 3 عناصر بالظبط (خطوات/إجابات صح/ستريك) - مش

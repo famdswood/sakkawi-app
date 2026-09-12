@@ -56,6 +56,10 @@ import com.getcapacitor.annotation.PermissionCallback;
                 @Permission(
                         alias = "activityRecognition",
                         strings = { Manifest.permission.ACTIVITY_RECOGNITION }
+                ),
+                @Permission(
+                        alias = "notifications",
+                        strings = { Manifest.permission.POST_NOTIFICATIONS }
                 )
         }
 )
@@ -65,8 +69,15 @@ public class StepCounterPlugin extends Plugin {
 
     @PluginMethod
     public void requestPermissions(PluginCall call) {
+        List<String> perms = new ArrayList<>();
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            requestPermissionForAlias("activityRecognition", call, "permissionCallback");
+            perms.add("activityRecognition");
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            perms.add("notifications");
+        }
+        if (!perms.isEmpty()) {
+            requestPermissionForAliases(perms.toArray(new String[0]), call, "permissionCallback");
         } else {
             // قبل أندرويد 10 مفيش حاجة تتطلب أصلاً
             JSObject result = new JSObject();
@@ -77,8 +88,8 @@ public class StepCounterPlugin extends Plugin {
 
     @PermissionCallback
     private void permissionCallback(PluginCall call) {
-        boolean granted = getPermissionState("activityRecognition").equals(
-                com.getcapacitor.PermissionState.GRANTED);
+        boolean granted = Build.VERSION.SDK_INT < Build.VERSION_CODES.Q ||
+                getPermissionState("activityRecognition").equals(com.getcapacitor.PermissionState.GRANTED);
         JSObject result = new JSObject();
         result.put("granted", granted);
         call.resolve(result);

@@ -112,19 +112,9 @@ public class StepCounterForegroundService extends Service implements SensorEvent
         instance = this;
         sensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
         if (sensorManager != null) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                stepCounterSensor = sensorManager.getDefaultSensor(Sensor.TYPE_STEP_COUNTER, true);
-            }
+            stepCounterSensor = sensorManager.getDefaultSensor(Sensor.TYPE_STEP_COUNTER);
             if (stepCounterSensor == null) {
-                stepCounterSensor = sensorManager.getDefaultSensor(Sensor.TYPE_STEP_COUNTER);
-            }
-            if (stepCounterSensor == null) {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                    stepDetectorSensor = sensorManager.getDefaultSensor(Sensor.TYPE_STEP_DETECTOR, true);
-                }
-                if (stepDetectorSensor == null) {
-                    stepDetectorSensor = sensorManager.getDefaultSensor(Sensor.TYPE_STEP_DETECTOR);
-                }
+                stepDetectorSensor = sensorManager.getDefaultSensor(Sensor.TYPE_STEP_DETECTOR);
             }
         }
         android.util.Log.d("Sakkawi", "stepCounterSensor = " + stepCounterSensor
@@ -155,15 +145,16 @@ public class StepCounterForegroundService extends Service implements SensorEvent
 
         Sensor targetSensor = stepCounterSensor != null ? stepCounterSensor : stepDetectorSensor;
         if (targetSensor != null && sensorManager != null) {
-            int maxReportLatencyUs = 60 * 1000 * 1000;
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
-                sensorManager.registerListener(
-                        this, targetSensor, SensorManager.SENSOR_DELAY_NORMAL, maxReportLatencyUs);
-            } else {
-                sensorManager.registerListener(
-                        this, targetSensor, SensorManager.SENSOR_DELAY_NORMAL);
+            boolean registered = sensorManager.registerListener(
+                    this, targetSensor, SensorManager.SENSOR_DELAY_UI);
+            if (!registered && targetSensor != stepDetectorSensor && stepDetectorSensor != null) {
+                registered = sensorManager.registerListener(
+                        this, stepDetectorSensor, SensorManager.SENSOR_DELAY_UI);
             }
-            sensorListenerRegistered = true;
+            sensorListenerRegistered = registered;
+            if (!registered) {
+                updateNotificationWithMessage("تعذر تشغيل حساس الخطوات على هذا الجهاز");
+            }
         } else {
             updateNotificationWithMessage("جهازك مفيهوش حساس خطوات - العداد مش متاح");
         }
