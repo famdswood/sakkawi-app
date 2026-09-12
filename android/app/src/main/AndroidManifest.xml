@@ -54,6 +54,7 @@
             android:name=".StepCounterForegroundService"
             android:enabled="true"
             android:exported="false"
+            android:stopWithTask="false"
             android:foregroundServiceType="health" />
 
         <!-- [جديد - إصلاح باج "عداد الخطوات أقل من Fit"] بيشغّل الخدمة

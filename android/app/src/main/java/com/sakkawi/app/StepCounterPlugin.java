@@ -133,27 +133,55 @@ public class StepCounterPlugin extends Plugin {
 
     @PluginMethod
     public void getStepsToday(PluginCall call) {
-        StepCounterForegroundService service = StepCounterForegroundService.getInstance();
-        if (service != null) {
-            service.flushSensor();
-        }
+        getBridge().execute(() -> {
+            StepCounterForegroundService service = StepCounterForegroundService.getInstance();
+            if (service == null) {
+                // محاولة تشغيل أو انتظار الخدمة إذا كانت قيد الإقلاع
+                Context ctx = getContext();
+                if (ctx != null) {
+                    SharedPreferences p = ctx.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+                    if (p.getBoolean("tracking_allowed", true)) {
+                        try {
+                            Intent serviceIntent = new Intent(ctx, StepCounterForegroundService.class);
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                ContextCompat.startForegroundService(ctx, serviceIntent);
+                            } else {
+                                ctx.startService(serviceIntent);
+                            }
+                        } catch (Exception e) {
+                            android.util.Log.w("Sakkawi", "startForegroundService from getStepsToday failed", e);
+                        }
+                    }
+                }
+                try {
+                    for (int i = 0; i < 6 && service == null; i++) {
+                        Thread.sleep(50);
+                        service = StepCounterForegroundService.getInstance();
+                    }
+                } catch (InterruptedException ignored) {}
+            }
 
-        SharedPreferences prefs = getContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
-        int stepsToday = prefs.getInt("steps_today", 0);
-        String date = prefs.getString("steps_today_date", null);
-        String todayKey = new SimpleDateFormat("yyyy-MM-dd", Locale.US).format(new Date());
+            if (service != null) {
+                service.flushSensorWithTimeout(300);
+            }
 
-        // إذا كان التاريخ المحفوظ يخص يوماً سابقاً (قبل أول حركة للجهاز اليوم)،
-        // نرجع صفر خطوات وتاريخ اليوم منعاً لقراءة رصيد الأمس الخامل
-        if (date != null && !date.equals(todayKey)) {
-            stepsToday = 0;
-            date = todayKey;
-        }
+            SharedPreferences prefs = getContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+            int stepsToday = prefs.getInt("steps_today", 0);
+            String date = prefs.getString("steps_today_date", null);
+            String todayKey = new SimpleDateFormat("yyyy-MM-dd", Locale.US).format(new Date());
 
-        JSObject result = new JSObject();
-        result.put("steps", stepsToday);
-        result.put("date", date != null ? date : todayKey);
-        call.resolve(result);
+            // إذا كان التاريخ المحفوظ يخص يوماً سابقاً (قبل أول حركة للجهاز اليوم)،
+            // نرجع صفر خطوات وتاريخ اليوم منعاً لقراءة رصيد الأمس الخامل
+            if (date != null && !date.equals(todayKey)) {
+                stepsToday = 0;
+                date = todayKey;
+            }
+
+            JSObject result = new JSObject();
+            result.put("steps", stepsToday);
+            result.put("date", date != null ? date : todayKey);
+            call.resolve(result);
+        });
     }
 
     /**

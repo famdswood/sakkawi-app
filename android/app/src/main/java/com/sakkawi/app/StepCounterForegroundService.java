@@ -106,14 +106,36 @@ public class StepCounterForegroundService extends Service implements SensorEvent
         }
     }
 
+    public void ensureSensorRegistered() {
+        if (sensorListenerRegistered) return;
+        Sensor targetSensor = stepCounterSensor != null ? stepCounterSensor : stepDetectorSensor;
+        if (targetSensor != null && sensorManager != null) {
+            boolean registered = sensorManager.registerListener(
+                    this, targetSensor, SensorManager.SENSOR_DELAY_UI);
+            if (!registered && targetSensor != stepDetectorSensor && stepDetectorSensor != null) {
+                registered = sensorManager.registerListener(
+                        this, stepDetectorSensor, SensorManager.SENSOR_DELAY_UI);
+            }
+            sensorListenerRegistered = registered;
+        }
+    }
+
     @Override
     public void onCreate() {
         super.onCreate();
         instance = this;
         sensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
         if (sensorManager != null) {
-            stepCounterSensor = sensorManager.getDefaultSensor(Sensor.TYPE_STEP_COUNTER);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                stepCounterSensor = sensorManager.getDefaultSensor(Sensor.TYPE_STEP_COUNTER, true);
+            }
             if (stepCounterSensor == null) {
+                stepCounterSensor = sensorManager.getDefaultSensor(Sensor.TYPE_STEP_COUNTER);
+            }
+            if (stepCounterSensor == null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                stepDetectorSensor = sensorManager.getDefaultSensor(Sensor.TYPE_STEP_DETECTOR, true);
+            }
+            if (stepCounterSensor == null && stepDetectorSensor == null) {
                 stepDetectorSensor = sensorManager.getDefaultSensor(Sensor.TYPE_STEP_DETECTOR);
             }
         }
@@ -269,9 +291,12 @@ public class StepCounterForegroundService extends Service implements SensorEvent
             NotificationChannel channel = new NotificationChannel(
                     CHANNEL_ID,
                     "تتبّع الخطوات",
-                    NotificationManager.IMPORTANCE_LOW
+                    NotificationManager.IMPORTANCE_DEFAULT
             );
             channel.setDescription("إشعار ثابت لتتبّع خطواتك حتى لو التطبيق مقفول");
+            channel.setSound(null, null);
+            channel.enableVibration(false);
+            channel.setShowBadge(false);
             NotificationManager manager = getSystemService(NotificationManager.class);
             if (manager != null) manager.createNotificationChannel(channel);
         }
@@ -297,50 +322,67 @@ public class StepCounterForegroundService extends Service implements SensorEvent
         int stepsToday = prefs.getInt("steps_today", 0);
         String text = stepsToday > 0 ? ("خطوات النهاردة: " + stepsToday) : "التتبع شغّال في الخلفية";
 
-        return new NotificationCompat.Builder(this, CHANNEL_ID)
+        NotificationCompat.Builder builder = new NotificationCompat.Builder(this, CHANNEL_ID)
                 .setContentTitle("سِكّاوي بيتابع خطواتك")
                 .setContentText(text)
                 .setSmallIcon(getNotificationIcon())
                 .setColor(ContextCompat.getColor(this, R.color.notification_accent))
                 .setContentIntent(getOpenAppPendingIntent())
                 .setOngoing(true)
-                .setPriority(NotificationCompat.PRIORITY_LOW)
-                .setCategory(NotificationCompat.CATEGORY_SERVICE)
-                .build();
+                .setSilent(true)
+                .setOnlyAlertOnce(true)
+                .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+                .setCategory(NotificationCompat.CATEGORY_SERVICE);
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            builder.setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE);
+        }
+
+        return builder.build();
     }
 
     private void updateNotification(int stepsToday) {
-        Notification notification = new NotificationCompat.Builder(this, CHANNEL_ID)
+        NotificationCompat.Builder builder = new NotificationCompat.Builder(this, CHANNEL_ID)
                 .setContentTitle("سِكّاوي بيتابع خطواتك")
                 .setContentText("خطوات النهاردة: " + stepsToday)
                 .setSmallIcon(getNotificationIcon())
                 .setColor(ContextCompat.getColor(this, R.color.notification_accent))
                 .setContentIntent(getOpenAppPendingIntent())
                 .setOngoing(true)
-                .setPriority(NotificationCompat.PRIORITY_LOW)
-                .setCategory(NotificationCompat.CATEGORY_SERVICE)
-                .build();
+                .setSilent(true)
+                .setOnlyAlertOnce(true)
+                .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+                .setCategory(NotificationCompat.CATEGORY_SERVICE);
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            builder.setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE);
+        }
 
         NotificationManager manager =
                 (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
-        if (manager != null) manager.notify(NOTIFICATION_ID, notification);
+        if (manager != null) manager.notify(NOTIFICATION_ID, builder.build());
     }
 
     private void updateNotificationWithMessage(String message) {
-        Notification notification = new NotificationCompat.Builder(this, CHANNEL_ID)
+        NotificationCompat.Builder builder = new NotificationCompat.Builder(this, CHANNEL_ID)
                 .setContentTitle("سِكّاوي")
                 .setContentText(message)
                 .setSmallIcon(getNotificationIcon())
                 .setColor(ContextCompat.getColor(this, R.color.notification_accent))
                 .setContentIntent(getOpenAppPendingIntent())
                 .setOngoing(true)
-                .setPriority(NotificationCompat.PRIORITY_LOW)
-                .setCategory(NotificationCompat.CATEGORY_SERVICE)
-                .build();
+                .setSilent(true)
+                .setOnlyAlertOnce(true)
+                .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+                .setCategory(NotificationCompat.CATEGORY_SERVICE);
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            builder.setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE);
+        }
 
         NotificationManager manager =
                 (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
-        if (manager != null) manager.notify(NOTIFICATION_ID, notification);
+        if (manager != null) manager.notify(NOTIFICATION_ID, builder.build());
     }
 
     @Override
@@ -364,18 +406,10 @@ public class StepCounterForegroundService extends Service implements SensorEvent
     @Override
     public void onTaskRemoved(Intent rootIntent) {
         super.onTaskRemoved(rootIntent);
-        // ضمان استمرار خدمة تتبع الخطوات حتى لو مسح المستخدم التطبيق من قائمة التطبيقات الحديثة (Recents)
-        try {
-            Intent restartServiceIntent = new Intent(getApplicationContext(), this.getClass());
-            restartServiceIntent.setPackage(getPackageName());
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                startForegroundService(restartServiceIntent);
-            } else {
-                startService(restartServiceIntent);
-            }
-        } catch (Exception e) {
-            android.util.Log.w("Sakkawi", "onTaskRemoved restart failed", e);
-        }
+        // بفضل android:stopWithTask="false" في AndroidManifest، تستمر الخدمة بالعمل تلقائياً.
+        // نتجنب استدعاء startForegroundService هنا لأنه يرمي ForegroundServiceStartNotAllowedException على أندرويد 12+
+        acquireWakeLock();
+        ensureSensorRegistered();
     }
 
     @Override

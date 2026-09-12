@@ -1463,7 +1463,7 @@ export function updateProfileStats(newStats = {}) {
     if (todayStepsEl) todayStepsEl.textContent = formatCompactNumber(todaySteps);
 
     const serverTotal = Number(profileStats.totalSteps) || 0;
-    const totalSteps = Math.max(serverTotal, serverTotal + todaySteps);
+    const totalSteps = Math.max(serverTotal, todaySteps);
     if (totalStepsEl) totalStepsEl.textContent = formatCompactNumber(totalSteps);
 
     // الرقم القياسي اليومي (أعلى عدد خطوات في يوم واحد - ديناميكي ومباشر)
