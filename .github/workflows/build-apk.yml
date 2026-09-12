@@ -41,17 +41,12 @@ jobs:
       # -------------------------------------------------------------
       - name: Build Main Sekkawy APK
         run: |
-          mkdir -p release-apks
+          mkdir -p "$GITHUB_WORKSPACE/release-apks"
           npx cap sync android
           cd android
           ./gradlew assembleDebug --stacktrace
-          cd app/build/outputs/apk/debug
-          if [ -f Sekkawy.apk ]; then
-            cp Sekkawy.apk ../../../../../release-apks/Sekkawy.apk
-          elif [ -f app-debug.apk ]; then
-            cp app-debug.apk ../../../../../release-apks/Sekkawy.apk
-          fi
-          cd ../../../../..
+          cd "$GITHUB_WORKSPACE"
+          cp android/app/build/outputs/apk/debug/*.apk release-apks/Sekkawy.apk
           rm -rf android/app/build/outputs/apk/debug/*
 
       # -------------------------------------------------------------
@@ -63,15 +58,8 @@ jobs:
           npx cap sync android
           cd android
           ./gradlew assembleDebug --stacktrace
-          cd app/build/outputs/apk/debug
-          if [ -f Sekkawy-Admin.apk ]; then
-            cp Sekkawy-Admin.apk ../../../../../release-apks/Sekkawy-Admin.apk
-          elif [ -f Sekkawy.apk ]; then
-            cp Sekkawy.apk ../../../../../release-apks/Sekkawy-Admin.apk
-          elif [ -f app-debug.apk ]; then
-            cp app-debug.apk ../../../../../release-apks/Sekkawy-Admin.apk
-          fi
-          cd ../../../../..
+          cd "$GITHUB_WORKSPACE"
+          cp android/app/build/outputs/apk/debug/*.apk release-apks/Sekkawy-Admin.apk
           node scripts/restore-main-build.js
           ls -lh release-apks/
 
