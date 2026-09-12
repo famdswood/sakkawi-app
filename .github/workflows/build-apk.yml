@@ -52,6 +52,7 @@ jobs:
             cp app-debug.apk ../../../../../release-apks/Sekkawy.apk
           fi
           cd ../../../../..
+          rm -rf android/app/build/outputs/apk/debug/*
 
       # -------------------------------------------------------------
       # 2) Prepare & Build Admin App APK (Sekkawy-Admin.apk)
@@ -65,6 +66,8 @@ jobs:
           cd app/build/outputs/apk/debug
           if [ -f Sekkawy-Admin.apk ]; then
             cp Sekkawy-Admin.apk ../../../../../release-apks/Sekkawy-Admin.apk
+          elif [ -f Sekkawy.apk ]; then
+            cp Sekkawy.apk ../../../../../release-apks/Sekkawy-Admin.apk
           elif [ -f app-debug.apk ]; then
             cp app-debug.apk ../../../../../release-apks/Sekkawy-Admin.apk
           fi

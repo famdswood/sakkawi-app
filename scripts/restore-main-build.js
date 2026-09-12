@@ -18,7 +18,15 @@ if (fs.existsSync(wwwBackup)) {
     console.log('Restored www/index.html');
 }
 
-// 2. Restore capacitor.config.ts
+// 2. Restore google-services.json
+const googleServices = path.join(rootDir, 'android', 'app', 'google-services.json');
+const googleServicesBak = path.join(rootDir, 'android', 'app', 'google-services.json.bak');
+if (fs.existsSync(googleServicesBak)) {
+    fs.renameSync(googleServicesBak, googleServices);
+    console.log('Restored google-services.json');
+}
+
+// 3. Restore capacitor.config.ts
 const capConfigFile = path.join(rootDir, 'capacitor.config.ts');
 if (fs.existsSync(capConfigFile)) {
     let content = fs.readFileSync(capConfigFile, 'utf-8');
@@ -28,7 +36,7 @@ if (fs.existsSync(capConfigFile)) {
     console.log('Restored capacitor.config.ts for main app');
 }
 
-// 3. Restore android/app/build.gradle
+// 4. Restore android/app/build.gradle
 const buildGradleFile = path.join(rootDir, 'android', 'app', 'build.gradle');
 if (fs.existsSync(buildGradleFile)) {
     let content = fs.readFileSync(buildGradleFile, 'utf-8');
@@ -37,7 +45,7 @@ if (fs.existsSync(buildGradleFile)) {
     console.log('Restored android/app/build.gradle applicationId to com.sakkawi.app');
 }
 
-// 4. Restore strings.xml
+// 5. Restore strings.xml
 const stringsFile = path.join(rootDir, 'android', 'app', 'src', 'main', 'res', 'values', 'strings.xml');
 if (fs.existsSync(stringsFile)) {
     let content = fs.readFileSync(stringsFile, 'utf-8');
