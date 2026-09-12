@@ -33,40 +33,67 @@ jobs:
         run: |
           npm install
 
-      - name: Sync Capacitor Android
-        run: |
-          npx cap sync android
-
       - name: Make Gradlew executable
         run: chmod +x android/gradlew
 
-      - name: Build Android APK
+      # -------------------------------------------------------------
+      # 1) Build Main App APK (Sekkawy.apk)
+      # -------------------------------------------------------------
+      - name: Build Main Sekkawy APK
         run: |
+          mkdir -p release-apks
+          npx cap sync android
           cd android
           ./gradlew assembleDebug --stacktrace
-
-      - name: Ensure APK naming
-        run: |
-          cd android/app/build/outputs/apk/debug
-          if [ -f app-debug.apk ] && [ ! -f Sekkawy.apk ]; then
-            cp app-debug.apk Sekkawy.apk
+          cd app/build/outputs/apk/debug
+          if [ -f Sekkawy.apk ]; then
+            cp Sekkawy.apk ../../../../../release-apks/Sekkawy.apk
+          elif [ -f app-debug.apk ]; then
+            cp app-debug.apk ../../../../../release-apks/Sekkawy.apk
           fi
-          ls -la
+          cd ../../../../..
 
-      - name: Upload APK Artifact
+      # -------------------------------------------------------------
+      # 2) Prepare & Build Admin App APK (Sekkawy-Admin.apk)
+      # -------------------------------------------------------------
+      - name: Build Admin Sekkawy APK
+        run: |
+          node scripts/prepare-admin-build.js
+          npx cap sync android
+          cd android
+          ./gradlew assembleDebug --stacktrace
+          cd app/build/outputs/apk/debug
+          if [ -f Sekkawy-Admin.apk ]; then
+            cp Sekkawy-Admin.apk ../../../../../release-apks/Sekkawy-Admin.apk
+          elif [ -f app-debug.apk ]; then
+            cp app-debug.apk ../../../../../release-apks/Sekkawy-Admin.apk
+          fi
+          cd ../../../../..
+          node scripts/restore-main-build.js
+          ls -lh release-apks/
+
+      # -------------------------------------------------------------
+      # 3) Upload APK Artifacts
+      # -------------------------------------------------------------
+      - name: Upload APK Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: Sekkawy-APK
-          path: android/app/build/outputs/apk/debug/Sekkawy.apk
+          name: Sekkawy-APKs
+          path: release-apks/*.apk
           if-no-files-found: error
           retention-days: 30
 
+      # -------------------------------------------------------------
+      # 4) Create GitHub Release with both APKs
+      # -------------------------------------------------------------
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         continue-on-error: true
         with:
           tag_name: v${{ github.run_number }}
           name: "Sekkawy v${{ github.run_number }}"
-          files: android/app/build/outputs/apk/debug/Sekkawy.apk
+          files: |
+            release-apks/Sekkawy.apk
+            release-apks/Sekkawy-Admin.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

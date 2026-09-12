@@ -24,7 +24,7 @@
    ================================================================== */
 
 import { restoreSession, bindAuthEventListeners, checkExistingSession, getCurrentUser, hasAnyStoredSessionHint } from './auth.js';
-import { getStepsCount, getStepsHistory, syncActiveUser, ensureStillSameDay, requestBatteryOptimizationExemption, requestAutostartPermission } from './sensors.js';
+import { getStepsCount, getStepsHistory, syncActiveUser, ensureStillSameDay, requestBatteryOptimizationExemption, requestAutostartPermission, syncFromNativeStepCounter } from './sensors.js';
 import { applyGuestModeRestrictions } from './geofence.js';
 import { initStoriesUI } from './stories.js';
 import { initProfileUI } from './profiles.js';
@@ -673,6 +673,43 @@ function initStepsCounter() {
             && appState.steps > appState.previousBestSteps;
         updateStepsUI();
     });
+
+    // زر تحديث الخطوات في كارت العداد بالصفحة الرئيسية
+    const btnRefreshHomeSteps = document.getElementById('btnRefreshHomeSteps');
+    const btnRefreshHomeStepsIcon = document.getElementById('btnRefreshHomeStepsIcon');
+
+    if (btnRefreshHomeSteps) {
+        let isRefreshingSteps = false;
+        btnRefreshHomeSteps.addEventListener('click', async () => {
+            if (isRefreshingSteps) return;
+            isRefreshingSteps = true;
+            btnRefreshHomeSteps.disabled = true;
+            if (btnRefreshHomeStepsIcon) {
+                btnRefreshHomeStepsIcon.classList.add('animate-spin');
+            }
+
+            try {
+                await syncFromNativeStepCounter();
+                appState.steps = getStepsCount();
+                appState.stageIndex = getStageIndexForSteps(appState.steps);
+                appState.earnedFromSteps = Math.floor(appState.steps / STEPS_PER_POINT);
+                updateStepsUI();
+
+                showToast(`تم تحديث الخطوات بنجاح: ${appState.steps.toLocaleString()} خطوة`);
+            } catch (err) {
+                console.error('خطأ أثناء تحديث الخطوات يدويا:', err);
+                showToast('تم فحص الحساس، العداد محدث بالفعل');
+            } finally {
+                setTimeout(() => {
+                    if (btnRefreshHomeStepsIcon) {
+                        btnRefreshHomeStepsIcon.classList.remove('animate-spin');
+                    }
+                    btnRefreshHomeSteps.disabled = false;
+                    isRefreshingSteps = false;
+                }, 600);
+            }
+        });
+    }
 }
 
 /* ------------------------------------------------------------------

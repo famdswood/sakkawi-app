@@ -84,6 +84,11 @@ export async function scheduleSmartNotification({ id, title, body, at, extra = {
     const plugin = getLocalNotificationsPlugin();
     if (!plugin?.schedule) return;
 
+    // إذا كان التطبيق في وضع الصيانة، لا نجدول أي إشعار ذكي
+    if (window.__app_maintenance_mode) {
+        return;
+    }
+
     // إذا كان الموعد قد مضى بالفعل لليوم، لا نقوم بجدولته
     if (isTimeInPast(at)) {
         return;
@@ -120,8 +125,8 @@ export async function scheduleSmartNotification({ id, title, body, at, extra = {
  * @param {{ currentSteps: number, targetSteps?: number }} params
  */
 export async function evaluateAndScheduleDailyTargetReminder({ currentSteps = 0, targetSteps = 10000 }) {
-    // الشرط المنطقي الصارم: إذا حقق المستخدم هدفه اليومي، يُلغى التذكير فوراً ولا يظهر إطلاقاً
-    if (currentSteps >= targetSteps) {
+    // إذا كان التطبيق في وضع الصيانة، أو حقق المستخدم هدفه، يُلغى التذكير فوراً
+    if (window.__app_maintenance_mode || currentSteps >= targetSteps) {
         await cancelSmartNotification(NOTIF_ID_DAILY_TARGET);
         return;
     }
@@ -154,8 +159,13 @@ export async function cancelDailyTargetReminder() {
  * @param {{ areAllQuestionsDone: boolean }} params
  */
 export async function evaluateAndScheduleDailyQuestionReminder({ areAllQuestionsDone = false }) {
-    // الشرط المنطقي الصارم: إذا تمت الإجابة على السؤال اليومي، يُلغى التذكير فوراً ولا يظهر إطلاقاً
-    if (areAllQuestionsDone) {
+    // الشرط المنطقي الصارم: إذا تمت الإجابة، أو كانت الميزة معطلة إدارياً، أو التطبيق في وضع الصيانة، أو المستخدم زائر بدون حساب
+    if (
+        areAllQuestionsDone ||
+        window.__feature_daily_question_enabled === false ||
+        window.__app_maintenance_mode ||
+        window.isGuestMode
+    ) {
         await cancelSmartNotification(NOTIF_ID_DAILY_QUESTION);
         return;
     }
@@ -186,9 +196,13 @@ export async function cancelDailyQuestionReminder() {
  * @param {{ streakCount: number, isSecuredToday: boolean }} params
  */
 export async function evaluateAndScheduleStreakSaver({ streakCount = 0, isSecuredToday = false }) {
-    // الشرط المنطقي الصارم: إذا كان الستريك مؤمناً لليوم أو إذا لم يكن لدى المستخدم أي ستريك (0)
-    // يُلغى التنبيه فوراً
-    if (isSecuredToday || streakCount <= 0) {
+    // لا نجدول تنبيه إنقاذ الستريك إذا كان التطبيق في وضع الصيانة أو المستخدم زائر أو الستريك مؤمن أو الستريك صفر
+    if (
+        window.__app_maintenance_mode ||
+        window.isGuestMode ||
+        isSecuredToday ||
+        streakCount <= 0
+    ) {
         await cancelSmartNotification(NOTIF_ID_STREAK_SAVER);
         return;
     }

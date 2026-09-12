@@ -1259,10 +1259,14 @@ export function initDailyQuestionCard() {
     // مزامنة أي نتائج معلقة عند عودة اتصال الإنترنت
     window.addEventListener('online', flushPendingDqSync);
 
-    // تقييم أولي لتذكير السؤال اليومي بناءً على الكاش المحلي
-    evaluateAndScheduleDailyQuestionReminder({
-        areAllQuestionsDone: areTodaysQuestionsCompleted(),
-    });
+    // تقييم أولي لتذكير السؤال اليومي بناءً على الكاش المحلي فقط إذا كان المستخدم مسجلاً وليس زائراً والميزة مفعلة
+    if (currentUserId && !window.isGuestMode && window.__feature_daily_question_enabled !== false && !window.__app_maintenance_mode) {
+        evaluateAndScheduleDailyQuestionReminder({
+            areAllQuestionsDone: areTodaysQuestionsCompleted(),
+        });
+    } else {
+        cancelDailyQuestionReminder().catch(() => {});
+    }
 
     // معرفة هوية المستخدم بنفس فلسفة js/notifications.js (الاستماع
     // لحدث 'auth:login' بدل استيراد getCurrentUser مباشرة) - وبمجرد ما
@@ -1276,15 +1280,28 @@ export function initDailyQuestionCard() {
         // الشاشة لحظياً. بعد كده reconcileTodayStatusFromSupabase بتجيب
         // نتيجة الحساب الجديد الحقيقية لو فعلاً جاوب قبل كده من جهاز تاني
         applyLockedUIForAllSlots();
-        evaluateAndScheduleDailyQuestionReminder({
-            areAllQuestionsDone: areTodaysQuestionsCompleted(),
-        });
+        if (currentUserId && !window.isGuestMode && window.__feature_daily_question_enabled !== false && !window.__app_maintenance_mode) {
+            evaluateAndScheduleDailyQuestionReminder({
+                areAllQuestionsDone: areTodaysQuestionsCompleted(),
+            });
+        } else {
+            cancelDailyQuestionReminder().catch(() => {});
+        }
         reconcileTodayStatusFromSupabase();
         flushPendingDqSync();
     });
     document.addEventListener('auth:signed-out', () => {
         currentUserId = null;
+        cancelDailyQuestionReminder().catch(() => {});
         // (إصلاح) رجّع الكارتين لحالة الضيف الافتراضية فورًا كمان
         applyLockedUIForAllSlots();
+    });
+
+    // الاستماع لتعطيل الميزة من لوحة التحكم لإلغاء الإشعار فوراً
+    document.addEventListener('app:feature-flags', (event) => {
+        const settings = event.detail?.settings;
+        if (settings && settings.feature_daily_question_enabled === false) {
+            cancelDailyQuestionReminder().catch(() => {});
+        }
     });
 }

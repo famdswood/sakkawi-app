@@ -13,6 +13,7 @@
  */
 
 import { supabaseClient } from './supabase-config.js';
+import { cancelAllSmartReminders, cancelDailyQuestionReminder } from './smart-notifications.js';
 
 export const CURRENT_APP_VERSION = '1.0.0';
 
@@ -82,8 +83,12 @@ function applyMaintenanceMode(settings) {
 
     const isMaintenance = Boolean(settings?.is_maintenance_mode);
     const isAdmin = isCurrentUserAdmin();
+    window.__app_maintenance_mode = isMaintenance;
 
     if (isMaintenance) {
+        // إلغاء كافة الإشعارات الذكية فوراً عند تفعيل وضع الصيانة
+        cancelAllSmartReminders().catch(() => {});
+
         if (isAdmin) {
             // الأدمن يستمر في تصفح التطبيق مع ظهور تنبيه عائم في الأعلى
             overlay.classList.add('hidden');
@@ -172,6 +177,11 @@ function applyForceUpdate(settings) {
 function applyFeatureFlags(settings) {
     if (!settings) return;
 
+    window.__feature_daily_question_enabled = settings.feature_daily_question_enabled !== false;
+    window.__feature_leaderboard_enabled = settings.feature_leaderboard_enabled !== false;
+    window.__feature_stories_enabled = settings.feature_stories_enabled !== false;
+    window.__feature_posts_enabled = settings.feature_posts_enabled !== false;
+
     // 1. القصص والستوريز (Stories)
     const storiesBar = document.getElementById('storiesBar');
     let storiesNotice = document.getElementById('storiesDisabledNotice');
@@ -199,6 +209,8 @@ function applyFeatureFlags(settings) {
     const dqCard2 = document.getElementById('dailyQuestionCard2');
     let dqNotice = document.getElementById('dailyQuestionsDisabledNotice');
     if (settings.feature_daily_question_enabled === false) {
+        // إلغاء تذكير السؤال اليومي فوراً في حال تعطيل الميزة إدارياً
+        cancelDailyQuestionReminder().catch(() => {});
         if (dqCard1) dqCard1.classList.add('hidden');
         if (dqCard2) dqCard2.classList.add('hidden');
         if (!dqNotice && dqCard1 && dqCard1.parentNode) {

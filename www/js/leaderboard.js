@@ -493,7 +493,7 @@ function scheduleRealtimeLeaderboardRefresh() {
             hasPendingLeaderboardUpdate = true;
             return;
         }
-        refreshActiveLeaderboard();
+        refreshActiveLeaderboard({ isSilent: true });
     }, LEADERBOARD_REALTIME_DEBOUNCE_MS);
 }
 
@@ -1488,36 +1488,22 @@ function clearLeaderboardLoadingState() {
  * نتيجته لما توصل متأخرة عشان بيانات بطولة غلط ماتظهرش فوق تبويب جديد.
  * @param {'today'|'week'|'month'} periodKey
  */
-async function loadAndRenderPeriod(periodKey) {
+async function loadAndRenderPeriod(periodKey, options = {}) {
     const config = CHAMPIONSHIP_PERIODS[periodKey];
     if (!config) return;
 
     const requestToken = ++leaderboardFetchToken;
+    const isSilent = Boolean(options?.isSilent);
 
-    // بنعرض حالة التحميل (Skeleton) فوراً زي الأول - لو فيه كاش
-    // محفوظ، قراءته من IndexedDB هتوصل بعد أجزاء من الثانية وهتستبدل
-    // الـ Skeleton ده على طول (شوف renderLeaderboardResult تحت)، فمش
-    // هيبان فعلياً كـ "Flash" ملحوظ للمستخدم. لو مفيش كاش خالص (أول
-    // فتح للتطبيق على الجهاز ده)، دي هي الحالة اللي محتاجينها أصلاً
-    // لحد ما رد الشبكة يوصل.
-    renderLeaderboardLoadingState();
+    // تفادي مسح الشاشة بالـ Skeleton إذا كانت هناك بيانات معروضة بالفعل أو التحديث في الخلفية
+    const hasExistingRows = Array.isArray(leaderboardRows) && leaderboardRows.length > 0;
+    const shouldShowSkeleton = !isSilent && !hasExistingRows;
 
-    // (جديد - كاش الأوفلاين) دالة الرسم بقت مفصولة في renderLeaderboardResult
-    // تحت عشان تتنادى مرتين محتمل: مرة فورية بالنسخة المخزّنة محلياً
-    // (لو موجودة، وده اللي بيحصل جوه fetchWithCache نفسها)، ومرة تانية
-    // لما رد الشبكة الحقيقي يوصل. Request Token بيتفحص جوه الدالة دي
-    // نفسها في الحالتين عشان لو المستخدم بدّل تبويب في الوقت ده، مفيش
-    // رسم قديم متأخر يظهر فوق التبويب الجديد.
+    if (shouldShowSkeleton) {
+        renderLeaderboardLoadingState();
+    }
+
     let hasRenderedRows = false;
-    // (تحديث - إصلاح باج "هبهبة سريعة عند فتح الليدربورد/تبديل البطولات"):
-    // fetchWithCache ممكن ينادي الـ callback ده مرتين في نفس دورة التحميل
-    // دي - مرة فورية بالنسخة المخزّنة محلياً (لو موجودة)، ومرة تانية برد
-    // الشبكة الحقيقي لما يوصل بعد كده. لو الاتنين شغّلوا حركة الدخول
-    // (champFadeInUp/champ-pop-in) من الصفر، كانت الحركة بتتكرر خلال
-    // أجزاء من الثانية - وده أصل الـ"هبهبة" اللي بتحصل بسرعة وبعدين
-    // تستقر. بنشغّل الحركة أول مرة بس (hasAnimatedThisCycle لسه false)،
-    // وأي رسم تاني بعد كده في نفس الدورة بيحدّث القيم من غير ما يعيد
-    // الحركة تاني.
     let hasAnimatedThisCycle = false;
 
     await Promise.all([
@@ -1527,7 +1513,8 @@ async function loadAndRenderPeriod(periodKey) {
             (rows, _source) => {
                 if (requestToken !== leaderboardFetchToken) return;
                 hasRenderedRows = true;
-                renderLeaderboardResult(rows, config, !hasAnimatedThisCycle);
+                const shouldAnimate = !isSilent && !hasAnimatedThisCycle && !hasExistingRows;
+                renderLeaderboardResult(rows, config, shouldAnimate);
                 hasAnimatedThisCycle = true;
             },
         ),
@@ -1646,8 +1633,8 @@ export function getActivePeriod() {
  * التبويب الظاهر فعلياً"، وده أصل باج الأرقام الوهمية اللي كانت بتظهر
  * وترجع.
  */
-export function refreshActiveLeaderboard() {
-    loadAndRenderPeriod(activePeriod);
+export function refreshActiveLeaderboard(options = {}) {
+    loadAndRenderPeriod(activePeriod, { isSilent: true, ...options });
 }
 
 /** @returns {'points'|'total_steps'} مقياس الترتيب المستخدم في الفترة النشطة حالياً */

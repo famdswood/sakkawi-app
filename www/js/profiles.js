@@ -2779,6 +2779,8 @@ const LEADERBOARD_PASS_COOLDOWN_MS = 2 * 60 * 60 * 1000;
  */
 async function notifyLeaderboardPassIfNeeded(metric, oldValue, newValue) {
     if (!currentAuthUser || !(newValue > oldValue)) return;
+    // لا يتم إرسال إشعارات تخطي الترتيب إذا كانت لوحة المتصدرين معطلة إدارياً أو التطبيق في وضع الصيانة
+    if (window.__feature_leaderboard_enabled === false || window.__app_maintenance_mode) return;
 
     try {
         const { data: passedUsers, error } = await supabaseClient
@@ -3915,11 +3917,11 @@ async function fetchPublicProfileRow(targetUserId) {
     try {
         let { data, error } = await supabaseClient
             .from('public_profiles')
-            .select('id, full_name, title, avatar_url, points, streak_count, best_streak_days, total_steps, correct_answers, daily_championship_wins, weekly_championship_wins, monthly_championship_wins, featured_badge_id, created_at, best_daily_steps, is_verified')
+            .select('id, full_name, title, avatar_url, points, streak_count, best_streak_days, total_steps, correct_answers, daily_championship_wins, weekly_championship_wins, monthly_championship_wins, featured_badge_id, created_at, best_daily_steps, is_verified, daily_steps')
             .eq('id', targetUserId)
             .maybeSingle();
 
-        if (error && (error.code === '42703' || error.message?.includes('best_daily_steps') || error.message?.includes('created_at'))) {
+        if (error && (error.code === '42703' || error.message?.includes('daily_steps') || error.message?.includes('best_daily_steps') || error.message?.includes('created_at'))) {
             let fallback = await supabaseClient
                 .from('public_profiles')
                 .select('id, full_name, title, avatar_url, points, streak_count, best_streak_days, total_steps, correct_answers, daily_championship_wins, weekly_championship_wins, monthly_championship_wins, featured_badge_id, created_at, is_verified')
@@ -3950,6 +3952,15 @@ async function fetchPublicProfileRow(targetUserId) {
                 if (typeof data.best_daily_steps === 'undefined' || data.best_daily_steps === null) {
                     data.best_daily_steps = currentProfileRow?.best_daily_steps ?? profileStats.bestDailySteps ?? 0;
                 }
+                data.daily_steps = getStepsCount?.() || currentProfileRow?.daily_steps || 0;
+            } else if (typeof data.daily_steps === 'undefined' || data.daily_steps === null) {
+                try {
+                    const todayLb = await getCached('cached_leaderboard:today');
+                    const foundInLb = todayLb?.find((r) => r.id === targetUserId);
+                    if (foundInLb && typeof foundInLb.total_steps === 'number') {
+                        data.daily_steps = foundInLb.total_steps;
+                    }
+                } catch (e) {}
             }
             setCached(`cached_public_profile:${targetUserId}`, data).catch(() => {});
         }
@@ -4219,6 +4230,18 @@ function renderPublicProfileContent(profileRow) {
     if (streakEl) streakEl.textContent = `${profileRow.streak_count ?? 0} يوم ستريك حالي`;
     const totalSteps = Number(profileRow.total_steps) || 0;
     if (stepsEl) stepsEl.textContent = formatCompactNumber(totalSteps);
+
+    // عداد خطوات اليوم في البروفايل العام
+    const todayStepsEl = document.getElementById('publicProfileTodaySteps');
+    if (todayStepsEl) {
+        let todayCount = 0;
+        if (currentAuthUser && profileRow.id === currentAuthUser.id) {
+            try { todayCount = getStepsCount?.() || 0; } catch (e) {}
+        } else {
+            todayCount = Number(profileRow.daily_steps) || 0;
+        }
+        todayStepsEl.textContent = Number(todayCount).toLocaleString();
+    }
 
     // الرقم القياسي لأعلى عدد خطوات في يوم واحد
     if (bestDailyStepsEl) {
@@ -5111,8 +5134,22 @@ function openAccountSettingsPage() {
     // "لسه محتفظ" بباسورد كتبته قبل كده في فتحة سابقة للصفحة)
     const newPasswordInput = document.getElementById('newPasswordInput');
     const confirmNewPasswordInput = document.getElementById('confirmNewPasswordInput');
-    if (newPasswordInput) newPasswordInput.value = '';
-    if (confirmNewPasswordInput) confirmNewPasswordInput.value = '';
+    if (newPasswordInput) {
+        newPasswordInput.value = '';
+        newPasswordInput.type = 'password';
+    }
+    if (confirmNewPasswordInput) {
+        confirmNewPasswordInput.value = '';
+        confirmNewPasswordInput.type = 'password';
+    }
+    ['btnToggleNewPassword', 'btnToggleConfirmNewPassword'].forEach((btnId) => {
+        const btn = document.getElementById(btnId);
+        if (!btn) return;
+        const openIcon = btn.querySelector('.eye-open');
+        const closedIcon = btn.querySelector('.eye-closed');
+        if (openIcon) openIcon.classList.remove('hidden');
+        if (closedIcon) closedIcon.classList.add('hidden');
+    });
 
     // تعبئة حقل الـ username المخفي بإيميل المستخدم الحالي عشان مديري
     // الباسورد في المتصفح يقدروا يربطوا الباسورد الجديد بالحساب الصح
@@ -5377,8 +5414,24 @@ async function handleChangePasswordSubmit(event) {
         const { error } = await supabaseClient.auth.updateUser({ password: newPassword });
         if (error) throw error;
 
-        document.getElementById('newPasswordInput').value = '';
-        document.getElementById('confirmNewPasswordInput').value = '';
+        const newPassEl = document.getElementById('newPasswordInput');
+        const confirmPassEl = document.getElementById('confirmNewPasswordInput');
+        if (newPassEl) {
+            newPassEl.value = '';
+            newPassEl.type = 'password';
+        }
+        if (confirmPassEl) {
+            confirmPassEl.value = '';
+            confirmPassEl.type = 'password';
+        }
+        ['btnToggleNewPassword', 'btnToggleConfirmNewPassword'].forEach((btnId) => {
+            const btn = document.getElementById(btnId);
+            if (!btn) return;
+            const openIcon = btn.querySelector('.eye-open');
+            const closedIcon = btn.querySelector('.eye-closed');
+            if (openIcon) openIcon.classList.remove('hidden');
+            if (closedIcon) closedIcon.classList.add('hidden');
+        });
 
         document.dispatchEvent(new CustomEvent('app:toast', {
             detail: { message: 'تم تغيير الباسورد بنجاح', type: 'success' },
@@ -5623,6 +5676,27 @@ function bindEditProfileEvents() {
     if (genderMaleBtn) genderMaleBtn.addEventListener('click', () => selectEditGender('male'));
     if (genderFemaleBtn) genderFemaleBtn.addEventListener('click', () => selectEditGender('female'));
     if (changePasswordForm) changePasswordForm.addEventListener('submit', handleChangePasswordSubmit);
+
+    // زر إظهار/إخفاء كلمة المرور في إعدادات الحساب
+    function bindSettingsPasswordVisibility(btnId, inputId) {
+        const btn = document.getElementById(btnId);
+        const input = document.getElementById(inputId);
+        if (!btn || !input) return;
+
+        btn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const isPassword = input.type === 'password';
+            input.type = isPassword ? 'text' : 'password';
+            const openIcon = btn.querySelector('.eye-open');
+            const closedIcon = btn.querySelector('.eye-closed');
+            if (openIcon) openIcon.classList.toggle('hidden', isPassword);
+            if (closedIcon) closedIcon.classList.toggle('hidden', !isPassword);
+        });
+    }
+
+    bindSettingsPasswordVisibility('btnToggleNewPassword', 'newPasswordInput');
+    bindSettingsPasswordVisibility('btnToggleConfirmNewPassword', 'confirmNewPasswordInput');
 
     if (uploadBtn && fileInput) uploadBtn.addEventListener('click', () => fileInput.click());
     if (deleteAvatarBtn) deleteAvatarBtn.addEventListener('click', handleDeleteEditAvatar);

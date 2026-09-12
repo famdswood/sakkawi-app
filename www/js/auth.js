@@ -846,6 +846,23 @@ function resetSignupExtraFields() {
         btn.classList.add('bg-lux-800', 'border-gold-500/15', 'text-lux-300');
     });
 
+    const passwordConfirmInput = document.getElementById('authPasswordConfirmInput');
+    if (passwordConfirmInput) passwordConfirmInput.value = '';
+
+    // إعادة ضبط حقول كلمات المرور إلى وضع الإخفاء الافتراضي
+    ['authPasswordInput', 'authPasswordConfirmInput'].forEach((id) => {
+        const input = document.getElementById(id);
+        if (input) input.type = 'password';
+    });
+    ['btnToggleAuthPassword', 'btnToggleAuthConfirmPassword'].forEach((btnId) => {
+        const btn = document.getElementById(btnId);
+        if (!btn) return;
+        const openIcon = btn.querySelector('.eye-open');
+        const closedIcon = btn.querySelector('.eye-closed');
+        if (openIcon) openIcon.classList.remove('hidden');
+        if (closedIcon) closedIcon.classList.add('hidden');
+    });
+
     updateSignupAvatarPreview(DEFAULT_AVATAR_URI);
     // تنضيف احتياطي مباشر (بدون المرور بـ closeModal/history.back) -
     // شوف تعليق hideAvatarCropModal فوق ليه هنا بالذات لازم الخام
@@ -2426,6 +2443,27 @@ function bindAuthModalEvents() {
         cancelApprovalBtn.addEventListener('click', cancelApprovalWait);
     }
 
+    // زر إظهار/إخفاء كلمة المرور في فورم الدخول والتسجيل
+    function bindPasswordVisibility(btnId, inputId) {
+        const btn = document.getElementById(btnId);
+        const input = document.getElementById(inputId);
+        if (!btn || !input) return;
+
+        btn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const isPassword = input.type === 'password';
+            input.type = isPassword ? 'text' : 'password';
+            const openIcon = btn.querySelector('.eye-open');
+            const closedIcon = btn.querySelector('.eye-closed');
+            if (openIcon) openIcon.classList.toggle('hidden', isPassword);
+            if (closedIcon) closedIcon.classList.toggle('hidden', !isPassword);
+        });
+    }
+
+    bindPasswordVisibility('btnToggleAuthPassword', 'authPasswordInput');
+    bindPasswordVisibility('btnToggleAuthConfirmPassword', 'authPasswordConfirmInput');
+
     if (emailForm) {
         emailForm.addEventListener('submit', async (event) => {
             event.preventDefault();
@@ -2442,9 +2480,20 @@ function bindAuthModalEvents() {
                 showAuthError('من فضلك اكتب كلمة المرور');
                 return;
             }
-            if (currentAuthMode === 'signup' && password.length < 6) {
-                showAuthError('كلمة المرور لازم تكون 6 حروف/أرقام على الأقل');
-                return;
+            if (currentAuthMode === 'signup') {
+                if (password.length < 6) {
+                    showAuthError('كلمة المرور لازم تكون 6 حروف/أرقام على الأقل');
+                    return;
+                }
+                const confirmPassword = document.getElementById('authPasswordConfirmInput')?.value;
+                if (!confirmPassword) {
+                    showAuthError('من فضلك أكد كلمة المرور');
+                    return;
+                }
+                if (password !== confirmPassword) {
+                    showAuthError('كلمتا المرور غير متطابقتين، يرجى التأكد');
+                    return;
+                }
             }
 
             setAuthFormLoading(true);

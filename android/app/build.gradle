@@ -24,7 +24,11 @@ android {
     }
     applicationVariants.all { variant ->
         variant.outputs.all {
-            outputFileName = "Sekkawy.apk"
+            if (variant.applicationId.contains("admin")) {
+                outputFileName = "Sekkawy-Admin.apk"
+            } else {
+                outputFileName = "Sekkawy.apk"
+            }
         }
     }
 }
