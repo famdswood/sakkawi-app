@@ -314,7 +314,7 @@ async function fetchCurrentUserProfile() {
     try {
         const { data, error } = await supabaseClient
             .from('profiles')
-            .select('username, full_name, avatar_url')
+            .select('username, full_name, avatar_url, is_verified, verified_until')
             .eq('id', currentUserId)
             .single();
 
@@ -322,7 +322,11 @@ async function fetchCurrentUserProfile() {
             return;
         }
 
-        currentUserProfile = data;
+        const isVerifiedActive = Boolean(data.is_verified && (!data.verified_until || new Date(data.verified_until) > new Date()));
+        currentUserProfile = {
+            ...data,
+            is_verified: isVerifiedActive,
+        };
     } catch (err) {
         // يتم الاعتماد على كاش الأوفلاين بهدوء
     }
@@ -443,7 +447,7 @@ function buildPostCardElement(post) {
         <div class="post-card-header">
             ${appAvatarHtml}
             <div class="post-card-header-text">
-                <span class="post-card-app-name">${appName}</span>
+                <span class="post-card-app-name flex items-center">${appName}${buildVerifiedBadgeHtml(true)}</span>
                 <span class="post-card-time" data-created-at="${post.created_at || ''}">${timeText}</span>
             </div>
         </div>
@@ -653,6 +657,7 @@ function mapCommentRowToAuthoredComment(row) {
             username: row.username,
             full_name: row.full_name,
             avatar_url: row.avatar_url,
+            is_verified: Boolean(row.is_verified),
         },
     };
 }
@@ -693,6 +698,8 @@ function buildCommentElement(card, post, comment, isReply) {
 
     const author = comment.profiles || {};
     const displayName = escapeHtml(author.full_name || author.username || 'مستخدم');
+    const isAuthorVerified = Boolean(author.is_verified || comment.is_verified);
+    const verifiedBadgeHtml = isAuthorVerified ? buildVerifiedBadgeHtml(true) : '';
     const avatarUrl = author.avatar_url || buildFallbackAvatarUrl(author.username || author.full_name || '؟');
     const isOwnComment = comment.user_id === currentUserId;
     const canReply = !isReply && Boolean(currentUserId);
@@ -702,7 +709,7 @@ function buildCommentElement(card, post, comment, isReply) {
         <img class="post-comment-avatar post-comment-clickable" src="${escapeHtml(avatarUrl)}" alt="" loading="lazy">
         <div class="post-comment-body">
             <div class="post-comment-bubble">
-                <span class="post-comment-author post-comment-clickable">${displayName}</span>
+                <span class="post-comment-author post-comment-clickable inline-flex items-center">${displayName}${verifiedBadgeHtml}</span>
                 <span class="post-comment-text">${escapeHtml(comment.content)}</span>
             </div>
             <div class="post-comment-meta">
@@ -789,6 +796,17 @@ function buildFallbackAvatarUrl(seedText) {
     const initial = (safeText[0] || '؟').toUpperCase();
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><rect width="40" height="40" rx="20" fill="#14171F"/><text x="20" y="26" font-size="16" font-family="Cairo,sans-serif" text-anchor="middle" fill="#D4AF37">${initial}</text></svg>`;
     return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+}
+
+/**
+ * بناء شارة التوثيق الذهبية الرسمية بتصميم دائري مميز وفاخر (Scalloped Rosette Seal)
+ * @param {boolean} isVerified
+ * @param {string} [extraClasses='']
+ * @returns {string}
+ */
+function buildVerifiedBadgeHtml(isVerified, extraClasses = '') {
+    if (!isVerified) return '';
+    return `<span class="inline-flex items-center align-middle select-none text-gold-400 cursor-pointer shrink-0 ${extraClasses}" title="حساب موثق رسمي في سِكّاوي" onclick="if(window.showToast) window.showToast('حساب موثق رسمي في سِكّاوي')"><svg class="w-4 h-4 inline-block shrink-0" viewBox="0 0 24 24" fill="none"><path d="M22.25 12c0-1.43-.88-2.67-2.19-3.34.46-1.39.2-2.9-.81-3.91s-2.52-1.27-3.91-.81c-.67-1.31-1.91-2.19-3.34-2.19s-2.67.88-3.34 2.19c-1.39-.46-2.9-.2-3.91.81s-1.27 2.52-.81 3.91C2.63 9.33 1.75 10.57 1.75 12s.88 2.67 2.19 3.34c-.46 1.39-.2 2.9.81 3.91s2.52 1.27 3.91.81c.67 1.31 1.91 2.19 3.34 2.19s2.67-.88 3.34-2.19c1.39.46 2.9.2 3.91-.81s1.27-2.52.81-3.91c1.31-.67 2.19-1.91 2.19-3.34z" fill="#D4AF37"/><circle cx="12" cy="12" r="7.5" stroke="#FFF0A0" stroke-width="0.6" stroke-opacity="0.5"/><path d="M7.75 12l3.25 3.25 6-6.5" stroke="#0B0D12" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/></svg></span>`;
 }
 
 /**
@@ -906,6 +924,7 @@ async function handleCommentSubmit(card, post, formEl, parentCommentId = null) {
                     username: currentUserProfile?.username || '',
                     full_name: currentUserProfile?.full_name || '',
                     avatar_url: currentUserProfile?.avatar_url || null,
+                    is_verified: Boolean(currentUserProfile?.is_verified),
                 },
             };
 

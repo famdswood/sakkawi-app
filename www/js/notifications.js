@@ -1850,6 +1850,25 @@ function handleIncomingNotification(newNotification) {
     updateUnreadBadges();
     persistNotificationsCache();
 
+    // معالجة فورية للإجراءات الإدارية المباشرة
+    const notifData = newNotification.data;
+    if (notifData && typeof notifData === 'object') {
+        if (notifData.action === 'reset_today_steps') {
+            if (typeof window.clearPendingSteps === 'function') {
+                window.clearPendingSteps();
+            }
+            document.dispatchEvent(new CustomEvent('sensors:force-reset'));
+        } else if (notifData.action === 'adjust_points' || notifData.action === 'restore_streak') {
+            if (typeof window.refreshProfileFromServerIfNeeded === 'function') {
+                window.refreshProfileFromServerIfNeeded();
+            }
+        }
+    } else if (newNotification.type === 'admin_message') {
+        if (typeof window.refreshProfileFromServerIfNeeded === 'function') {
+            window.refreshProfileFromServerIfNeeded();
+        }
+    }
+
     const matchesCurrentFilter = currentFilter === 'all' || !newNotification.is_read;
     if (matchesCurrentFilter) {
         const listContainer = document.getElementById('notificationsList');

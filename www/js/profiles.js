@@ -214,6 +214,7 @@ export function clearCachedHeaderFields() {
     try {
         window.localStorage.removeItem(CACHED_DISPLAY_NAME_KEY);
         window.localStorage.removeItem(CACHED_DISPLAY_TITLE_KEY);
+        window.localStorage.removeItem(PENDING_STEPS_STORAGE_KEY);
     } catch (err) {
         // تجاهل بهدوء
     }
@@ -695,14 +696,23 @@ async function applyStepsProgressServerSide(addedSteps) {
  * جديدة توصل أثناء تنفيذ الـ Request الحالي تتجمّع في دفعة (Batch)
  * تالية بدل ما تتفقد.
  */
+let isStepSyncInProgress = false;
+
+/**
+ * (المرحلة 7) تطبيق التحديث الفعلي على Supabase لكل الخطوات والنقاط
+ * المتراكمة محلياً منذ آخر Flush ناجح (Batch Update)، في UPDATE واحد
+ * بس - بدل ما كل خطوة مفردة تعمل Request منفصل.
+ */
 async function flushPendingStepsBatch() {
     if (stepsBatchFlushTimer) {
         clearTimeout(stepsBatchFlushTimer);
         stepsBatchFlushTimer = null;
     }
 
-    if (!currentAuthUser || !currentProfileRow || pendingStepsDelta <= 0) return;
+    if (isStepSyncInProgress || !currentAuthUser || !currentProfileRow || pendingStepsDelta <= 0) return;
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
 
+    isStepSyncInProgress = true;
     const stepsToFlush = pendingStepsDelta;
     const pointsToFlush = pendingStepsPointsDelta;
     pendingStepsDelta = 0;
@@ -722,13 +732,6 @@ async function flushPendingStepsBatch() {
         const oldPoints = currentProfileRow.points ?? 0;
         const oldTotalSteps = currentProfileRow.total_steps ?? 0;
 
-        // (إصلاح أمني) مبقناش بنحسب points/total_steps الجداد هنا في
-        // الفرونت إند ونبعتهم في UPDATE مباشر (ده اللي كان بيسمح لأي حد
-        // يفتح الكونسول ويزوّر نقاطه/خطواته زي ما اتأكد بالاختبار).
-        // دلوقتي بنبعت بس *عدد الخطوات المضافة* لدالة RPC سيرفر-سايد
-        // (apply_steps_progress) وهي اللي بتتحقق من القيمة وتحسب النقاط
-        // وتكتبها فعليًا جوه الداتابيز - pointsToFlush بقت مجرد قيمة
-        // تقديرية للعرض المحلي، مش مصدر الحقيقة تاني.
         await applyStepsProgressServerSide(stepsToFlush);
 
         // تم تأكيد استلام السيرفر للخطوات بنجاح - الآن فقط نمسح النسخة الاحتياطية بأمان
@@ -738,71 +741,36 @@ async function flushPendingStepsBatch() {
             console.warn('تعذر مسح النسخة الاحتياطية من localStorage بعد نجاح الـ Flush:', err);
         }
 
-        // الـ Flush بيحدّث المقياسين (points و total_steps) مع بعض، فبنتحقق
-        // من التخطي على الاتنين - كل واحد وليدربورده المستقل (شوف
-        // notifyLeaderboardPassIfNeeded فوق)
         await notifyLeaderboardPassIfNeeded('points', oldPoints, currentProfileRow?.points ?? oldPoints);
         await notifyLeaderboardPassIfNeeded('total_steps', oldTotalSteps, currentProfileRow?.total_steps ?? oldTotalSteps);
-
-        // تحديث فوري لترتيب الليدربورد (نفس فلسفة recordCorrectAnswer فوق)
-        // (إصلاح باج "الأرقام الوهمية"): كان بينادي هنا على النسخة
-        // القديمة loadAndRenderLeaderboard اللي بترسم أرقام all-time
-        // بغض النظر عن التبويب (يومي/أسبوعي/شهري) الظاهر فعلاً - بقى
-        // بينادي على refreshActiveLeaderboard() من js/leaderboard.js
-        // اللي بتحدّث بس الفترة النشطة حالياً بنفس مصدر البيانات الصح
         await refreshActiveLeaderboard();
     } catch (error) {
-        // لو الـ Flush فشل (مشكلة شبكة مؤقتة مثلاً)، بنرجّع الخطوات
-        // والنقاط دي لقايمة الانتظار عشان تتحاول تاني في الـ Flush
-        // الجاي بدل ما تتفقد نهائياً
         pendingStepsDelta += stepsToFlush;
         pendingStepsPointsDelta += pointsToFlush;
-
-        // (إصلاح - باج حقيقي) كنا بنعتمد بس على persistPendingStepsToStorage()
-        // وقت visibilitychange/pagehide عشان نحفظ الرصيد ده احتياطيًا -
-        // فلو التطبيق اتقفل فجأة (Kill من النظام بسبب الرام مثلاً) قبل
-        // ما أي حدث من دول يحصل، الرصيد المتراكم في الذاكرة كان بيضيع
-        // نهائيًا من غير رجعة حتى لو النت رجع بعدين. دلوقتي بنحفظه فورًا
-        // في localStorage بمجرد ما أي Flush يفشل، بغض النظر عن سبب
-        // الفشل أو حالة الصفحة وقتها
         persistPendingStepsToStorage();
 
-        // (إصلاح) رسالة الخطأ الأصلية (error.message) بتوصل زي ما هي من
-        // Supabase/الشبكة - مفيدة للمطوّر لكن مش مفهومة للمستخدم العادي
-        // (مثلاً "TypeError: Failed to fetch"). كنا بنعتمد على
-        // navigator.onLine عشان نقرر نعرض الرسالة المطمئنة ولا لأ - بس
-        // navigator.onLine مش موثوق: بيرجّع true طول ما الجهاز متوصّل
-        // بشبكة (واي فاي/بيانات) حتى لو الشبكة دي مالهاش إنترنت حقيقي
-        // أو Supabase نفسه مش قادر يتوصله، فكان بيسيب النص التقني الخام
-        // يظهر للمستخدم في حالات فشل شبكة حقيقية (زي السكرين شوت اللي
-        // وصلنا). دلوقتي بنفحص نص الخطأ نفسه - أي فشل fetch (بغض النظر
-        // عن السبب: مفيش نت فعليًا، DNS، السيرفر مش راد..إلخ) بيدّي نفس
-        // البصمة النصية دي في كل المتصفحات تقريبًا، فهي إشارة أوثق بكتير
         const isNetworkFailure = /failed to fetch|network\s*error|load failed|networkerror/i.test(error.message || '');
         if (!isNetworkFailure) {
             console.warn('[profiles] تعذر إرسال دفعة الخطوات:', error);
         }
-        // (إصلاح تكرار التوست): تم إلغاء إطلاق توست دوري في الخلفية كل 8 ثوانٍ عند انقطاع النت!
-        // خطوات ونقاط المستخدم محفوظة محلياً بأمان في localStorage (persistPendingStepsToStorage)،
-        // وتكرار إظهار التوست أثناء المشي كان يسبب إزعاجاً كبيراً وتراكماً للتوستات المكررة.
+    } finally {
+        isStepSyncInProgress = false;
     }
 }
-
-let isSyncingOfflineSteps = false;
 
 /**
  * مزامنة خطوات اليوم المقطوعة أثناء انقطاع الإنترنت أو إغلاق التطبيق.
  * تقارن بين عدد الخطوات المسجل محلياً في حساس الجهاز لليوم الحالي،
  * وبين daily_steps المسجل في السيرفر لليوم الحالي.
  * إذا كان المحلي أكبر من السيرفر، يتم إرسال الفارق بدقة على دفعات آمنة لـ apply_steps_progress،
- * مما يضمن تحديث النقاط وخطوات البطولات اليومية والأسبوعية والشهرية والبروفايل والليدربورد فوراً.
+ * مما يضمن تحديث النقاط وخطوات البطولات اليومية والأسبوعية والشهرية والبروفايل والليدربورد فوراً دون أي تضاعف.
  */
 export async function syncOfflineStepsToServerIfNeeded() {
-    if (isSyncingOfflineSteps || !currentAuthUser || !currentProfileRow) return;
+    if (isStepSyncInProgress || !currentAuthUser || !currentProfileRow) return;
     if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
 
     try {
-        isSyncingOfflineSteps = true;
+        isStepSyncInProgress = true;
 
         // مزامنة العداد مع حساس الموبايل الأصلي أولاً إن وجد
         if (typeof syncFromNativeStepCounter === 'function') {
@@ -814,21 +782,21 @@ export async function syncOfflineStepsToServerIfNeeded() {
         const isRowFromToday = currentProfileRow.last_active_date === todayStr;
         const serverDailySteps = isRowFromToday ? (currentProfileRow.daily_steps ?? 0) : 0;
 
-        const missingSteps = localSteps - serverDailySteps;
+        const missingSteps = Math.max(0, localSteps - serverDailySteps);
+
+        // تصفير أي تراكم مؤقت ومسح التخزين المؤقت لأننا سنرسل الفارق كاملاً بناءً على قراءة الحساس
+        pendingStepsDelta = 0;
+        pendingStepsPointsDelta = 0;
+        if (stepsBatchFlushTimer) {
+            clearTimeout(stepsBatchFlushTimer);
+            stepsBatchFlushTimer = null;
+        }
+        try {
+            window.localStorage.removeItem(PENDING_STEPS_STORAGE_KEY);
+        } catch (_) {}
 
         if (missingSteps > 0) {
             console.log(`[profiles.js] مزامنة خطوات الأوفلاين: محلي = ${localSteps}، سيرفر = ${serverDailySteps}، المفقود = ${missingSteps}`);
-
-            // تصفير أي تراكم مؤقت لمنع التكرار لأننا سنرسل الفارق كاملاً
-            pendingStepsDelta = 0;
-            pendingStepsPointsDelta = 0;
-            if (stepsBatchFlushTimer) {
-                clearTimeout(stepsBatchFlushTimer);
-                stepsBatchFlushTimer = null;
-            }
-            try {
-                window.localStorage.removeItem(PENDING_STEPS_STORAGE_KEY);
-            } catch (_) {}
 
             // نرسل الخطوات المتبقية على دفعات لا تتجاوز 10,000 خطوة لكل استدعاء
             let remaining = missingSteps;
@@ -846,7 +814,7 @@ export async function syncOfflineStepsToServerIfNeeded() {
     } catch (err) {
         console.warn('[profiles.js] تعذر مزامنة خطوات الأوفلاين:', err);
     } finally {
-        isSyncingOfflineSteps = false;
+        isStepSyncInProgress = false;
     }
 }
 
@@ -1011,20 +979,18 @@ document.addEventListener('steps:progress', (event) => {
 // الاستماع لتحديث الرقم القياسي من السيرفر/المحلي لمزامنة كارت "الرقم القياسي" فوراً
 document.addEventListener('sensors:best-steps-resynced', (event) => {
     const serverBest = event.detail?.bestSteps;
-    if (typeof serverBest === 'number' && serverBest > (profileStats.bestDailySteps || 0)) {
-        updateProfileStats({ bestDailySteps: serverBest });
+    if (typeof serverBest === 'number' && Number.isFinite(serverBest)) {
+        updateProfileStats({ bestDailySteps: Math.max(0, serverBest) });
     }
 });
 
 // (خطة الأوفلاين) عند عودة الاتصال بالإنترنت، نرسل الخطوات المحفوظة ونحدّث بيانات البروفايل فوراً
 document.addEventListener('app:online', async () => {
-    if (pendingStepsDelta > 0) {
-        await flushPendingStepsBatch();
-    }
     if (currentAuthUser) {
         await loadAndRenderRealProfile(currentAuthUser);
+    } else {
+        await syncOfflineStepsToServerIfNeeded();
     }
-    await syncOfflineStepsToServerIfNeeded();
 });
 
 // نسترجع فورًا عند تحميل الملف أي رصيد خطوات فضل محفوظ في localStorage
@@ -1050,6 +1016,19 @@ restorePendingStepsFromStorage();
  * والمستخدم offline (شوف bindStepsFlushLifecycleEvents)، عشان لو حصل
  * كده نقدر نسترجعها تاني في الجلسة الجاية بدل ما تضيع نهائياً
  */
+export function clearPendingSteps() {
+    pendingStepsDelta = 0;
+    pendingStepsPointsDelta = 0;
+    try {
+        window.localStorage.removeItem(PENDING_STEPS_STORAGE_KEY);
+    } catch (err) {
+        console.error('تعذر حذف الخطوات المعلقة محلياً:', err);
+    }
+}
+if (typeof window !== 'undefined') {
+    window.clearPendingSteps = clearPendingSteps;
+}
+
 function persistPendingStepsToStorage() {
     if (pendingStepsDelta <= 0) return;
 
@@ -1146,7 +1125,6 @@ function bindStepsFlushLifecycleEvents() {
         // التطبيق تاني ولقى نت موجود - المفروض يتبعت على طول من غير ما
         // يستنى خطوة جديدة تتسجل أو الـ Flush الدوري يجيله دوره
         if (navigator.onLine) {
-            flushPendingStepsBatch();
             syncOfflineStepsToServerIfNeeded();
         }
     });
@@ -1164,7 +1142,6 @@ function bindStepsFlushLifecycleEvents() {
     // أول ما النت يرجع بعد انقطاع، ابعت أي خطوات متراكمة فوراً بدل ما
     // تستنى معاد الـ Flush الدوري
     window.addEventListener('online', () => {
-        flushPendingStepsBatch();
         syncOfflineStepsToServerIfNeeded();
     });
 }
@@ -1415,6 +1392,11 @@ export function renderProfileHeader(profile, user) {
             headerTitleEl.classList.add('hidden');
         }
     }
+
+    // شارة التوثيق الذهبية جنب الاسم في بروفايلي وفي الهيدر العلوي
+    const isProfileVerified = Boolean(profile?.is_verified && (!profile.verified_until || new Date(profile.verified_until) > new Date()));
+    renderVerifiedBadgeInline(nameEl, isProfileVerified);
+    renderVerifiedBadgeInline(headerNameEl, isProfileVerified);
 
     // (المرحلة 7) أيقونة الشارة المميزة جنب الاسم - في كارت "بروفايلي"
     // وفي الهيدر العلوي مع بعض. بنستنى الكتالوج لو لسه مش محمّل (Fire
@@ -2004,6 +1986,70 @@ function renderFeaturedBadgeInline(nameEl, featuredBadgeId) {
         badgeEl.textContent = badge.icon;
     }
     badgeEl.title = badge.title;
+}
+
+/**
+ * بناء شارة التوثيق الذهبية الرسمية بتصميم دائري مميز وفاخر (Scalloped Rosette Seal)
+ * @param {boolean} isVerified
+ * @param {string} [extraClasses='']
+ * @returns {string}
+ */
+export function buildVerifiedBadgeHtml(isVerified, extraClasses = '') {
+    if (!isVerified) return '';
+    return `<span class="inline-flex items-center align-middle select-none text-gold-400 cursor-pointer shrink-0 ${extraClasses}" title="حساب موثق رسمي في سِكّاوي" onclick="if(window.showToast) window.showToast('حساب موثق رسمي في سِكّاوي')"><svg class="w-4 h-4 inline-block shrink-0" viewBox="0 0 24 24" fill="none"><path d="M22.25 12c0-1.43-.88-2.67-2.19-3.34.46-1.39.2-2.9-.81-3.91s-2.52-1.27-3.91-.81c-.67-1.31-1.91-2.19-3.34-2.19s-2.67.88-3.34 2.19c-1.39-.46-2.9-.2-3.91.81s-1.27 2.52-.81 3.91C2.63 9.33 1.75 10.57 1.75 12s.88 2.67 2.19 3.34c-.46 1.39-.2 2.9.81 3.91s2.52 1.27 3.91.81c.67 1.31 1.91 2.19 3.34 2.19s2.67-.88 3.34-2.19c1.39.46 2.9.2 3.91-.81s1.27-2.52.81-3.91c1.31-.67 2.19-1.91 2.19-3.34z" fill="#D4AF37"/><circle cx="12" cy="12" r="7.5" stroke="#FFF0A0" stroke-width="0.6" stroke-opacity="0.5"/><path d="M7.75 12l3.25 3.25 6-6.5" stroke="#0B0D12" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/></svg></span>`;
+}
+
+/**
+ * رسم شارة التوثيق الذهبية بجانب أي عنصر اسم مستخدم في الواجهة مع ضمان عدم نزولها لسطر جديد
+ * @param {HTMLElement|null} nameEl
+ * @param {boolean} isVerified
+ */
+export function renderVerifiedBadgeInline(nameEl, isVerified) {
+    if (!nameEl) return;
+
+    // 1. فحص وجود Slot مخصص (مثل الهيدر وبروفايلي والبروفايل العام)
+    const slotMap = {
+        headerUserName: 'headerUserVerifiedBadgeSlot',
+        profileName: 'profileVerifiedBadgeSlot',
+        publicProfileName: 'publicProfileVerifiedBadgeSlot'
+    };
+    const slotId = nameEl.id ? slotMap[nameEl.id] : null;
+    const slotEl = slotId ? document.getElementById(slotId) : null;
+
+    if (slotEl) {
+        slotEl.innerHTML = isVerified ? buildVerifiedBadgeHtml(true) : '';
+        return;
+    }
+
+    if (!nameEl.parentElement) return;
+
+    const badgeSelector = nameEl.id
+        ? `[data-verified-badge-for="${nameEl.id}"]`
+        : '.verified-badge-icon';
+    let badgeEl = nameEl.parentElement.querySelector(badgeSelector);
+
+    if (!isVerified) {
+        if (badgeEl) badgeEl.remove();
+        return;
+    }
+
+    if (!badgeEl) {
+        badgeEl = document.createElement('span');
+        if (nameEl.id) badgeEl.dataset.verifiedBadgeFor = nameEl.id;
+        badgeEl.className = 'verified-badge-icon shrink-0 inline-flex items-center align-middle select-none text-gold-400 cursor-pointer';
+        badgeEl.title = 'حساب موثق رسمي في سِكّاوي';
+        badgeEl.innerHTML = buildVerifiedBadgeHtml(true);
+        badgeEl.onclick = (e) => {
+            e.stopPropagation();
+            if (window.showToast) window.showToast('حساب موثق رسمي في سِكّاوي');
+        };
+        if (nameEl.parentElement && !nameEl.parentElement.classList.contains('flex') && !nameEl.parentElement.classList.contains('inline-flex')) {
+            nameEl.parentElement.classList.add('inline-flex', 'items-center');
+        }
+        nameEl.insertAdjacentElement('afterend', badgeEl);
+    } else {
+        badgeEl.innerHTML = buildVerifiedBadgeHtml(true);
+    }
 }
 
 /**
@@ -2857,7 +2903,7 @@ async function searchLeaderboardUsers(query, metric) {
     // (جديد) public_profiles بدل profiles - نفس السبب المذكور في fetchLeaderboardTop
     const { data, error } = await supabaseClient
         .from('public_profiles')
-        .select('id, full_name, avatar_url, points, total_steps')
+        .select('id, full_name, avatar_url, points, total_steps, is_verified')
         .ilike('full_name', `%${trimmedQuery}%`)
         .order(metric, { ascending: false, nullsFirst: false })
         .limit(20);
@@ -2890,13 +2936,13 @@ function renderLeaderboardSearchResults(results, metric) {
         return `
             <article class="rank-card${isCurrentUser ? ' rank-card-self' : ''}" data-leaderboard-search-user-id="${row.id}">
                 <span class="relative inline-block shrink-0">
-                    <img src="${row.avatar_url || DEFAULT_AVATAR_URI}" alt="${row.full_name || 'بطل'}"
+                    <img src="${row.avatar_url || DEFAULT_AVATAR_URI}" alt="${escapeHtml(row.full_name || 'بطل')}"
                          class="rank-card-avatar"
-                         onerror="this.src='${DEFAULT_AVATAR_URI}'">
+                         onerror="this.onerror=null;this.src='${DEFAULT_AVATAR_URI}'">
                     ${presenceDotHtml(row.id)}
                 </span>
                 <div class="rank-card-info">
-                    <h5 class="rank-card-name">${row.full_name || 'بطل'}${isCurrentUser ? ' (أنت)' : ''}</h5>
+                    <h5 class="rank-card-name flex items-center">${escapeHtml(row.full_name || 'بطل')}${isCurrentUser ? ' (أنت)' : ''}${buildVerifiedBadgeHtml(row.is_verified)}</h5>
                     <div class="dual-stat-badge dual-stat-badge-compact">
                         <span class="dual-stat-item" title="عدد الخطوات">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l2-6 4 12 2-6h6"/></svg>
@@ -3038,7 +3084,7 @@ async function fetchAcceptedFriends(userId) {
     // متاحة لأي مستخدم يقرا منها بيانات أي حد تاني بأمان.
     const { data: friendProfiles, error: profilesError } = await supabaseClient
         .from('public_profiles')
-        .select('id, full_name, avatar_url, points')
+        .select('id, full_name, avatar_url, points, is_verified')
         .in('id', friendIds);
 
     if (profilesError) {
@@ -3056,6 +3102,7 @@ async function fetchAcceptedFriends(userId) {
             name: profile?.full_name || 'بطل',
             points: profile?.points ?? 0,
             avatar: profile?.avatar_url || DEFAULT_AVATAR_URI,
+            isVerified: Boolean(profile?.is_verified),
         };
     });
 }
@@ -3086,7 +3133,7 @@ async function fetchIncomingFriendRequests(userId) {
     // profiles مباشرة كانت بترجع فاضية لبيانات أي مستخدم مش أنا.
     const { data: requesterProfiles, error: profilesError } = await supabaseClient
         .from('public_profiles')
-        .select('id, full_name, avatar_url')
+        .select('id, full_name, avatar_url, is_verified')
         .in('id', requesterIds);
 
     if (profilesError) {
@@ -3103,6 +3150,7 @@ async function fetchIncomingFriendRequests(userId) {
             requesterId: rel.requester_id,
             name: profile?.full_name || 'بطل',
             avatar: profile?.avatar_url || DEFAULT_AVATAR_URI,
+            isVerified: Boolean(profile?.is_verified),
         };
     });
 }
@@ -3278,7 +3326,7 @@ function buildFriendRowHtml(friend) {
                          onerror="this.src='${DEFAULT_AVATAR_URI}'">
                     ${presenceDotHtml(friend.userId)}
                 </span>
-                <span class="text-xs font-extrabold text-lux-100 truncate">${friend.name}</span>
+                <span class="text-xs font-extrabold text-lux-100 truncate flex items-center">${friend.name}${buildVerifiedBadgeHtml(friend.isVerified)}</span>
             </button>
             <div class="flex items-center gap-2 shrink-0">
                 <span class="text-[11px] font-black text-gold-400">${friend.points.toLocaleString()} ن</span>
@@ -3385,7 +3433,7 @@ function buildFriendRequestRowHtml(req) {
                          onerror="this.src='${DEFAULT_AVATAR_URI}'">
                     ${presenceDotHtml(req.requesterId)}
                 </span>
-                <span class="text-xs font-extrabold text-lux-100 truncate">${req.name}</span>
+                <span class="text-xs font-extrabold text-lux-100 truncate flex items-center">${req.name}${buildVerifiedBadgeHtml(req.isVerified)}</span>
             </button>
             <div class="flex items-center gap-1.5 shrink-0">
                 <button class="accept-friend-request-btn text-[11px] font-black text-teal-400 hover:text-teal-300 bg-teal-500/10 px-2.5 py-1.5 rounded-xl" data-request-id="${req.id}">قبول</button>
@@ -3853,20 +3901,20 @@ async function fetchPublicProfileRow(targetUserId) {
     try {
         let { data, error } = await supabaseClient
             .from('public_profiles')
-            .select('id, full_name, title, avatar_url, points, streak_count, best_streak_days, total_steps, correct_answers, daily_championship_wins, weekly_championship_wins, monthly_championship_wins, featured_badge_id, created_at, best_daily_steps')
+            .select('id, full_name, title, avatar_url, points, streak_count, best_streak_days, total_steps, correct_answers, daily_championship_wins, weekly_championship_wins, monthly_championship_wins, featured_badge_id, created_at, best_daily_steps, is_verified')
             .eq('id', targetUserId)
             .maybeSingle();
 
         if (error && (error.code === '42703' || error.message?.includes('best_daily_steps') || error.message?.includes('created_at'))) {
             let fallback = await supabaseClient
                 .from('public_profiles')
-                .select('id, full_name, title, avatar_url, points, streak_count, best_streak_days, total_steps, correct_answers, daily_championship_wins, weekly_championship_wins, monthly_championship_wins, featured_badge_id, created_at')
+                .select('id, full_name, title, avatar_url, points, streak_count, best_streak_days, total_steps, correct_answers, daily_championship_wins, weekly_championship_wins, monthly_championship_wins, featured_badge_id, created_at, is_verified')
                 .eq('id', targetUserId)
                 .maybeSingle();
             if (fallback.error && fallback.error.code === '42703') {
                 fallback = await supabaseClient
                     .from('public_profiles')
-                    .select('id, full_name, title, avatar_url, points, streak_count, best_streak_days, total_steps, correct_answers, daily_championship_wins, weekly_championship_wins, monthly_championship_wins, featured_badge_id')
+                    .select('id, full_name, title, avatar_url, points, streak_count, best_streak_days, total_steps, correct_answers, daily_championship_wins, weekly_championship_wins, monthly_championship_wins, featured_badge_id, is_verified')
                     .eq('id', targetUserId)
                     .maybeSingle();
             }
@@ -4046,6 +4094,7 @@ function setPublicProfileLoadingState() {
     // (المرحلة 7) نشيل أيقونة الشارة المميزة القديمة (لو موجودة من
     // بروفايل عام سابق) لحد ما بيانات البروفايل الجديد توصل
     renderFeaturedBadgeInline(nameEl, null);
+    renderVerifiedBadgeInline(nameEl, false);
 
     // (المرحلة 8) نفضّي زرار "إرسال رسالة" القديم برضه (بروفايل عام
     // سابق ممكن يكون كان بروفايل الأدمن نفسه) لحد ما renderPublicProfileSupportButton
@@ -4081,7 +4130,10 @@ function renderPublicProfileContent(profileRow) {
 
     const avatarUrl = profileRow.avatar_url || DEFAULT_AVATAR_URI;
 
-    if (nameEl) nameEl.textContent = profileRow.full_name || 'بطل';
+    if (nameEl) {
+        nameEl.textContent = profileRow.full_name || 'بطل';
+        renderVerifiedBadgeInline(nameEl, Boolean(profileRow.is_verified));
+    }
     // (تعديل بناءً على طلب المستخدم): زي بالظبط منطق renderProfileHeader
     // (بروفايلي) - لو صاحب البروفايل ده مختار لقب، اعرضه؛ لو لأ، السطر
     // بيتخفي تمامًا (مفيش نص بديل زي "لسه معندكش لقب")
@@ -4798,18 +4850,6 @@ async function loadAndRenderRealProfile(user) {
         if (pipelineRan) return;
         pipelineRan = true;
 
-        // (إصلاح - باج حقيقي) currentAuthUser/currentProfileRow دلوقتي
-        // متظبطين - أي خطوات اتجمّعت في pendingStepsDelta قبل كده (من
-        // غير ما تتبعت، لأن المستخدم ماكانش مسجّل دخول لسه) موجودة أصلاً
-        // في الذاكرة (recordStepsProgress بتجمّعها هناك مباشرة) -
-        // مبنعملش restorePendingStepsFromStorage هنا عشان مش نضيفها مرة
-        // تانية فوق نفسها. bindStepsFlushLifecycleEvents (بتتنادى
-        // لاحقًا من initProfileUI) هي المسؤولة عن استرجاع أي رصيد اتحفظ
-        // من *جلسة سابقة* فعلاً اتقفلت (شوف restorePendingStepsFromStorage).
-        if (pendingStepsDelta > 0) {
-            flushPendingStepsBatch();
-        }
-
         // "تسجيل حضور" اليوم بعد ما البروفايل اتحمّل بنجاح - ده اللي
         // بيحقق شرط "الستريك +1 عند تسجيل الدخول" (المرحلة 3). بنتجاهلها
         // لو الصف مش موجود أصلاً (مستخدم لسه معملش "إعداد البطل لأول مرة")
@@ -4832,14 +4872,26 @@ async function loadAndRenderRealProfile(user) {
             const isRowFromToday = currentProfileRow.last_active_date === todayStr;
             const safeServerDailySteps = isRowFromToday ? (currentProfileRow.daily_steps ?? 0) : 0;
 
-            reconcileWithServerSteps(safeServerDailySteps);
+            const lastAppliedReset = window.localStorage.getItem(`sakkawi_steps_reset_${user.id}`);
+            const isResetPending = currentProfileRow.steps_reset_at && currentProfileRow.steps_reset_at !== lastAppliedReset;
+
+            if (isResetPending) {
+                window.localStorage.setItem(`sakkawi_steps_reset_${user.id}`, currentProfileRow.steps_reset_at);
+                clearPendingSteps();
+                reconcileWithServerSteps(0, true);
+            } else {
+                reconcileWithServerSteps(safeServerDailySteps);
+            }
+
             // (جديد) نفس فكرة السطر اللي فوق بالظبط بس للرقم القياسي
             // (best_daily_steps) - عشان "رقمك القياسي" يفضل صح عبر كل
             // الأجهزة لنفس الحساب، مش بس محفوظ محليًا على جهاز واحد
             reconcileServerBestSteps(currentProfileRow.best_daily_steps ?? 0);
 
             // مزامنة أي خطوات تم قطعها أوفلاين ولم تصل للسيرفر بعد
-            await syncOfflineStepsToServerIfNeeded();
+            if (!isResetPending) {
+                await syncOfflineStepsToServerIfNeeded();
+            }
         }
 
         // تحميل الأوسمة الحقيقية وقائمة الأصدقاء (المرحلتين 4 و5) بعد ما
@@ -5772,14 +5824,14 @@ export async function initProfileUI(user) {
         // الثغرة دي من جذرها، مش بس بصريًا.
         currentAuthUser = null;
         currentProfileRow = null;
-        // (إصلاح - باج حقيقي) يصفّر عداد الخطوات المحلي في sensors.js وقت
-        // الخروج/وضع الزائر، عشان لو حساب تاني دخل بعد كده على نفس
-        // الجهاز مياخدش خطوات الحساب اللي خرج غلط (شوف syncActiveUser)
+        pendingStepsDelta = 0;
+        pendingStepsPointsDelta = 0;
+        try {
+            window.localStorage.removeItem(PENDING_STEPS_STORAGE_KEY);
+        } catch (e) {
+            // تجاهل
+        }
         syncActiveUser(null);
-        // (إصلاح) نصفّر baseline الأوسمة كمان - لو حساب تاني دخل بعد كده
-        // على نفس الجهاز، مينفعش يفضل شايف badgesLoadedOnce=true وbadgesData
-        // بتاعة الحساب اللي خرج (هتتفحص واحدة صح من loadAndRenderRealProfile
-        // بتاعة الحساب الجديد قبل ما أي checkAndUnlockBadges تشتغل عليه أصلاً)
         badgesData = [];
         badgesLoadedOnce = false;
         friendsData = [];
@@ -5801,6 +5853,9 @@ export async function initProfileUI(user) {
         updateProfileStats();
         renderFriends();
         renderIncomingFriendRequests();
+        document.dispatchEvent(new CustomEvent('sensors:best-steps-resynced', {
+            detail: { bestSteps: 0 }
+        }));
     }
 
     // ربط مودال "تعديل البروفايل" الحقيقي (صورة + اسم + لقب) - بيستبدل
@@ -5845,4 +5900,37 @@ export async function initProfileUI(user) {
 
     // تهيئة تبويب "لوحة الصدارة" بالبيانات الحقيقية من profiles (المرحلة 5)
     await initLeaderboardUI();
+}
+
+/**
+ * تحديث بيانات البروفايل الحالية من السيرفر مباشرة وعكس أي تعديلات إدارية على الشاشة
+ */
+export async function refreshProfileFromServerIfNeeded() {
+    if (!currentAuthUser) return;
+    try {
+        const res = await fetchUserProfileFromServer(currentAuthUser.id);
+        const freshProfile = res?.profile;
+        if (!freshProfile) return;
+
+        currentProfileRow = freshProfile;
+        syncProfileToCache(freshProfile);
+        renderProfileHeader(freshProfile, currentAuthUser);
+        updateProfileStats({
+            totalSteps: freshProfile.total_steps ?? 0,
+            bestDailySteps: freshProfile.best_daily_steps ?? 0,
+            correctAnswers: freshProfile.correct_answers ?? 0,
+            bestStreakDays: freshProfile.best_streak_days ?? 0,
+            points: freshProfile.points ?? 0,
+            streakCount: freshProfile.streak_count ?? 0,
+            dailyChampionshipWins: freshProfile.daily_championship_wins ?? 0,
+            weeklyChampionshipWins: freshProfile.weekly_championship_wins ?? 0,
+            monthlyChampionshipWins: freshProfile.monthly_championship_wins ?? 0,
+        });
+    } catch (err) {
+        console.warn('[profiles.js] تعذر تحديث البروفايل من السيرفر:', err);
+    }
+}
+
+if (typeof window !== 'undefined') {
+    window.refreshProfileFromServerIfNeeded = refreshProfileFromServerIfNeeded;
 }

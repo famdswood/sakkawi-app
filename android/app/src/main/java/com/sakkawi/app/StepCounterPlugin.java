@@ -44,7 +44,7 @@ import com.getcapacitor.annotation.PermissionCallback;
  *   (Autostart) الخاصة بالشركة المصنّعة مباشرة (شاومي/هواوي/أوبو/فيفو..إلخ)،
  *   لأن التقييد ده أخطر من توفير البطارية العادي - على الشركات دي بتقفل
  *   أي Foreground Service للتطبيق لو مش مفعّل Autostart له، حتى لو
- *   التطبيق مستثنى من توفير البطارية أصلاً. ⚠️ دي Intent-ات غير رسمية
+ *   التطبيق مستثنى من توفير البطارية أصلاً. دي Intent-ات غير رسمية
  *   (مفيش API معتمد من جوجل لها) بنعرفها من component names معروفة
  *   لكل شركة - ممكن تتغيّر أو متبقاش موجودة في إصدارات ROM مستقبلية،
  *   فبنتعامل معاها دفاعيًا (try/catch) وبنرجع للشاشة العامة
@@ -122,6 +122,11 @@ public class StepCounterPlugin extends Plugin {
 
     @PluginMethod
     public void getStepsToday(PluginCall call) {
+        StepCounterForegroundService service = StepCounterForegroundService.getInstance();
+        if (service != null) {
+            service.flushSensor();
+        }
+
         SharedPreferences prefs = getContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
         int stepsToday = prefs.getInt("steps_today", 0);
         String date = prefs.getString("steps_today_date", null);
@@ -170,7 +175,7 @@ public class StepCounterPlugin extends Plugin {
      * حاجة برمجية بنقدر نجبرها من غير موافقة صريحة من المستخدم.
      * لو الجهاز أقل من Android M أو مفيش activity متاحة، بنرجّع
      * granted: false على طول من غير محاولة (مفيش API أصلاً قبل M).
-     * ⚠️ ملحوظة: النافذة دي بتتقفل والنداء ده بيرجع فورًا (مش بعد ما
+     * ملحوظة: النافذة دي بتتقفل والنداء ده بيرجع فورًا (مش بعد ما
      * المستخدم يوافق أو يرفض) لأنها بتفتح Activity منفصلة - الـ JS
      * لازم ينادي isIgnoringBatteryOptimizations() تاني بعدها (مثلاً
      * لما التطبيق يرجع للمقدمة عبر visibilitychange) عشان يعرف
@@ -343,8 +348,7 @@ public class StepCounterPlugin extends Plugin {
      * المعروفة أصلاً)، بيرجع للشاشة العامة لتفاصيل التطبيق
      * (Application Details Settings) عشان المستخدم على الأقل يقدر
      * يدوّر بنفسه بدل ما نسيبه من غير أي حاجة.
-     *
-     * ⚠️ مفيش ضمان إن الشاشة اللي فتحناها هي بالظبط الصفحة اللي فيها
+     * مفيش ضمان إن الشاشة اللي فتحناها هي بالظبط الصفحة اللي فيها
      * سِكّاوي جاهز يتفعّله - بعض الشركات بتفتح قائمة عامة والمستخدم
      * لازم يدوّر على التطبيق فيها بنفسه. برضو مفيش طريقة رسمية نتأكد
      * بيها إن المستخدم فعّل الخيار فعلاً (على عكس توفير البطارية).

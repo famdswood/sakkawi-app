@@ -2201,7 +2201,7 @@
             </div>
 
             <!-- ملخص الحساب -->
-            <div class="grid grid-cols-3 gap-2 bg-lux-950 p-3 rounded-xl border border-lux-800/60 text-center">
+            <div class="grid grid-cols-4 gap-2 bg-lux-950 p-3 rounded-xl border border-lux-800/60 text-center">
                 <div>
                     <div class="text-[10px] text-lux-400 font-bold">رصيد النقاط</div>
                     <div id="userModalPoints" class="text-sm font-mono font-bold text-gold-400">—</div>
@@ -2213,6 +2213,10 @@
                 <div>
                     <div class="text-[10px] text-lux-400 font-bold">خطوات اليوم</div>
                     <div id="userModalTodaySteps" class="text-sm font-mono font-bold text-emerald-400">—</div>
+                </div>
+                <div>
+                    <div class="text-[10px] text-lux-400 font-bold">حالة التوثيق</div>
+                    <div id="userModalVerificationStatus" class="text-xs font-bold text-lux-300 truncate">—</div>
                 </div>
             </div>
 
@@ -2271,6 +2275,55 @@
                     <button type="button" id="btnExecuteRestoreStreak" class="w-full py-1.5 rounded-lg bg-teal-600/20 hover:bg-teal-600/30 text-teal-300 border border-teal-600/40 text-xs font-bold transition">
                         استعادة السلسلة المتتالية
                     </button>
+                </div>
+
+                <!-- 5. توثيق الحساب (الشارة الذهبية) -->
+                <div class="p-3.5 rounded-xl bg-lux-950/60 border border-lux-800/80 space-y-2.5">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <div class="text-xs font-bold text-lux-100 flex items-center gap-1.5">
+                                <span>شارة التوثيق الذهبية</span>
+                                <span class="inline-flex items-center text-gold-400">
+                                    <svg class="w-4 h-4 inline-block shrink-0" viewBox="0 0 24 24" fill="none">
+                                        <path d="M22.25 12c0-1.43-.88-2.67-2.19-3.34.46-1.39.2-2.9-.81-3.91s-2.52-1.27-3.91-.81c-.67-1.31-1.91-2.19-3.34-2.19s-2.67.88-3.34 2.19c-1.39-.46-2.9-.2-3.91.81s-1.27 2.52-.81 3.91C2.63 9.33 1.75 10.57 1.75 12s.88 2.67 2.19 3.34c-.46 1.39-.2 2.9.81 3.91s2.52 1.27 3.91.81c.67 1.31 1.91 2.19 3.34 2.19s2.67-.88 3.34-2.19c1.39.46 2.9.2 3.91-.81s1.27-2.52.81-3.91c1.31-.67 2.19-1.91 2.19-3.34z" fill="#D4AF37"/>
+                                        <circle cx="12" cy="12" r="7.5" stroke="#FFF0A0" stroke-width="0.6" stroke-opacity="0.5"/>
+                                        <path d="M7.75 12l3.25 3.25 6-6.5" stroke="#0B0D12" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/>
+                                    </svg>
+                                </span>
+                            </div>
+                            <div class="text-[10px] text-lux-400">منح أو تجديد أو سحب شارة التوثيق الذهبية الملكية مع مؤقت زمني</div>
+                        </div>
+                        <span id="userModalVerificationBadgeTag" class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-lux-800 text-lux-400 border border-lux-700">
+                            غير موثق
+                        </span>
+                    </div>
+
+                    <div id="userModalVerificationDetails" class="hidden text-[11px] p-2 rounded-lg bg-gold-500/10 border border-gold-500/20 text-gold-300 font-mono">
+                    </div>
+
+                    <div class="space-y-1.5">
+                        <label for="selectVerificationDuration" class="text-[10px] font-bold text-lux-400 block">مدة التوثيق:</label>
+                        <select id="selectVerificationDuration" class="w-full bg-lux-900 border border-lux-800 rounded-lg px-3 py-1.5 text-xs text-lux-100 focus:border-gold-500/50 outline-none">
+                            <option value="0">توثيق دائم (بدون تاريخ انتهاء)</option>
+                            <option value="7">أسبوع (7 أيام)</option>
+                            <option value="14">أسبوعين (14 يوم)</option>
+                            <option value="30" selected>شهر (30 يوم)</option>
+                            <option value="90">3 أشهر (90 يوم)</option>
+                            <option value="180">6 أشهر (180 يوم)</option>
+                            <option value="365">سنة (365 يوم)</option>
+                        </select>
+                    </div>
+
+                    <input type="text" id="inputVerificationReason" class="w-full bg-lux-900 border border-lux-800 rounded-lg px-3 py-1.5 text-xs text-lux-100" placeholder="سبب التوثيق أو رقم الاشتراك (اختياري)...">
+
+                    <div class="grid grid-cols-2 gap-2 pt-1">
+                        <button type="button" id="btnExecuteSetVerification" class="py-1.5 rounded-lg bg-gold-500/20 hover:bg-gold-500/30 text-gold-300 border border-gold-500/40 text-xs font-bold transition flex items-center justify-center gap-1">
+                            تفعيل / تجديد التوثيق
+                        </button>
+                        <button type="button" id="btnExecuteRevokeVerification" class="py-1.5 rounded-lg bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-600/40 text-xs font-bold transition flex items-center justify-center gap-1">
+                            سحب التوثيق
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>

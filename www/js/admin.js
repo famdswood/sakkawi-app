@@ -21,9 +21,21 @@
    supabaseClient من نفس ملف التهيئة المشترك.
    ================================================================== */
 
-import { supabaseClient } from './supabase-config.js';
-import { getCurrentUser } from './auth.js';
 import { clearGeofenceSettingsCache } from './geofence.js';
+
+const { createClient } = window.supabase;
+const SUPABASE_URL = 'https://rvytcqozbwsqpslkehiw.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_ieqWt5WLLppNF8HJJbQ9lQ_7PAd6mhN';
+
+export const adminSupabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: false,
+        storageKey: 'sekkawy-admin-session',
+    },
+});
+const supabaseClient = adminSupabaseClient;
 
 
 /* ==================================================================
@@ -44,10 +56,10 @@ let isAdminModulesInitialized = false;
  */
 async function checkAdminSession() {
     try {
-        const user = await getCurrentUser();
-        if (!user) return false;
+        const { data: { user }, error: userError } = await adminSupabaseClient.auth.getUser();
+        if (userError || !user) return false;
 
-        const { data: profile, error } = await supabaseClient
+        const { data: profile, error } = await adminSupabaseClient
             .from('profiles')
             .select('role')
             .eq('id', user.id)
@@ -240,6 +252,29 @@ const GEOFENCE_RADIUS_MAX_METERS = 20000;
 // اتشالت - Widget رقم 2 بقى بيحمّل كل الحسابات مرة واحدة ويفلترها
 // محلياً بدل البحث المتقطّع (Debounced) على السيرفر، شوف
 // loadAllUsers/renderFilteredUserList تحت)
+
+/**
+ * التحقق مما إذا كان توثيق المستخدم نشطاً حالياً (دائم أو تاريخ الانتهاء في المستقبل)
+ * @param {object} user
+ * @returns {boolean}
+ */
+function isUserVerificationActive(user) {
+    if (!user) return false;
+    if (!user.is_verified) return false;
+    if (!user.verified_until) return true;
+    return new Date(user.verified_until) > new Date();
+}
+
+/**
+ * بناء شارة التوثيق الذهبية الرسمية بتصميم دائري مميز وفاخر (Scalloped Rosette Seal)
+ * @param {boolean} isVerified
+ * @param {string} [extraClasses='']
+ * @returns {string}
+ */
+function buildVerifiedBadgeHtml(isVerified, extraClasses = '') {
+    if (!isVerified) return '';
+    return `<span class="inline-flex items-center align-middle select-none text-gold-400 cursor-pointer shrink-0 ${extraClasses}" title="حساب موثق رسمي في سِكّاوي" onclick="if(window.showToast) window.showToast('حساب موثق رسمي في سِكّاوي')"><svg class="w-4 h-4 inline-block shrink-0" viewBox="0 0 24 24" fill="none"><path d="M22.25 12c0-1.43-.88-2.67-2.19-3.34.46-1.39.2-2.9-.81-3.91s-2.52-1.27-3.91-.81c-.67-1.31-1.91-2.19-3.34-2.19s-2.67.88-3.34 2.19c-1.39-.46-2.9-.2-3.91.81s-1.27 2.52-.81 3.91C2.63 9.33 1.75 10.57 1.75 12s.88 2.67 2.19 3.34c-.46 1.39-.2 2.9.81 3.91s2.52 1.27 3.91.81c.67 1.31 1.91 2.19 3.34 2.19s2.67-.88 3.34-2.19c1.39.46 2.9.2 3.91-.81s1.27-2.52.81-3.91c1.31-.67 2.19-1.91 2.19-3.34z" fill="#D4AF37"/><circle cx="12" cy="12" r="7.5" stroke="#FFF0A0" stroke-width="0.6" stroke-opacity="0.5"/><path d="M7.75 12l3.25 3.25 6-6.5" stroke="#0B0D12" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/></svg></span>`;
+}
 
 
 /* ==================================================================
@@ -979,6 +1014,10 @@ function buildUserRowElement(user) {
     // الـ RPC نفسها برضو بترفض حظر الأدمن لنفسه، شوف admin_toggle_user_block)
     const isSelfRow = user.id === currentAdminUserId;
 
+    // التحقق من حالة التوثيق الحالية
+    const isVerified = isUserVerificationActive(user);
+    const verifiedBadgeHtml = isVerified ? buildVerifiedBadgeHtml(true) : '';
+
     li.innerHTML = `
         <span class="relative inline-block shrink-0">
             <img class="admin-user-avatar" src="${avatarUrl}" alt="" loading="lazy">
@@ -989,7 +1028,7 @@ function buildUserRowElement(user) {
             <span class="presence-dot${presenceIsOnline ? ' is-online' : ''}" aria-hidden="true"></span>
         </span>
         <div class="admin-user-info">
-            <div class="admin-user-name">${displayName}</div>
+            <div class="admin-user-name flex items-center">${displayName}${verifiedBadgeHtml}</div>
             <div class="admin-user-username">${usernameText}</div>
             <div class="text-[0.65rem] font-mono font-bold ${presenceIsOnline ? 'text-emerald-400' : 'text-lux-500'} mt-0.5">
                 ${presenceIsOnline ? '● ' : ''}${presenceText}
@@ -997,9 +1036,6 @@ function buildUserRowElement(user) {
             ${joinedText ? `<div class="text-[0.6rem] font-mono font-medium text-lux-600 mt-0.5">${escapeHtml(joinedText)}</div>` : ''}
             ${isBlocked ? `<div class="admin-user-blocked-reason">محظور${blockedReasonText ? `: ${blockedReasonText}` : ''}</div>` : ''}
         </div>
-        <span class="admin-user-bounds-badge ${isInside ? 'is-inside' : 'is-outside'}">
-            ${isInside ? 'داخل النطاق' : 'خارج النطاق'}
-        </span>
         <div class="admin-user-actions flex items-center gap-2">
             ${isSelfRow ? '' : `
                 <button type="button" class="admin-block-btn ${isBlocked ? 'is-blocked' : ''}">
@@ -4424,6 +4460,8 @@ function initUserActionModal() {
             if (reasonInput) reasonInput.value = '';
             const stepsEl = document.getElementById('userModalTodaySteps');
             if (stepsEl) stepsEl.textContent = '0';
+            selectedUserForAction.daily_steps = 0;
+            selectedUserForAction.daily_points = 0;
         });
     }
 
@@ -4548,12 +4586,160 @@ function initUserActionModal() {
 
             const newStreak = data?.current_streak_days ?? days;
             selectedUserForAction.current_streak_days = newStreak;
+            selectedUserForAction.streak_count = newStreak;
+            selectedUserForAction.best_streak_days = newStreak;
             const strkEl = document.getElementById('userModalStreak');
             if (strkEl) strkEl.textContent = `${newStreak.toLocaleString('ar-EG')} يوم`;
             setStatusText(statusEl, `تمت استعادة السلسلة المتتالية بنجاح (${newStreak} يوم).`, 'success');
             if (daysInput) daysInput.value = '';
             if (reasonInput) reasonInput.value = '';
         });
+    }
+
+    // 5. توثيق الحساب (الشارة الذهبية)
+    const btnSetVerification = document.getElementById('btnExecuteSetVerification');
+    if (btnSetVerification) {
+        btnSetVerification.addEventListener('click', async () => {
+            if (!selectedUserForAction) return;
+            const durationSelect = document.getElementById('selectVerificationDuration');
+            const reasonInput = document.getElementById('inputVerificationReason');
+
+            const durationDays = parseInt(durationSelect ? durationSelect.value : '0', 10);
+            const reason = reasonInput ? reasonInput.value.trim() : '';
+
+            btnSetVerification.disabled = true;
+            setStatusText(statusEl, 'جاري تفعيل شارة التوثيق…', 'loading');
+
+            const { data, error } = await supabaseClient.rpc('admin_set_user_verification', {
+                p_user_id: selectedUserForAction.id,
+                p_duration_days: durationDays,
+                p_enable: true,
+                p_reason: reason,
+            });
+
+            btnSetVerification.disabled = false;
+
+            if (error) {
+                console.error('[admin.js] فشل تفعيل التوثيق:', error);
+                setStatusText(statusEl, error.message || 'تعذر تفعيل التوثيق.', 'error');
+                return;
+            }
+
+            selectedUserForAction.is_verified = true;
+            selectedUserForAction.verified_until = data?.verified_until || null;
+
+            updateUserModalVerificationDisplay(selectedUserForAction);
+            setStatusText(statusEl, 'تم تفعيل شارة التوثيق الذهبية للحساب بنجاح.', 'success');
+            if (reasonInput) reasonInput.value = '';
+
+            updateUserRowVerificationInList(selectedUserForAction);
+        });
+    }
+
+    const btnRevokeVerification = document.getElementById('btnExecuteRevokeVerification');
+    if (btnRevokeVerification) {
+        btnRevokeVerification.addEventListener('click', async () => {
+            if (!selectedUserForAction) return;
+            const reasonInput = document.getElementById('inputVerificationReason');
+            const reason = reasonInput ? reasonInput.value.trim() : '';
+
+            if (!confirm(`هل أنت متأكد من سحب شارة التوثيق الذهبية من (${selectedUserForAction.full_name || selectedUserForAction.username})؟`)) return;
+
+            btnRevokeVerification.disabled = true;
+            setStatusText(statusEl, 'جاري سحب التوثيق…', 'loading');
+
+            const { error } = await supabaseClient.rpc('admin_set_user_verification', {
+                p_user_id: selectedUserForAction.id,
+                p_duration_days: 0,
+                p_enable: false,
+                p_reason: reason,
+            });
+
+            btnRevokeVerification.disabled = false;
+
+            if (error) {
+                console.error('[admin.js] فشل سحب التوثيق:', error);
+                setStatusText(statusEl, error.message || 'تعذر سحب التوثيق.', 'error');
+                return;
+            }
+
+            selectedUserForAction.is_verified = false;
+            selectedUserForAction.verified_until = null;
+
+            updateUserModalVerificationDisplay(selectedUserForAction);
+            setStatusText(statusEl, 'تم سحب شارة التوثيق من الحساب بنجاح.', 'success');
+            if (reasonInput) reasonInput.value = '';
+
+            updateUserRowVerificationInList(selectedUserForAction);
+        });
+    }
+}
+
+function updateUserRowVerificationInList(user) {
+    if (!user || !user.id) return;
+    const rowEl = document.querySelector(`.admin-user-row[data-user-id="${user.id}"]`);
+    if (!rowEl) return;
+    const nameEl = rowEl.querySelector('.admin-user-name');
+    if (!nameEl) return;
+    const isVerified = isUserVerificationActive(user);
+    const displayName = escapeHtml(user.full_name || user.username || 'مستخدم بدون اسم');
+    const badgeHtml = isVerified ? buildVerifiedBadgeHtml(true) : '';
+    nameEl.innerHTML = `${displayName}${badgeHtml}`;
+}
+
+function updateUserModalVerificationDisplay(user) {
+    const statusTextEl = document.getElementById('userModalVerificationStatus');
+    const badgeTagEl = document.getElementById('userModalVerificationBadgeTag');
+    const detailsEl = document.getElementById('userModalVerificationDetails');
+
+    const isVerified = isUserVerificationActive(user);
+    if (isVerified) {
+        if (!user.verified_until) {
+            if (statusTextEl) {
+                statusTextEl.textContent = 'موثق (دائم)';
+                statusTextEl.className = 'text-xs font-bold text-gold-400 truncate';
+            }
+            if (badgeTagEl) {
+                badgeTagEl.textContent = 'موثق دائم';
+                badgeTagEl.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold bg-gold-500/20 text-gold-300 border border-gold-500/30';
+            }
+            if (detailsEl) {
+                detailsEl.textContent = 'شارة التوثيق الذهبية مفعّلة بشكل دائم بدون تاريخ انتهاء.';
+                detailsEl.classList.remove('hidden');
+            }
+        } else {
+            const untilDate = new Date(user.verified_until);
+            const now = new Date();
+            const diffMs = untilDate - now;
+            const remainingDays = Math.max(1, Math.ceil(diffMs / (1000 * 60 * 60 * 24)));
+            const formattedDate = untilDate.toLocaleDateString('ar-EG', { year: 'numeric', month: 'short', day: 'numeric' });
+
+            if (statusTextEl) {
+                statusTextEl.textContent = `موثق (${remainingDays} يوم)`;
+                statusTextEl.className = 'text-xs font-bold text-gold-400 truncate';
+            }
+            if (badgeTagEl) {
+                badgeTagEl.textContent = `موثق مؤقت (${remainingDays} يوم)`;
+                badgeTagEl.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold bg-gold-500/20 text-gold-300 border border-gold-500/30';
+            }
+            if (detailsEl) {
+                detailsEl.textContent = `ينتهي التوثيق في ${formattedDate} (متبقي حوالي ${remainingDays} يوم).`;
+                detailsEl.classList.remove('hidden');
+            }
+        }
+    } else {
+        if (statusTextEl) {
+            statusTextEl.textContent = 'غير موثق';
+            statusTextEl.className = 'text-xs font-bold text-lux-400 truncate';
+        }
+        if (badgeTagEl) {
+            badgeTagEl.textContent = 'غير موثق';
+            badgeTagEl.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold bg-lux-800 text-lux-400 border border-lux-700';
+        }
+        if (detailsEl) {
+            detailsEl.textContent = '';
+            detailsEl.classList.add('hidden');
+        }
     }
 }
 
@@ -4574,11 +4760,14 @@ async function openUserActionModal(user) {
     if (nameEl) nameEl.textContent = user.full_name || user.username || 'مستخدم بدون اسم';
     if (usernameEl) usernameEl.textContent = user.username ? `@${user.username}` : '';
     if (pointsEl) pointsEl.textContent = (user.points || 0).toLocaleString('ar-EG');
-    if (streakEl) streakEl.textContent = `${(user.current_streak_days || 0).toLocaleString('ar-EG')} يوم`;
+    const currentStreak = user.current_streak_days || user.streak_count || user.best_streak_days || 0;
+    if (streakEl) streakEl.textContent = `${currentStreak.toLocaleString('ar-EG')} يوم`;
     if (todayStepsEl) {
         todayStepsEl.textContent = (user.daily_steps || 0).toLocaleString('ar-EG');
     }
     if (statusEl) setStatusText(statusEl, '', null);
+
+    updateUserModalVerificationDisplay(user);
 
     modal.classList.remove('hidden');
 }

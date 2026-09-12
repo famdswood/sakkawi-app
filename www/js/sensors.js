@@ -25,11 +25,16 @@
    ================================================================== */
 
 /**
- * مفتاح التخزين في localStorage. بيحتوي على JSON بالشكل:
- * { date: 'YYYY-MM-DD', steps: <عدد خطوات اليوم الحالي>,
- *   history: { 'YYYY-MM-DD': <خطوات اليوم ده>, ... } }
+ * مفتاح التخزين في localStorage. معزول لكل مستخدم على حدة لمنع تسريب
+ * الخطوات أو الأرشيف أو الأرقام القياسية بين الحسابات على نفس الجهاز:
+ * - مستخدم مسجل: saa_baladi_step_tracker_v2_user_<userId>
+ * - زائر: saa_baladi_step_tracker_v2_guest
  */
-const STORAGE_KEY = 'saa_baladi_step_tracker_v1';
+const STORAGE_KEY_PREFIX = 'saa_baladi_step_tracker_v2_';
+
+function getStorageKey(userId) {
+    return userId ? `${STORAGE_KEY_PREFIX}user_${userId}` : `${STORAGE_KEY_PREFIX}guest`;
+}
 
 /* ------------------------------------------------------------------
    حالة التطبيق الداخلية (State) - مفيش داعي تتعدل يدوياً
@@ -37,12 +42,9 @@ const STORAGE_KEY = 'saa_baladi_step_tracker_v1';
 let stepCount = 0;
 let currentDayKey = null;        // تاريخ اليوم الحالي (YYYY-MM-DD) اللي العداد بيتحسب عليه
 let stepsHistory = {};           // أرشيف خطوات الأيام السابقة { 'YYYY-MM-DD': steps }
-
-// (إصلاح - باج حقيقي) آخر user id اتسجلت الحالة المحلية (localStorage)
-// باسمه - null يعني "زائر" أو مفيش حساب لسه. بنستخدمه عشان نكتشف
-// "تبديل حساب على نفس الجهاز" ونصفّر العداد المحلي وقتها، بدل ما نسيب
-// بيانات حساب سابق تتسرب لحساب جديد (شوف syncActiveUser تحت)
-let currentOwnerUserId = null;
+let currentOwnerUserId = null;   // معرف المستخدم الحالي
+let lastNativeStepsSeen = 0;     // آخر قراءة لحساس الجهاز لهذا المستخدم لمنع تسريب خطوات الحسابات الأخرى
+let resetNativeBaselineOnNextSync = false; // علم إعادة ضبط الأساس عند تبديل الحساب
 
 /**
  * إرجاع تاريخ اليوم الحالي بصيغة YYYY-MM-DD بالتوقيت المحلي للجهاز
@@ -58,65 +60,61 @@ function getTodayKey() {
 
 /**
  * حفظ الحالة الحالية (تاريخ اليوم + عدد خطواته + أرشيف الأيام
- * السابقة) في localStorage. بتتنفذ مع كل خطوة جديدة (Auto Save).
+ * السابقة) في localStorage للحساب النشط الحالي فقط.
  */
 function persistDailyState() {
     try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        const key = getStorageKey(currentOwnerUserId);
+        localStorage.setItem(key, JSON.stringify({
             date: currentDayKey,
             steps: stepCount,
             history: stepsHistory,
-            ownerUserId: currentOwnerUserId   // (إصلاح - باج حقيقي) صاحب الحالة المحلية دي
+            ownerUserId: currentOwnerUserId,
+            lastNative: lastNativeStepsSeen
         }));
     } catch (err) {
-        // ممكن يفشل لو localStorage ممتلئ أو محظور (وضع تصفح خفي مثلاً)
         console.warn('[sensors.js] تعذر حفظ خطوات اليوم في localStorage:', err);
     }
 }
 
 /**
- * تُستدعى مرة واحدة عند تحميل الملف (من autoInit): بتقرأ آخر حالة
- * محفوظة في localStorage وتقرر إحنا مكملين على نفس اليوم ولا لازم
- * نفتح يوم جديد (Daily Reset Check):
- * - لو مفيش بيانات محفوظة أصلاً -> نبدأ يوم جديد بعداد صفر.
- * - لو التاريخ المحفوظ = النهاردة -> نسترجع العداد ونكمل عليه.
- * - لو التاريخ المحفوظ يوم قديم -> نأرشف خطواته في History ونصفّر
- *   العداد لليوم الجديد.
+ * تُستدعى عند بدء التشغيل وعند تبديل الحساب: تقرأ حالة الحساب الحالي
+ * من مفتاحه المعزول وتقرر إحنا مكملين على نفس اليوم ولا لازم نفتح يوم جديد.
  */
 function loadPersistedDailyState() {
     const todayKey = getTodayKey();
     let saved = null;
 
     try {
-        const raw = localStorage.getItem(STORAGE_KEY);
+        const key = getStorageKey(currentOwnerUserId);
+        const raw = localStorage.getItem(key);
         if (raw) saved = JSON.parse(raw);
     } catch (err) {
-        console.warn('[sensors.js] تعذر قراءة بيانات الخطوات المحفوظة (هنبدأ من صفر):', err);
+        console.warn('[sensors.js] تعذر قراءة بيانات الخطوات المحفوظة:', err);
     }
 
     if (!saved || typeof saved !== 'object') {
-        // أول تشغيل للتطبيق على الإطلاق - مفيش أي بيانات سابقة
         currentDayKey = todayKey;
         stepCount = 0;
         stepsHistory = {};
+        lastNativeStepsSeen = 0;
         persistDailyState();
         return;
     }
 
     stepsHistory = saved.history && typeof saved.history === 'object' ? saved.history : {};
-    currentOwnerUserId = saved.ownerUserId ?? null; // (إصلاح - باج حقيقي)
+    lastNativeStepsSeen = Number(saved.lastNative) || 0;
 
     if (saved.date === todayKey) {
-        // نفس تاريخ اليوم - نكمل على العداد المحفوظ زي ما هو
         currentDayKey = todayKey;
         stepCount = Number(saved.steps) || 0;
     } else {
-        // يوم جديد: أرشفة خطوات اليوم اللي فات (لو موجود) وتصفير العداد
         if (saved.date) {
             stepsHistory[saved.date] = Number(saved.steps) || 0;
         }
         currentDayKey = todayKey;
         stepCount = 0;
+        lastNativeStepsSeen = 0;
     }
 
     persistDailyState();
@@ -137,6 +135,7 @@ export function ensureStillSameDay() {
         }
         currentDayKey = todayKey;
         stepCount = 0;
+        lastNativeStepsSeen = 0;
         persistDailyState();
         document.dispatchEvent(new CustomEvent('sensors:day-reset', {
             detail: { date: todayKey, previousDay }
@@ -201,8 +200,27 @@ export function getStepsCount() {
  * نفسه، مش حركة جديدة لسه متسجلتش).
  * @param {number} serverDailySteps - قيمة daily_steps من صف البروفايل
  */
-export function reconcileWithServerSteps(serverDailySteps) {
+export function forceResetDailySteps() {
+    stepCount = 0;
+    lastNativeStepsSeen = 0;
+    resetNativeBaselineOnNextSync = true;
+    persistDailyState();
+
+    document.dispatchEvent(new CustomEvent('sensors:steps-resynced', {
+        detail: { steps: 0, date: currentDayKey, forced: true }
+    }));
+}
+
+document.addEventListener('sensors:force-reset', () => {
+    forceResetDailySteps();
+});
+
+export function reconcileWithServerSteps(serverDailySteps, isForcedReset = false) {
     if (typeof serverDailySteps !== 'number' || !Number.isFinite(serverDailySteps)) return;
+    if (isForcedReset) {
+        forceResetDailySteps();
+        return;
+    }
     if (serverDailySteps <= stepCount) return; // العداد المحلي أصلاً مساوي أو أكبر - مفيش داعي نعمل حاجة
 
     stepCount = serverDailySteps;
@@ -225,13 +243,15 @@ export function reconcileWithServerSteps(serverDailySteps) {
  * @param {number} serverBestSteps - قيمة best_daily_steps من صف البروفايل
  */
 export function reconcileServerBestSteps(serverBestSteps) {
-    if (typeof serverBestSteps !== 'number' || !Number.isFinite(serverBestSteps)) return;
+    const safeServer = (typeof serverBestSteps === 'number' && Number.isFinite(serverBestSteps))
+        ? Math.max(0, serverBestSteps)
+        : 0;
 
     const localBest = Object.values(stepsHistory).reduce(
         (max, value) => Math.max(max, Number(value) || 0),
         0
     );
-    const combinedBest = Math.max(localBest, serverBestSteps);
+    const combinedBest = Math.max(localBest, safeServer);
 
     document.dispatchEvent(new CustomEvent('sensors:best-steps-resynced', {
         detail: { bestSteps: combinedBest }
@@ -249,31 +269,28 @@ export function resetSteps() {
 }
 
 /**
- * (إصلاح - باج حقيقي) بتتنادى من profiles.js بمجرد ما نعرف مين المستخدم
- * الحالي فعليًا (بعد تسجيل دخول، أو null بعد تسجيل خروج/وضع زائر).
- * لو المستخدم مختلف عن آخر واحد كانت الحالة المحلية دي باسمه، بنصفّر
- * العداد المحلي بالكامل (زي جهاز جديد تمامًا) قبل ما نسيب
- * reconcileWithServerSteps تجيب رقمه الصحيح من Supabase - عشان نمنع
- * تسريب خطوات حساب سابق لحساب جديد على نفس الجهاز (اللي كان بيحصل قبل
- * الإصلاح ده لأن "ماخدناش غير الأكبر" في reconcileWithServerSteps كانت
- * بتحسب رقم الحساب القديم كـ"تقدم أعلى" غلط بدل ما تعرف إنه حساب مختلف
- * خالص).
- * (إصلاح تاني - باج حقيقي): كنا بنصفّر stepCount بس وننسى stepsHistory
- * (أرشيف الأيام السابقة اللي "رقمك القياسي" في app.js بيتحسب منه عن
- * طريق getStepsHistory/getPreviousBestSteps) - فده كان فاضل تابع
- * للجهاز مش للحساب، فحساب جديد لسه معملش خطوة كان بيشوف "رقم قياسي"
- * حساب سابق على نفس الجهاز. دلوقتي بنصفّرها هي كمان مع أي تبديل حساب
- * فعلي (بنسيبها زي ما هي بس لو نفس الحساب، شوف الشرط فوق).
+ * بتتنادى بمجرد ما نعرف مين المستخدم الحالي (بعد تسجيل دخول، أو null بعد خروج/وضع زائر).
+ * كل حساب معزول تماماً بمفتاح تخزين منفصل وbaseline حساس مستقل، مما يمنع تسريب
+ * أي خطوات أو تاريخ أو أرقام قياسية بين الحسابات على نفس الجهاز.
  * @param {string|null} userId
  */
 export function syncActiveUser(userId) {
     const normalizedId = userId || null;
-    if (currentOwnerUserId === normalizedId) return; // نفس المستخدم، مفيش داعي نعمل حاجة
+    if (currentOwnerUserId === normalizedId) return;
+
+    // حفظ حالة المستخدم السابق قبل التبديل
+    persistDailyState();
 
     currentOwnerUserId = normalizedId;
-    stepCount = 0;
-    stepsHistory = {};
-    persistDailyState();
+    loadPersistedDailyState();
+
+    // نفعّل علم إعادة ضبط الأساس لتفادي احتساب أي خطوات قطعها مستخدم سابق على الجهاز اليوم
+    resetNativeBaselineOnNextSync = true;
+
+    // إشعار فوري للواجهة بالخطوات الحالية لهذا المستخدم
+    document.dispatchEvent(new CustomEvent('sensors:steps-update', {
+        detail: { steps: stepCount, delta: 0, date: currentDayKey, source: 'account-switch' }
+    }));
 }
 
 /* ==================================================================
@@ -362,16 +379,22 @@ export async function syncFromNativeStepCounter() {
 
         ensureStillSameDay();
 
-        // ندمج بس لو الرقم الأصلي أكبر من المحفوظ محليًا (الحساس
-        // الأصلي بيفضل شغّال في الخلفية، يعني ممكن يكون سبقنا بخطوات
-        // حصلت والتطبيق كان مقفول)
-        if (nativeDate === currentDayKey && nativeSteps > stepCount) {
-            const delta = nativeSteps - stepCount;
-            stepCount = nativeSteps;
-            persistDailyState();
-            document.dispatchEvent(new CustomEvent('sensors:steps-update', {
-                detail: { steps: stepCount, delta, date: currentDayKey, source: 'native' }
-            }));
+        // نحتسب فقط الزيادة الحقيقية التي حدثت أثناء نشاط هذا الحساب
+        if (nativeDate === currentDayKey && typeof nativeSteps === 'number' && Number.isFinite(nativeSteps)) {
+            if (resetNativeBaselineOnNextSync || lastNativeStepsSeen <= 0 || nativeSteps < lastNativeStepsSeen) {
+                // أول قراءة لهذا الحساب أو تبديل حساب أو بعد إعادة تشغيل الهاتف
+                lastNativeStepsSeen = nativeSteps;
+                resetNativeBaselineOnNextSync = false;
+                persistDailyState();
+            } else if (nativeSteps > lastNativeStepsSeen) {
+                const delta = nativeSteps - lastNativeStepsSeen;
+                lastNativeStepsSeen = nativeSteps;
+                stepCount += delta;
+                persistDailyState();
+                document.dispatchEvent(new CustomEvent('sensors:steps-update', {
+                    detail: { steps: stepCount, delta, date: currentDayKey, source: 'native' }
+                }));
+            }
         }
     } catch (err) {
         console.warn('[sensors.js] تعذر المزامنة مع StepCounter الأصلي:', err);

@@ -276,8 +276,18 @@ function applyFeatureFlags(settings) {
     const supportHeaderBtn = document.getElementById('btnSupportHelp');
     const supportBannerBtn = document.getElementById('guestBannerSupportBtn');
     const isSupportOff = settings.feature_support_chat_enabled === false;
+    window.__feature_support_chat_enabled = !isSupportOff;
 
-    if (supportFab) supportFab.classList.toggle('hidden', isSupportOff);
+    if (supportFab) {
+        if (isSupportOff) {
+            supportFab.classList.add('hidden');
+        } else if (typeof window.updateSupportFabVisibility === 'function') {
+            window.updateSupportFabVisibility();
+        } else {
+            const isViewerAdmin = Boolean(window.__currentUserIsAdmin);
+            supportFab.classList.toggle('hidden', !isViewerAdmin);
+        }
+    }
     if (supportHeaderBtn) {
         supportHeaderBtn.classList.toggle('opacity-40', isSupportOff);
         supportHeaderBtn.classList.toggle('pointer-events-none', isSupportOff);

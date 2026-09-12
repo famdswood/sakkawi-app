@@ -193,6 +193,9 @@ function switchTab(tabId, { fromPopState = false } = {}) {
         if (typeof window.syncOfflineStepsToServerIfNeeded === 'function') {
             window.syncOfflineStepsToServerIfNeeded();
         }
+        if (typeof window.refreshProfileFromServerIfNeeded === 'function') {
+            window.refreshProfileFromServerIfNeeded();
+        }
         if (selfRankBar) {
             selfRankBar.classList.add('hidden');
         }
@@ -401,24 +404,27 @@ function updateStepsUI() {
     }
 }
 
-/** الاستجابة لأي زيادة في الخطوات (سواء جاية من زر المحاكاة أو حساس حقيقي) */
-function handleStepsIncrease(delta) {
+function handleStepsIncrease(delta, totalSteps) {
     // (جديد - تجربة الزائر): احتساب الخطوات محلياً على الجهاز للزائر
     // دون إرسالها إلى Supabase إلا بعد تسجيل حساب حقيقي
     // (يتم حفظها كـ pendingStepsDelta في profiles.js).
 
     // (جديد) وصلنا لسقف الأمان اليومي بالفعل - مفيش أي تسجيل إضافي خالص
-    // (ده سقف أمان مش سقف تحفيزي، محدش حقيقي هيوصله في الاستخدام الطبيعي)
     if (appState.steps >= HARD_DAILY_STEPS_CAP) return;
+
+    // حماية حاسمة ضد التضاعف: إذا تم تمرير إجمالي خطوات اليوم من الحساس وكان
+    // عداد التطبيق مساوياً له أو أكبر منه بالفعل، نتجاهل أي زيادة مكررة فوراً
+    if (typeof totalSteps === 'number' && Number.isFinite(totalSteps)) {
+        if (totalSteps <= appState.steps) return;
+        delta = Math.min(delta, totalSteps - appState.steps);
+    }
+
+    if (!delta || delta <= 0) return;
 
     const finalTarget = STAGE_MILESTONES[STAGE_MILESTONES.length - 1];
     const wasAtFinalStage = appState.stageIndex === STAGE_MILESTONES.length - 1;
     const currentTarget = getCurrentStageTarget();
 
-    // (جديد) العداد بقى بيكمل بعد هدف الـ10,000 (بدل ما يقف عنده زي
-    // قبل كده) لحد سقف الأمان بس (50,000) - مراحل STAGE_MILESTONES نفسها
-    // (الشريط البصري) بتفضل واقفة عند آخر مرحلة زي ما هي، لكن العداد
-    // الحقيقي والنقاط يكملوا يتحسبوا وراها لحد السقف
     const addedSteps = Math.min(delta, HARD_DAILY_STEPS_CAP - appState.steps);
     const stepsBeforeUpdate = appState.steps;
 
@@ -600,10 +606,10 @@ function resetStepsUIForGuestMode() {
     appState.steps = getStepsCount();
     appState.stageIndex = getStageIndexForSteps(appState.steps);
     appState.earnedFromSteps = Math.floor(appState.steps / STEPS_PER_POINT);
-    appState.previousBestSteps = getPreviousBestSteps();
-    appState.recordBrokenToday = getPreviousBestSteps() > 0 && appState.steps > getPreviousBestSteps();
-    appState.reachedDailyGoalToday = appState.steps >= STAGE_MILESTONES[STAGE_MILESTONES.length - 1];
-    appState.hitHardCapToday = appState.steps >= HARD_DAILY_STEPS_CAP;
+    appState.previousBestSteps = 0;
+    appState.recordBrokenToday = false;
+    appState.reachedDailyGoalToday = false;
+    appState.hitHardCapToday = false;
 
     updateStepsUI();
 }
@@ -648,7 +654,7 @@ function initStepsCounter() {
 
     // الاستماع لأي خطوات جاية لايف من js/sensors.js (حساس الحركة الحقيقي فقط)
     document.addEventListener('sensors:steps-update', (event) => {
-        handleStepsIncrease(event.detail.delta);
+        handleStepsIncrease(event.detail.delta, event.detail.steps);
     });
 
     // (إصلاح - باج حقيقي) الاستماع لمزامنة العداد مع daily_steps القادمة
@@ -657,21 +663,12 @@ function initStepsCounter() {
         applySilentStepsResync(event.detail.steps);
     });
 
-    // (إصلاح - باج حقيقي) كان الحدث ده بيتبعت فعليًا من reconcileServerBestSteps
-    // في sensors.js من غير أي حد يستمع له هنا - يعني الرقم القياسي
-    // المعروض (previousBestSteps) كان دايمًا بياخد من تاريخ الجهاز
-    // الحالي بس (getStepsHistory)، ومبيتقارنش أبدًا بـ best_daily_steps
-    // الحقيقي القادم من Supabase (اللي ممكن يكون اتسجل من جهاز/حساب
-    // تاني). النتيجة: توست "رقمك القياسي الجديد!" ممكن يظهر غلط لأنه
-    // بيقارن برقم قديم مش الرقم الحقيقي الأعلى فعليًا
+    // الاستماع لمزامنة الرقم القياسي للحساب النشط الحالي
     document.addEventListener('sensors:best-steps-resynced', (event) => {
         const serverBest = event.detail?.bestSteps;
-        if (typeof serverBest !== 'number' || serverBest <= appState.previousBestSteps) return;
+        if (typeof serverBest !== 'number' || !Number.isFinite(serverBest)) return;
 
-        appState.previousBestSteps = serverBest;
-        // نعيد حساب العلم بناءً على الرقم الجديد - لو خطوات اليوم
-        // بالفعل أعلى من الرقم القياسي الحقيقي الجديد، العلم يتفعّل
-        // فورًا من غير ما نستنى خطوة جديدة تجيله
+        appState.previousBestSteps = Math.max(0, serverBest);
         appState.recordBrokenToday = appState.previousBestSteps > 0
             && appState.steps > appState.previousBestSteps;
         updateStepsUI();
@@ -858,11 +855,6 @@ function triggerConfetti() {
         فاتح التطبيق دلوقتي فعلاً ولا لأ".
    ------------------------------------------------------------------ */
 
-/** المفتاح المستخدم لتخزين بصمة جهاز/زيارة ثابتة في localStorage - نفس
- *  فلسفة GUEST_MODE_STORAGE_KEY/DEVICE_SESSION_STORAGE_KEY في auth.js،
- *  بس بمفتاح منفصل عشان الغرض مختلف (عدّ الزوار، مش الجلسة الواحدة) */
-const VISITOR_SESSION_STORAGE_KEY = 'sakkawy-visitor-session-id';
-
 /** كل قد إيه بنحدّث last_seen_at/is_online للمستخدم المسجل دخول دلوقتي */
 const PRESENCE_HEARTBEAT_INTERVAL_MS = 2 * 60 * 1000; // دقيقتين
 
@@ -872,48 +864,37 @@ let presenceHeartbeatIntervalId = null;
 /** الـ id بتاع المستخدم المسجل دخول دلوقتي على الجهاز ده (null لو زائر/مفيش حد) */
 let presenceCurrentUserId = null;
 
-/**
- * بترجع بصمة الزيارة الثابتة للجهاز الحالي، وتولّد وحدة جديدة وتخزنها
- * لو ده أول مرة - بنفس أسلوب getOrCreateDeviceSessionId في auth.js
- * @returns {string}
- */
-function getOrCreateVisitorSessionId() {
-    try {
-        let id = window.localStorage.getItem(VISITOR_SESSION_STORAGE_KEY);
-        if (!id) {
-            id = (window.crypto && typeof window.crypto.randomUUID === 'function')
-                ? window.crypto.randomUUID()
-                : `visit-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-            window.localStorage.setItem(VISITOR_SESSION_STORAGE_KEY, id);
-        }
-        return id;
-    } catch (err) {
-        // لو localStorage مش متاح (تصفح خاص محظور فيه مثلاً)، بنرجع بصمة
-        // مؤقتة لحظة التشغيل عشان الميزة متكسرش باقي التطبيق
-        console.error('تعذر قراءة/تخزين بصمة الزيارة:', err);
-        return `visit-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-    }
+/** معرف الجلسة الحالية النشطة - يتولد بشكل فريد لكل زيارة تقضي أكثر من 30 ثانية */
+let currentVisitSessionId = null;
+
+function generateVisitSessionId() {
+    return `sess_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function getLocalDateString(date = new Date()) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
 }
 
 /**
- * تسجّل زيارة اليوم للجهاز الحالي في visitor_sessions - upsert بـ
- * ignoreDuplicates عشان محتاجين صلاحية INSERT بس (مش UPDATE) تحت RLS،
- * فمفيش تعارض لو الجدول فيه صف اليوم ده بالفعل لنفس الجهاز
+ * تسجّل زيارة مستقلة بعد قضاء أكثر من 30 ثانية في visitor_sessions
  * @param {string|null} userId - id المستخدم لو مسجل دخول، أو null لو زائر عابر
+ * @param {string} sessionId
  */
-async function registerVisitorSession(userId) {
-    const sessionId = getOrCreateVisitorSessionId();
+async function registerVisitorSession(userId, sessionId) {
+    if (!sessionId) return;
 
     const { error } = await supabaseClient
         .from('visitor_sessions')
-        .upsert(
-            { session_id: sessionId, user_id: userId || null },
-            { onConflict: 'session_id,visit_date', ignoreDuplicates: true }
-        );
+        .insert({
+            session_id: sessionId,
+            user_id: userId || null,
+            visit_date: getLocalDateString(),
+        });
 
     if (error) {
-        // فشل تسجيل الزيارة مش لازم يوقف أو يأثر على تجربة المستخدم
-        // خالص - مجرد إحصائية للأدمن، فبنكتفي بتسجيلها في الكونسول
         console.error('تعذر تسجيل الزيارة في visitor_sessions:', error.message);
     }
 }
@@ -932,8 +913,11 @@ function scheduleVisitorSessionRegistration(userId) {
         visitorRegistrationTimerId = null;
     }
 
-    visitorRegistrationTimerId = window.setTimeout(() => {
-        registerVisitorSession(userId);
+    const sessionId = generateVisitSessionId();
+    currentVisitSessionId = sessionId;
+
+    visitorRegistrationTimerId = window.setTimeout(async () => {
+        await registerVisitorSession(userId, sessionId);
         visitorRegistrationTimerId = null;
     }, 30000);
 }
@@ -1010,9 +994,19 @@ function markUserOffline(userId) {
 function initVisitorPresenceTracking() {
     // 1) تحديث عند عودة التاب للمقدمة في المتصفح والويب فيو
     document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'visible' && presenceCurrentUserId) {
-            updatePresenceHeartbeat(presenceCurrentUserId);
-            refreshCurrentPresence();
+        if (document.visibilityState === 'visible') {
+            if (!visitorRegistrationTimerId) {
+                scheduleVisitorSessionRegistration(presenceCurrentUserId);
+            }
+            if (presenceCurrentUserId) {
+                updatePresenceHeartbeat(presenceCurrentUserId);
+                refreshCurrentPresence();
+            }
+        } else if (document.visibilityState === 'hidden') {
+            if (visitorRegistrationTimerId) {
+                window.clearTimeout(visitorRegistrationTimerId);
+                visitorRegistrationTimerId = null;
+            }
         }
     });
 
@@ -1021,12 +1015,22 @@ function initVisitorPresenceTracking() {
         const CapApp = window.Capacitor?.Plugins?.App;
         if (CapApp?.addListener) {
             CapApp.addListener('appStateChange', ({ isActive }) => {
-                if (isActive && presenceCurrentUserId) {
-                    updatePresenceHeartbeat(presenceCurrentUserId);
-                    refreshCurrentPresence();
-                } else if (!isActive && presenceCurrentUserId) {
-                    // توثيق لحظة الخروج بدقة بالثانية عند الانتقال للخلفية
-                    updatePresenceHeartbeat(presenceCurrentUserId);
+                if (isActive) {
+                    if (!visitorRegistrationTimerId) {
+                        scheduleVisitorSessionRegistration(presenceCurrentUserId);
+                    }
+                    if (presenceCurrentUserId) {
+                        updatePresenceHeartbeat(presenceCurrentUserId);
+                        refreshCurrentPresence();
+                    }
+                } else {
+                    if (visitorRegistrationTimerId) {
+                        window.clearTimeout(visitorRegistrationTimerId);
+                        visitorRegistrationTimerId = null;
+                    }
+                    if (presenceCurrentUserId) {
+                        updatePresenceHeartbeat(presenceCurrentUserId);
+                    }
                 }
             });
         }
@@ -1109,6 +1113,7 @@ function initSharedUIBridge() {
     // فورًا (initProfileUI(null) بنفس النمط المستخدم وقت initApp لمستخدم
     // من غير جلسة) ونتأكد إن قيود وضع الزائر مفعّلة فورًا كمان.
     document.addEventListener('auth:signed-out', () => {
+        resetStepsUIForGuestMode();
         initProfileUI(null);
         applyGuestModeRestrictions(false);
 
@@ -1148,16 +1153,18 @@ function initSharedUIBridge() {
     });
 
     document.addEventListener('auth:login', (event) => {
-        initProfileUI(event.detail.user);
-
-        // (تحديث - اختيار 2): تسجيل الدخول بحساب شخصي = وصول كامل
-        // فورًا، من جوه نطاق نزلة عبيد أو برّه، من غير أي فحص GPS أو
-        // طلب إذن موقع خالص. الهدف الوحيد لكونه "داخل بحساب" إنه يقدر
-        // يعمل كل حاجة: يحل الأسئلة، خطواته تتحسب، يتحكم في حسابه، يضيف
-        // أصدقاء، يوصله إشعارات، يعمل ستوري ويتفاعل مع ستوريهات الناس.
-        if (event.detail.user && event.detail.user.id) {
+        const user = event.detail?.user;
+        if (user && user.id) {
+            syncActiveUser(user.id);
+            appState.steps = getStepsCount();
+            appState.stageIndex = getStageIndexForSteps(appState.steps);
+            appState.earnedFromSteps = Math.floor(appState.steps / STEPS_PER_POINT);
+            appState.previousBestSteps = getPreviousBestSteps();
+            appState.recordBrokenToday = appState.previousBestSteps > 0 && appState.steps > appState.previousBestSteps;
+            updateStepsUI();
             applyGuestModeRestrictions(true);
         }
+        initProfileUI(user);
     });
 
     // (إصلاح - باج "فلاش وضع الزائر لمستخدم مسجل دخول"): ده المصدر
@@ -1171,6 +1178,7 @@ function initSharedUIBridge() {
     // فمستخدم مسجل دخول كان بيشوف شريط الزائر يفلاش لحظة عند كل Refresh
     // قبل ما auth:login يرجّع كل حاجة لوضعها الصح.
     document.addEventListener('auth:confirmed-signed-out', () => {
+        resetStepsUIForGuestMode();
         initProfileUI(null);
         applyGuestModeRestrictions(false);
     });
@@ -1317,6 +1325,9 @@ function initApp() {
         if (currentUser || !hasAnyStoredSessionHint()) {
             initProfileUI(currentUser);
         }
+
+        // جدولة تسجيل الزيارة فور بدء التطبيق (إذا استمر التواجد أكثر من 30 ثانية)
+        scheduleVisitorSessionRegistration(currentUser?.id || null);
 
         // لو المستخدم اختار "إنشاء حساب" أو "تسجيل دخول" من آخر سلايد في
         // شاشات الترحيب، افتح صفحة اختيار الدخول/التسجيل الكاملة (مش

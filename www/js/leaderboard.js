@@ -919,6 +919,7 @@ function normalizeLeaderboardRow(row) {
         // Supabase الأول (شوف تعليق SQL المطلوب) وإلا هيفضل undefined
         // دايماً واللقب ببساطة مش هيظهر لحد ما يتحدث
         title: row.title || null,
+        is_verified: Boolean(row.is_verified),
     };
 }
 
@@ -1031,6 +1032,17 @@ function featuredBadgeIconHtml(featuredBadgeId) {
     return `<span class="featured-badge-icon" title="${escapeHtml(badge.title)}" style="margin-inline-start:0.25rem;">${escapeHtml(badge.icon)}</span>`;
 }
 
+/**
+ * بناء شارة التوثيق الذهبية الرسمية بتصميم دائري مميز وفاخر (Scalloped Rosette Seal)
+ * @param {boolean} isVerified
+ * @param {string} [extraClasses='']
+ * @returns {string}
+ */
+function buildVerifiedBadgeHtml(isVerified, extraClasses = '') {
+    if (!isVerified) return '';
+    return `<span class="inline-flex items-center align-middle select-none text-gold-400 cursor-pointer shrink-0 ${extraClasses}" title="حساب موثق رسمي في سِكّاوي" onclick="if(window.showToast) window.showToast('حساب موثق رسمي في سِكّاوي')"><svg class="w-4 h-4 inline-block shrink-0" viewBox="0 0 24 24" fill="none"><path d="M22.25 12c0-1.43-.88-2.67-2.19-3.34.46-1.39.2-2.9-.81-3.91s-2.52-1.27-3.91-.81c-.67-1.31-1.91-2.19-3.34-2.19s-2.67.88-3.34 2.19c-1.39-.46-2.9-.2-3.91.81s-1.27 2.52-.81 3.91C2.63 9.33 1.75 10.57 1.75 12s.88 2.67 2.19 3.34c-.46 1.39-.2 2.9.81 3.91s2.52 1.27 3.91.81c.67 1.31 1.91 2.19 3.34 2.19s2.67-.88 3.34-2.19c1.39.46 2.9.2 3.91-.81s1.27-2.52.81-3.91c1.31-.67 2.19-1.91 2.19-3.34z" fill="#D4AF37"/><circle cx="12" cy="12" r="7.5" stroke="#FFF0A0" stroke-width="0.6" stroke-opacity="0.5"/><path d="M7.75 12l3.25 3.25 6-6.5" stroke="#0B0D12" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/></svg></span>`;
+}
+
 /** تحديث نص عنصر بمعرفه (id) لو موجود فعلاً في الصفحة - اختصار بسيط بيتكرر استخدامه كتير تحت */
 function setElementText(elementId, text) {
     const el = document.getElementById(elementId);
@@ -1116,7 +1128,9 @@ function renderLeaderboardPodium(rows, shouldAnimate = true) {
         // وراء ستايل الـ Skeleton سهواً
         [nameEl, pointsEl, stepsEl].forEach((el) => el?.classList.remove('champ-skel'));
 
-        if (nameEl) nameEl.textContent = row ? `${row.full_name}${isCurrentUser ? ' (أنت)' : ''}` : '—';
+        if (nameEl) {
+            nameEl.innerHTML = row ? `${escapeHtml(row.full_name)}${isCurrentUser ? ' (أنت)' : ''}${buildVerifiedBadgeHtml(row.is_verified)}` : '—';
+        }
         // (جديد - لقب الشرف): نفس فلسفة renderProfileHeader/renderPublicProfile
         // بالظبط - بيتعرض بس لو صاحب المركز فعلاً مختار لقب (row.title)،
         // وبيتخفي تماماً (مش نص بديل) لو لأ - مفيش أي "زحمة" لمين معندوش لقب
@@ -1227,7 +1241,7 @@ function renderLeaderboardRemainingList(rows, shouldAnimate = true) {
                     ${presenceDotHtml(row.id)}
                 </span>
                 <div class="rank-card-info">
-                    <h5 class="rank-card-name">${escapeHtml(row.full_name)}${isCurrentUser ? ' (أنت)' : ''}${featuredBadgeIconHtml(row.featured_badge_id)}</h5>
+                    <h5 class="rank-card-name">${escapeHtml(row.full_name)}${isCurrentUser ? ' (أنت)' : ''}${buildVerifiedBadgeHtml(row.is_verified)}${featuredBadgeIconHtml(row.featured_badge_id)}</h5>
                     ${row.title ? `<span class="rank-card-title">${escapeHtml(row.title)}</span>` : ''}
                     <div class="dual-stat-badge dual-stat-badge-compact">
                         <span class="dual-stat-item" title="عدد الخطوات">

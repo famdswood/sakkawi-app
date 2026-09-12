@@ -3805,3 +3805,21 @@ input[type="date"].admin-text-input {
 .badge-card-btn:active {
     transform: scale(0.95);
 }
+
+/* شارة التوثيق الذهبية الرسمية - تصميم دائري فاخر وثابت دائما بجانب الاسم */
+.verified-badge-icon {
+    display: inline-flex;
+    align-items: center;
+    vertical-align: middle;
+    flex-shrink: 0;
+    line-height: 1;
+}
+
+#headerUserName,
+#profileName,
+#publicProfileName {
+    display: inline-block !important;
+    width: auto !important;
+    max-width: 100% !important;
+    vertical-align: middle;
+}

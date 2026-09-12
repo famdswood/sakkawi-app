@@ -378,6 +378,17 @@ function escapeHtml(text) {
 }
 
 /**
+ * بناء شارة التوثيق الذهبية الرسمية بتصميم دائري مميز وفاخر (Scalloped Rosette Seal)
+ * @param {boolean} isVerified
+ * @param {string} [extraClasses='']
+ * @returns {string}
+ */
+function buildVerifiedBadgeHtml(isVerified, extraClasses = '') {
+    if (!isVerified) return '';
+    return `<span class="inline-flex items-center align-middle select-none text-gold-400 cursor-pointer shrink-0 ${extraClasses}" title="حساب موثق رسمي في سِكّاوي" onclick="if(window.showToast) window.showToast('حساب موثق رسمي في سِكّاوي')"><svg class="w-4 h-4 inline-block shrink-0" viewBox="0 0 24 24" fill="none"><path d="M22.25 12c0-1.43-.88-2.67-2.19-3.34.46-1.39.2-2.9-.81-3.91s-2.52-1.27-3.91-.81c-.67-1.31-1.91-2.19-3.34-2.19s-2.67.88-3.34 2.19c-1.39-.46-2.9-.2-3.91.81s-1.27 2.52-.81 3.91C2.63 9.33 1.75 10.57 1.75 12s.88 2.67 2.19 3.34c-.46 1.39-.2 2.9.81 3.91s2.52 1.27 3.91.81c.67 1.31 1.91 2.19 3.34 2.19s2.67-.88 3.34-2.19c1.39.46 2.9.2 3.91-.81s1.27-2.52.81-3.91c1.31-.67 2.19-1.91 2.19-3.34z" fill="#D4AF37"/><circle cx="12" cy="12" r="7.5" stroke="#FFF0A0" stroke-width="0.6" stroke-opacity="0.5"/><path d="M7.75 12l3.25 3.25 6-6.5" stroke="#0B0D12" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/></svg></span>`;
+}
+
+/**
  * إرجاع كلاسات CSS الخاصة بشكل خط معيّن حسب معرّفه (font_style)،
  * مع رجوع لأول خيار افتراضي لو المعرّف مش موجود ضمن STORY_FONT_OPTIONS
  * @param {string} fontId
@@ -519,6 +530,7 @@ function mapRpcRowToStory(row) {
         viewers: [],
         viewCount: 0,
         viewersLoaded: false,
+        isVerified: Boolean(row.is_verified),
     };
 }
 
@@ -1514,7 +1526,7 @@ function renderCurrentStory() {
                 <img src="${safeAvatar}" class="w-8 h-8 rounded-full object-cover border border-white/40" alt="${safeUserName}"
                      onerror="this.src='${DEFAULT_STORY_AVATAR}'">
                 <div class="flex flex-col leading-tight">
-                    <span class="text-white text-xs font-extrabold">${safeUserName}</span>
+                    <span class="text-white text-xs font-extrabold flex items-center">${safeUserName}${buildVerifiedBadgeHtml(story.isVerified)}</span>
                     <span class="text-white/60 text-[10px] font-bold">${formatRelativeTimeArabic(story.createdAt)}</span>
                 </div>
             </button>

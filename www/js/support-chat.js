@@ -148,12 +148,17 @@ let longPressTimer = null;
 /** تُستدعى مرة واحدة من app.js (initApp) زي باقي دوال initXxxUI */
 export function initSupportChat() {
     bindStaticListeners();
+    updateSupportFabVisibility();
 
     document.addEventListener('auth:login', (event) => {
-        handleUserSignedIn(event.detail.user);
+        handleUserSignedIn(event.detail?.user);
     });
 
     document.addEventListener('auth:signed-out', () => {
+        handleUserSignedOut();
+    });
+
+    document.addEventListener('auth:confirmed-signed-out', () => {
         handleUserSignedOut();
     });
 }
@@ -244,6 +249,15 @@ export function getSupportAdminUserId() {
     return ADMIN_USER_ID;
 }
 
+/** تحديث ظهور الزرار العائم لصندوق رسائل الدعم (حصري للأدمن فقط) */
+export function updateSupportFabVisibility() {
+    const fabBtn = document.getElementById('supportInboxFab');
+    if (!fabBtn) return;
+    const isSupportOff = window.__feature_support_chat_enabled === false;
+    fabBtn.classList.toggle('hidden', !isCurrentUserAdmin || isSupportOff);
+}
+window.updateSupportFabVisibility = updateSupportFabVisibility;
+
 
 /* ------------------------------------------------------------------
    3) هوية المستخدم الحالي
@@ -252,9 +266,9 @@ export function getSupportAdminUserId() {
 function handleUserSignedIn(user) {
     currentUser = user;
     isCurrentUserAdmin = Boolean(user && user.id === ADMIN_USER_ID);
+    window.__currentUserIsAdmin = isCurrentUserAdmin;
 
-    const fabBtn = document.getElementById('supportInboxFab');
-    if (fabBtn) fabBtn.classList.toggle('hidden', !isCurrentUserAdmin);
+    updateSupportFabVisibility();
 
     if (isCurrentUserAdmin) {
         refreshAdminUnreadBadge();
@@ -278,11 +292,11 @@ function handleUserSignedIn(user) {
 function handleUserSignedOut() {
     currentUser = null;
     isCurrentUserAdmin = false;
+    window.__currentUserIsAdmin = false;
     activeConversationUserId = null;
     activeConversationMessages = [];
 
-    const fabBtn = document.getElementById('supportInboxFab');
-    if (fabBtn) fabBtn.classList.add('hidden');
+    updateSupportFabVisibility();
 
     unsubscribeFromActiveConversation();
     unsubscribeAdminGlobalChannel();
@@ -763,6 +777,17 @@ function setHeaderExitMode(mode) {
 }
 
 /**
+ * بناء شارة التوثيق الذهبية الرسمية بتصميم دائري مميز وفاخر (Scalloped Rosette Seal)
+ * @param {boolean} isVerified
+ * @param {string} [extraClasses='']
+ * @returns {string}
+ */
+function buildVerifiedBadgeHtml(isVerified, extraClasses = '') {
+    if (!isVerified) return '';
+    return `<span class="inline-flex items-center align-middle select-none text-gold-400 cursor-pointer shrink-0 ${extraClasses}" title="حساب موثق رسمي في سِكّاوي" onclick="if(window.showToast) window.showToast('حساب موثق رسمي في سِكّاوي')"><svg class="w-4 h-4 inline-block shrink-0" viewBox="0 0 24 24" fill="none"><path d="M22.25 12c0-1.43-.88-2.67-2.19-3.34.46-1.39.2-2.9-.81-3.91s-2.52-1.27-3.91-.81c-.67-1.31-1.91-2.19-3.34-2.19s-2.67.88-3.34 2.19c-1.39-.46-2.9-.2-3.91.81s-1.27 2.52-.81 3.91C2.63 9.33 1.75 10.57 1.75 12s.88 2.67 2.19 3.34c-.46 1.39-.2 2.9.81 3.91s2.52 1.27 3.91.81c.67 1.31 1.91 2.19 3.34 2.19s2.67-.88 3.34-2.19c1.39.46 2.9.2 3.91-.81s1.27-2.52.81-3.91c1.31-.67 2.19-1.91 2.19-3.34z" fill="#D4AF37"/><circle cx="12" cy="12" r="7.5" stroke="#FFF0A0" stroke-width="0.6" stroke-opacity="0.5"/><path d="M7.75 12l3.25 3.25 6-6.5" stroke="#0B0D12" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/></svg></span>`;
+}
+
+/**
  * (تعديل) بتعرض هوية الطرف التاني في الثريد المفتوح دلوقتي (صورة +
  * اسمه) بدل عنوان #supportChatTitle الثابت، وبتخليها قابلة للضغط عشان
  * تقفل شات الدعم وتوصّل لبروفايله العام - سواء المستخدم العادي بيكلم
@@ -779,6 +804,8 @@ async function setPeerHeader(peerId) {
     if (!peerBtn || !avatarEl || !nameEl) return;
 
     const defaultName = (peerId === ADMIN_USER_ID) ? 'الدعم الفني (إدارة سِكّاوي)' : 'مستخدم';
+    const isPeerVerifiedInitial = (peerId === ADMIN_USER_ID);
+    const initialBadge = isPeerVerifiedInitial ? buildVerifiedBadgeHtml(true) : '';
 
     // نعرض هوية الطرف التاني بدل العنوان الثابت على طول، مع صورة/اسم
     // احتياطيين لحد ما يوصل رد Supabase تحت
@@ -786,13 +813,15 @@ async function setPeerHeader(peerId) {
     peerBtn.classList.remove('hidden');
     peerBtn.classList.add('flex');
     avatarEl.src = FALLBACK_AVATAR;
-    nameEl.textContent = defaultName;
+    nameEl.innerHTML = `${escapeHtmlLocal(defaultName)}${initialBadge}`;
 
     // استرجاع فوري من الكاش المحلي لو محفوظ سابقاً
     try {
         const cachedProfile = await getCached(`cached_public_profile:${peerId}`);
         if (cachedProfile) {
-            if (cachedProfile.full_name) nameEl.textContent = cachedProfile.full_name;
+            const isVerified = (peerId === ADMIN_USER_ID) || Boolean(cachedProfile.is_verified);
+            const badge = isVerified ? buildVerifiedBadgeHtml(true) : '';
+            if (cachedProfile.full_name) nameEl.innerHTML = `${escapeHtmlLocal(cachedProfile.full_name)}${badge}`;
             if (cachedProfile.avatar_url) avatarEl.src = cachedProfile.avatar_url;
         }
     } catch (_) {}
@@ -844,7 +873,7 @@ async function setPeerHeader(peerId) {
     // يطلع Exception لو فعلاً مفيش صف (بدل PGRST116).
     const { data, error } = await supabaseClient
         .from('public_profiles')
-        .select('full_name, avatar_url')
+        .select('full_name, avatar_url, is_verified')
         .eq('id', peerId)
         .maybeSingle();
 
@@ -857,7 +886,9 @@ async function setPeerHeader(peerId) {
     }
 
     if (data) {
-        nameEl.textContent = data.full_name || defaultName;
+        const isVerified = (peerId === ADMIN_USER_ID) || Boolean(data.is_verified);
+        const badge = isVerified ? buildVerifiedBadgeHtml(true) : '';
+        nameEl.innerHTML = `${escapeHtmlLocal(data.full_name || defaultName)}${badge}`;
         avatarEl.src = data.avatar_url || FALLBACK_AVATAR;
         setCached(`cached_public_profile:${peerId}`, data).catch(() => {});
     }

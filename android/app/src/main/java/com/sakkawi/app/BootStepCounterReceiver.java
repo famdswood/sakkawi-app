@@ -14,8 +14,7 @@ import androidx.core.content.ContextCompat;
  * بيستقبل حدث BOOT_COMPLETED (وبديله على بعض أجهزة OEM القديمة
  * QUICKBOOT_POWERON) ويشغّل StepCounterForegroundService فورًا من غير
  * أي تدخل من المستخدم ومن غير ما يفتح التطبيق خالص.
- *
- * ⚠️ ده هو الإصلاح الأساسي لمشكلة "عدد الخطوات أقل من Google Fit":
+ * ده هو الإصلاح الأساسي لمشكلة "عدد الخطوات أقل من Google Fit":
  * قبل الإصلاح، الخدمة (وبالتالي الـ baseline بتاع TYPE_STEP_COUNTER في
  * resolveTodayStepCount()) كانت بتتسجل بس أول ما المستخدم يفتح
  * التطبيق بإيده - يعني أي خطوات اتمشيت *قبل* أول فتحة للتطبيق في اليوم

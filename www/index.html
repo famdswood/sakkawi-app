@@ -1303,9 +1303,12 @@
                               aria-hidden="true"></span>
                     </div>
                     <div class="min-w-0">
-                        <h1 id="headerUserName" class="text-sm font-black text-lux-50 truncate">
-                            <span class="header-name-skeleton"></span>
-                        </h1>
+                        <div class="inline-flex items-center gap-1 min-w-0 max-w-full">
+                            <h1 id="headerUserName" class="text-sm font-black text-lux-50 truncate inline-block">
+                                <span class="header-name-skeleton"></span>
+                            </h1>
+                            <span id="headerUserVerifiedBadgeSlot" class="shrink-0 inline-flex items-center"></span>
+                        </div>
                         <!-- عنصر اللقب تحت الاسم في الهيدر العلوي - مربوط
                              بـ profile.title الحقيقي ومحدث من profiles.js
                              (renderProfileHeader) بنفس منطق #profileTitle -->
@@ -2079,7 +2082,12 @@
                             </button>
                         </div>
 
-                        <h2 id="profileName" class="text-lg font-black text-lux-50 mt-2 header-name-skeleton"></h2>
+                        <div class="flex items-center justify-center mt-2">
+                            <div class="inline-flex items-center justify-center gap-1 max-w-full">
+                                <h2 id="profileName" class="text-lg font-black text-lux-50 truncate inline-block"></h2>
+                                <span id="profileVerifiedBadgeSlot" class="shrink-0 inline-flex items-center"></span>
+                            </div>
+                        </div>
                         <p id="profileTitle" class="text-xs text-gold-400 font-bold hidden"></p>
                         <p id="profileJoinedText" class="text-[11px] text-lux-500 font-medium mt-1"></p>
                     </div>
@@ -2342,7 +2350,12 @@
                             <span class="presence-dot presence-dot-lg" id="publicProfileAvatarPresenceDot" aria-hidden="true"></span>
                         </button>
 
-                        <h2 id="publicProfileName" class="text-lg font-black text-lux-50 mt-2">—</h2>
+                        <div class="flex items-center justify-center mt-2">
+                            <div class="inline-flex items-center justify-center gap-1 max-w-full">
+                                <h2 id="publicProfileName" class="text-lg font-black text-lux-50 truncate inline-block">—</h2>
+                                <span id="publicProfileVerifiedBadgeSlot" class="shrink-0 inline-flex items-center"></span>
+                            </div>
+                        </div>
 
                         <!-- لقب الشرف بتاع صاحب البروفايل ده -->
                         <p id="publicProfileTitle" class="text-xs text-gold-400 font-bold mt-0.5 hidden"></p>
@@ -4121,7 +4134,7 @@
                                  والأدمن بيشوفها لأي مستخدم دايماً - شوف js/presence.js -->
                             <span class="presence-dot" id="supportChatPeerPresenceDot" aria-hidden="true"></span>
                         </span>
-                        <span id="supportChatPeerName" class="text-base font-extrabold text-lux-50 tracking-tight truncate">—</span>
+                        <span id="supportChatPeerName" class="text-base font-extrabold text-lux-50 tracking-tight truncate inline-flex items-center gap-1">—</span>
                     </button>
                     <h2 id="supportChatTitle" class="text-base font-extrabold text-lux-50 tracking-tight truncate">شات الدعم</h2>
                 </div>

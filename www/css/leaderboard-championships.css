@@ -445,6 +445,10 @@ html:not(.dark) .podium-card::before {
     overflow: hidden;
     text-overflow: ellipsis;
     cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.25rem;
 }
 .podium-name-gold {
     font-size: 0.85rem;
@@ -797,6 +801,9 @@ html:not(.dark) .rank-card {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
 }
 
 /* (جديد) لقب الشرف الشخصي في باقي القائمة (تحت المركز 3) - نفس منطق
