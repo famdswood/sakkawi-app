@@ -17,6 +17,8 @@ import android.hardware.SensorEventListener2;
 import android.hardware.SensorManager;
 import android.os.Build;
 import android.os.IBinder;
+import android.os.Looper;
+import android.os.PowerManager;
 
 import androidx.core.app.NotificationCompat;
 import androidx.core.content.ContextCompat;
@@ -24,10 +26,13 @@ import androidx.core.content.ContextCompat;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 /**
  * خدمة أمامية (Foreground Service) بتفضل شغّالة حتى لو التطبيق مقفول
- * تمامًا. بتعتمد حصريًا على حساس TYPE_STEP_COUNTER الأصلي بالجهاز.
+ * تمامًا. بتعتمد على حساس الخطوات الأصلي بالجهاز مع دعم Wake-up وWakeLock
+ * لضمان عدم توقف الحساب أثناء إغلاق الشاشة ووضع الموبايل في الجيب.
  */
 public class StepCounterForegroundService extends Service implements SensorEventListener2 {
 
@@ -42,21 +47,62 @@ public class StepCounterForegroundService extends Service implements SensorEvent
 
     private SensorManager sensorManager;
     private Sensor stepCounterSensor;
+    private Sensor stepDetectorSensor;
     private boolean sensorListenerRegistered = false;
+    private PowerManager.WakeLock wakeLock;
+    private CountDownLatch flushLatch;
 
     public static StepCounterForegroundService getInstance() {
         return instance;
     }
 
     public void flushSensor() {
-        if (sensorManager != null && stepCounterSensor != null && sensorListenerRegistered) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
+        flushSensorWithTimeout(150);
+    }
+
+    public void flushSensorWithTimeout(long timeoutMs) {
+        if (sensorManager != null && sensorListenerRegistered) {
+            Sensor targetSensor = stepCounterSensor != null ? stepCounterSensor : stepDetectorSensor;
+            if (targetSensor != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
                 try {
-                    sensorManager.flush(this);
+                    flushLatch = new CountDownLatch(1);
+                    boolean flushSuccess = sensorManager.flush(this);
+                    if (flushSuccess && timeoutMs > 0 && Looper.myLooper() != Looper.getMainLooper()) {
+                        flushLatch.await(timeoutMs, TimeUnit.MILLISECONDS);
+                    }
                 } catch (Exception e) {
                     android.util.Log.w("Sakkawi", "sensorManager.flush failed", e);
+                } finally {
+                    flushLatch = null;
                 }
             }
+        }
+    }
+
+    private void acquireWakeLock() {
+        try {
+            if (wakeLock == null) {
+                PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
+                if (pm != null) {
+                    wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "Sakkawi:StepCounterWakeLock");
+                    wakeLock.setReferenceCounted(false);
+                }
+            }
+            if (wakeLock != null && !wakeLock.isHeld()) {
+                wakeLock.acquire();
+            }
+        } catch (Exception e) {
+            android.util.Log.w("Sakkawi", "acquireWakeLock failed", e);
+        }
+    }
+
+    private void releaseWakeLock() {
+        try {
+            if (wakeLock != null && wakeLock.isHeld()) {
+                wakeLock.release();
+            }
+        } catch (Exception e) {
+            android.util.Log.w("Sakkawi", "releaseWakeLock failed", e);
         }
     }
 
@@ -65,14 +111,28 @@ public class StepCounterForegroundService extends Service implements SensorEvent
         super.onCreate();
         instance = this;
         sensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
-        stepCounterSensor = sensorManager.getDefaultSensor(Sensor.TYPE_STEP_COUNTER);
-        android.util.Log.d("Sakkawi", "stepCounterSensor = " + stepCounterSensor);
+        if (sensorManager != null) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                stepCounterSensor = sensorManager.getDefaultSensor(Sensor.TYPE_STEP_COUNTER, true);
+            }
+            if (stepCounterSensor == null) {
+                stepCounterSensor = sensorManager.getDefaultSensor(Sensor.TYPE_STEP_COUNTER);
+            }
+            if (stepCounterSensor == null) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                    stepDetectorSensor = sensorManager.getDefaultSensor(Sensor.TYPE_STEP_DETECTOR, true);
+                }
+                if (stepDetectorSensor == null) {
+                    stepDetectorSensor = sensorManager.getDefaultSensor(Sensor.TYPE_STEP_DETECTOR);
+                }
+            }
+        }
+        android.util.Log.d("Sakkawi", "stepCounterSensor = " + stepCounterSensor
+                + ", stepDetectorSensor = " + stepDetectorSensor);
     }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        // [أمان] التحقق من منح إذن التعرف على النشاط على أندرويد 10+
-        // لمنع حدوث SecurityException إذا سحب المستخدم الإذن يدويًا
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACTIVITY_RECOGNITION)
                     != PackageManager.PERMISSION_GRANTED) {
@@ -81,34 +141,31 @@ public class StepCounterForegroundService extends Service implements SensorEvent
             }
         }
 
-        // [أندرويد 14+ / API 34+] يجب تمرير نوع الخدمة صراحة عند استدعاء startForeground
-        // وإلا يرمي النظام MissingForegroundServiceTypeException ويكرّش التطبيق
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             startForeground(NOTIFICATION_ID, buildNotification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_HEALTH);
         } else {
             startForeground(NOTIFICATION_ID, buildNotification());
         }
 
-        // (إصلاح - باج حقيقي خطير - شوف تعليق sensorListenerRegistered
-        // فوق): لو الحساس متسجّل بالفعل، مننداش registerListener() تاني
-        // خالص - ده بالظبط اللي كان بيسبب تسجيل نفس القراءة كذا مرة
-        // وزيادة العدد بشكل كبير عن الحقيقة كل ما JS تعيد نداء
-        // startTracking() (كل 4 ثواني تقريبًا طول ما التطبيق فاتح)
+        acquireWakeLock();
+
         if (sensorListenerRegistered) {
             return START_STICKY;
         }
 
-        if (stepCounterSensor != null) {
+        Sensor targetSensor = stepCounterSensor != null ? stepCounterSensor : stepDetectorSensor;
+        if (targetSensor != null && sensorManager != null) {
+            int maxReportLatencyUs = 60 * 1000 * 1000;
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
                 sensorManager.registerListener(
-                        this, stepCounterSensor, SensorManager.SENSOR_DELAY_UI, 0);
+                        this, targetSensor, SensorManager.SENSOR_DELAY_NORMAL, maxReportLatencyUs);
             } else {
                 sensorManager.registerListener(
-                        this, stepCounterSensor, SensorManager.SENSOR_DELAY_UI);
+                        this, targetSensor, SensorManager.SENSOR_DELAY_NORMAL);
             }
             sensorListenerRegistered = true;
         } else {
-            updateNotificationWithMessage("جهازك مفيهوش حساس خطوات (Step Counter) - العداد مش متاح");
+            updateNotificationWithMessage("جهازك مفيهوش حساس خطوات - العداد مش متاح");
         }
 
         return START_STICKY;
@@ -120,12 +177,37 @@ public class StepCounterForegroundService extends Service implements SensorEvent
             float totalStepsSinceBoot = event.values[0];
             int stepsToday = resolveTodayStepCount(totalStepsSinceBoot);
             updateNotification(stepsToday);
+        } else if (event.sensor.getType() == Sensor.TYPE_STEP_DETECTOR) {
+            int stepsToday = resolveDetectorStep();
+            updateNotification(stepsToday);
         }
     }
 
     @Override
     public void onFlushCompleted(Sensor sensor) {
-        // اكتمال تفريغ ذاكرة الحساس العتادية
+        if (flushLatch != null) {
+            flushLatch.countDown();
+        }
+    }
+
+    private int resolveDetectorStep() {
+        SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
+        String todayKey = DAY_FORMAT.format(new Date());
+        String savedDate = prefs.getString("steps_today_date", null);
+        int currentSteps = prefs.getInt("steps_today", 0);
+
+        if (savedDate == null || !savedDate.equals(todayKey)) {
+            currentSteps = 0;
+        }
+
+        currentSteps += 1;
+
+        SharedPreferences.Editor editor = prefs.edit();
+        editor.putInt("steps_today", currentSteps);
+        editor.putString("steps_today_date", todayKey);
+        editor.apply();
+
+        return currentSteps;
     }
 
     /**
@@ -220,13 +302,19 @@ public class StepCounterForegroundService extends Service implements SensorEvent
     private Notification buildNotification() {
         createNotificationChannelIfNeeded();
 
+        SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
+        int stepsToday = prefs.getInt("steps_today", 0);
+        String text = stepsToday > 0 ? ("خطوات النهاردة: " + stepsToday) : "التتبع شغّال في الخلفية";
+
         return new NotificationCompat.Builder(this, CHANNEL_ID)
                 .setContentTitle("سِكّاوي بيتابع خطواتك")
-                .setContentText("التتبع شغّال في الخلفية")
+                .setContentText(text)
                 .setSmallIcon(getNotificationIcon())
                 .setColor(ContextCompat.getColor(this, R.color.notification_accent))
                 .setContentIntent(getOpenAppPendingIntent())
                 .setOngoing(true)
+                .setPriority(NotificationCompat.PRIORITY_LOW)
+                .setCategory(NotificationCompat.CATEGORY_SERVICE)
                 .build();
     }
 
@@ -238,6 +326,8 @@ public class StepCounterForegroundService extends Service implements SensorEvent
                 .setColor(ContextCompat.getColor(this, R.color.notification_accent))
                 .setContentIntent(getOpenAppPendingIntent())
                 .setOngoing(true)
+                .setPriority(NotificationCompat.PRIORITY_LOW)
+                .setCategory(NotificationCompat.CATEGORY_SERVICE)
                 .build();
 
         NotificationManager manager =
@@ -253,6 +343,8 @@ public class StepCounterForegroundService extends Service implements SensorEvent
                 .setColor(ContextCompat.getColor(this, R.color.notification_accent))
                 .setContentIntent(getOpenAppPendingIntent())
                 .setOngoing(true)
+                .setPriority(NotificationCompat.PRIORITY_LOW)
+                .setCategory(NotificationCompat.CATEGORY_SERVICE)
                 .build();
 
         NotificationManager manager =
@@ -263,6 +355,7 @@ public class StepCounterForegroundService extends Service implements SensorEvent
     @Override
     public void onDestroy() {
         super.onDestroy();
+        releaseWakeLock();
         if (sensorManager != null) {
             sensorManager.unregisterListener(this);
         }

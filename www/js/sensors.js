@@ -39,10 +39,15 @@ function getStorageKey(userId) {
 /* ------------------------------------------------------------------
    حالة التطبيق الداخلية (State) - مفيش داعي تتعدل يدوياً
    ------------------------------------------------------------------ */
+const ACTIVE_USER_ID_STORAGE_KEY = 'saa_baladi_active_user_id';
+
 let stepCount = 0;
 let currentDayKey = null;        // تاريخ اليوم الحالي (YYYY-MM-DD) اللي العداد بيتحسب عليه
 let stepsHistory = {};           // أرشيف خطوات الأيام السابقة { 'YYYY-MM-DD': steps }
 let currentOwnerUserId = null;   // معرف المستخدم الحالي
+try {
+    currentOwnerUserId = localStorage.getItem(ACTIVE_USER_ID_STORAGE_KEY) || null;
+} catch (_) {}
 let lastNativeStepsSeen = 0;     // آخر قراءة لحساس الجهاز لهذا المستخدم لمنع تسريب خطوات الحسابات الأخرى
 let resetNativeBaselineOnNextSync = false; // علم إعادة ضبط الأساس عند تبديل الحساب
 
@@ -72,6 +77,11 @@ function persistDailyState() {
             ownerUserId: currentOwnerUserId,
             lastNative: lastNativeStepsSeen
         }));
+        if (currentOwnerUserId) {
+            localStorage.setItem(ACTIVE_USER_ID_STORAGE_KEY, currentOwnerUserId);
+        } else {
+            localStorage.removeItem(ACTIVE_USER_ID_STORAGE_KEY);
+        }
     } catch (err) {
         console.warn('[sensors.js] تعذر حفظ خطوات اليوم في localStorage:', err);
     }
@@ -279,13 +289,20 @@ export function syncActiveUser(userId) {
     if (currentOwnerUserId === normalizedId) return;
 
     // حفظ حالة المستخدم السابق قبل التبديل
+    const previousUserId = currentOwnerUserId;
     persistDailyState();
 
     currentOwnerUserId = normalizedId;
     loadPersistedDailyState();
 
-    // نفعّل علم إعادة ضبط الأساس لتفادي احتساب أي خطوات قطعها مستخدم سابق على الجهاز اليوم
-    resetNativeBaselineOnNextSync = true;
+    // مهم جدا: لا نفعّل resetNativeBaselineOnNextSync إلا إذا كان تبديلا حقيقيا بين حسابين مختلفين أثناء التشغيل
+    // أما في أول فتح للتطبيق أو عند استرجاع الجلسة لنفس المستخدم، فلا نلغي الخطوات المقطوعة أثناء إغلاق التطبيق!
+    const isActualAccountSwitch = previousUserId !== null && previousUserId !== normalizedId;
+    if (isActualAccountSwitch) {
+        resetNativeBaselineOnNextSync = true;
+    } else {
+        resetNativeBaselineOnNextSync = false;
+    }
 
     // إشعار فوري للواجهة بالخطوات الحالية لهذا المستخدم
     document.dispatchEvent(new CustomEvent('sensors:steps-update', {
@@ -381,10 +398,14 @@ export async function syncFromNativeStepCounter() {
 
         // نحتسب فقط الزيادة الحقيقية التي حدثت أثناء نشاط هذا الحساب
         if (nativeDate === currentDayKey && typeof nativeSteps === 'number' && Number.isFinite(nativeSteps)) {
-            if (resetNativeBaselineOnNextSync || lastNativeStepsSeen <= 0 || nativeSteps < lastNativeStepsSeen) {
-                // أول قراءة لهذا الحساب أو تبديل حساب أو بعد إعادة تشغيل الهاتف
+            if (resetNativeBaselineOnNextSync || (lastNativeStepsSeen <= 0 && stepCount <= 0) || nativeSteps < lastNativeStepsSeen) {
+                // أول قراءة لحساب جديد تماما بدون خطوات سابقة، أو بعد إعادة تشغيل الهاتف، أو بعد إعادة ضبط صريحة
                 lastNativeStepsSeen = nativeSteps;
                 resetNativeBaselineOnNextSync = false;
+                persistDailyState();
+            } else if (lastNativeStepsSeen <= 0 && stepCount > 0) {
+                // الحساب مسجل خطوات سابقة ولكن لم يكن لديه قراءة حساس مسجلة
+                lastNativeStepsSeen = nativeSteps;
                 persistDailyState();
             } else if (nativeSteps > lastNativeStepsSeen) {
                 const delta = nativeSteps - lastNativeStepsSeen;
@@ -432,6 +453,15 @@ export async function checkBatteryOptimizationStatus() {
                     message: 'عشان عداد الخطوات يفضل شغّال بدقة والتطبيق مقفول، لازم تستثنيه من "توفير البطارية" في إعدادات جهازك.'
                 }
             }));
+
+            // طلب استثناء توفير البطارية تلقائيًا لأول مرة لضمان استمرار عمل الخدمة في الخلفية والجيب
+            const PROMPT_KEY = 'sakkawi_battery_opt_prompted_v2';
+            if (!localStorage.getItem(PROMPT_KEY)) {
+                localStorage.setItem(PROMPT_KEY, '1');
+                try {
+                    await StepCounter.requestIgnoreBatteryOptimizations();
+                } catch (_) {}
+            }
         }
 
         return ignoring;
