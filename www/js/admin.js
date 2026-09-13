@@ -874,6 +874,159 @@ function updateHeaderStats() {
         ).length;
         todayEl.textContent = registeredToday.toLocaleString('ar-EG');
     }
+
+    // تحديث إحصاءات نبض القرية اليوم ومنصة التتويج
+    updateVillageOverviewStats();
+}
+
+/**
+ * تحديث إحصاءات نبض قرية نزلة عبيد في الصفحة الرئيسية:
+ * - إجمالي خطوات القرية اليوم (مجموع daily_steps لجميع المشتركين)
+ * - إجمالي المسافة المقطوعة بالكيلومترات (خطوات القرية / 1300)
+ * - المشتركون الذين حققوا الهدف اليومي (6000 خطوة فأكثر) ونسبتهم
+ * - منصة تتويج متصدري اليوم (المراكز الثلاثة الأولى)
+ */
+function updateVillageOverviewStats() {
+    if (!Array.isArray(allUsersList)) return;
+
+    // 1) حساب إجمالي خطوات القرية اليوم
+    const totalDailySteps = allUsersList.reduce((acc, u) => {
+        const s = Number(u.daily_steps || 0);
+        return acc + (s > 0 ? s : 0);
+    }, 0);
+
+    const totalKm = (totalDailySteps / 1300).toFixed(1);
+
+    // 2) حساب محققي الهدف اليومي (6,000 خطوة فما فوق)
+    const goalAchievers = allUsersList.filter((u) => Number(u.daily_steps || 0) >= 6000);
+    const activeWalkers = allUsersList.filter((u) => Number(u.daily_steps || 0) > 0);
+    const goalPct = activeWalkers.length > 0
+        ? Math.round((goalAchievers.length / activeWalkers.length) * 100)
+        : (allUsersList.length > 0 ? Math.round((goalAchievers.length / allUsersList.length) * 100) : 0);
+
+    const stepsEl = document.getElementById('statVillageTotalSteps');
+    const kmEl = document.getElementById('statVillageTotalKm');
+    const goalAchieversEl = document.getElementById('statVillageGoalAchievers');
+    const goalPctEl = document.getElementById('statVillageGoalPct');
+    const changeLabelEl = document.getElementById('statVillageStepsChangeLabel');
+
+    if (stepsEl) stepsEl.textContent = totalDailySteps.toLocaleString('ar-EG');
+    if (kmEl) kmEl.textContent = Number(totalKm).toLocaleString('ar-EG');
+    if (goalAchieversEl) goalAchieversEl.textContent = goalAchievers.length.toLocaleString('ar-EG');
+    if (goalPctEl) goalPctEl.textContent = `(${goalPct.toLocaleString('ar-EG')}%)`;
+    if (changeLabelEl) {
+        changeLabelEl.textContent = `${activeWalkers.length.toLocaleString('ar-EG')} متسابق مشى اليوم`;
+    }
+
+    // 3) رسم منصة تتويج أبطال اليوم
+    renderVillageDailyPodium();
+}
+
+/**
+ * ترسم منصة تتويج اليوم (المراكز الثلاثة الأولى في خطوات اليوم بنزلة عبيد)
+ */
+function renderVillageDailyPodium() {
+    const container = document.getElementById('villageDailyPodiumContainer');
+    if (!container) return;
+
+    if (!Array.isArray(allUsersList) || allUsersList.length === 0) {
+        container.innerHTML = `
+            <div class="col-span-full p-4 rounded-xl bg-lux-950/40 border border-lux-800/60 text-center text-lux-400 text-xs font-medium">
+                جاري تحميل بيانات المتسابقين…
+            </div>
+        `;
+        return;
+    }
+
+    const sortedWalkers = allUsersList
+        .filter((u) => Number(u.daily_steps || 0) > 0)
+        .sort((a, b) => Number(b.daily_steps || 0) - Number(a.daily_steps || 0));
+
+    if (sortedWalkers.length === 0) {
+        container.innerHTML = `
+            <div class="col-span-full p-4 rounded-xl bg-lux-950/40 border border-lux-800/60 text-center text-lux-400 text-xs font-medium">
+                لم يتم تسجيل أي خطوات اليوم حتى الآن. سيظهر المتصدرون بمجرد بدء المتسابقين في المشي.
+            </div>
+        `;
+        return;
+    }
+
+    const topThree = sortedWalkers.slice(0, 3);
+    const rankConfigs = [
+        {
+            rank: 1,
+            title: 'بطل اليوم (المركز الأول)',
+            badgeText: 'المركز 1',
+            badgeBg: 'bg-gold-500/20 text-gold-300 border-gold-500/40',
+            cardBorder: 'border-gold-500/40 bg-gradient-to-b from-gold-500/10 via-lux-950/60 to-lux-950/80',
+            stepsColor: 'text-gold-400',
+        },
+        {
+            rank: 2,
+            title: 'المركز الثاني',
+            badgeText: 'المركز 2',
+            badgeBg: 'bg-slate-400/20 text-slate-200 border-slate-400/40',
+            cardBorder: 'border-slate-500/30 bg-gradient-to-b from-slate-500/10 via-lux-950/60 to-lux-950/80',
+            stepsColor: 'text-slate-200',
+        },
+        {
+            rank: 3,
+            title: 'المركز الثالث',
+            badgeText: 'المركز 3',
+            badgeBg: 'bg-amber-700/25 text-amber-300 border-amber-600/40',
+            cardBorder: 'border-amber-700/30 bg-gradient-to-b from-amber-700/10 via-lux-950/60 to-lux-950/80',
+            stepsColor: 'text-amber-300',
+        },
+    ];
+
+    container.innerHTML = topThree.map((user, idx) => {
+        const conf = rankConfigs[idx] || rankConfigs[2];
+        const name = escapeHtml(user.full_name || user.username || 'متسابق');
+        const username = user.username ? `@${escapeHtml(user.username)}` : '';
+        const steps = Number(user.daily_steps || 0).toLocaleString('ar-EG');
+        const km = (Number(user.daily_steps || 0) / 1300).toFixed(1);
+        const avatarUrl = user.avatar_url || '';
+        const isOnline = isUserOnline(user);
+        const isVerified = isUserVerificationActive(user);
+
+        return `
+            <div class="p-3.5 sm:p-4 rounded-2xl border ${conf.cardBorder} flex flex-col justify-between space-y-3 relative overflow-hidden group hover:scale-[1.01] transition shadow-soft-card">
+                <div class="flex items-center justify-between">
+                    <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black border ${conf.badgeBg}">${conf.badgeText}</span>
+                    <span class="text-[10px] font-bold text-lux-400">${conf.title}</span>
+                </div>
+                <div class="flex items-center gap-3">
+                    <div class="relative shrink-0">
+                        ${avatarUrl ? `
+                            <img src="${escapeHtml(avatarUrl)}" class="w-11 h-11 rounded-full object-cover border border-lux-700 shadow" alt="${name}">
+                        ` : `
+                            <div class="w-11 h-11 rounded-full bg-lux-800 border border-lux-700 text-gold-400 font-black flex items-center justify-center text-xs shadow">
+                                ${name.slice(0, 2)}
+                            </div>
+                        `}
+                        ${isOnline ? '<span class="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-emerald-400 ring-2 ring-lux-950"></span>' : ''}
+                    </div>
+                    <div class="min-w-0 flex-1">
+                        <div class="text-xs sm:text-sm font-black text-lux-100 truncate flex items-center gap-1">
+                            <span>${name}</span>
+                            ${isVerified ? buildVerifiedBadgeHtml(true, 'scale-90') : ''}
+                        </div>
+                        <div class="text-[10px] font-mono text-lux-400 truncate">${username}</div>
+                    </div>
+                </div>
+                <div class="pt-2 border-t border-lux-800/60 flex items-center justify-between">
+                    <div>
+                        <div class="text-[9px] font-bold text-lux-400">خطوات اليوم</div>
+                        <div class="font-mono text-sm sm:text-base font-black ${conf.stepsColor} leading-none mt-0.5">${steps}</div>
+                    </div>
+                    <div class="text-left">
+                        <div class="text-[9px] font-bold text-lux-400">المسافة</div>
+                        <div class="font-mono text-xs sm:text-sm font-bold text-cyan-300 leading-none mt-0.5">${km} كم</div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
 }
 
 /** ربط مربع البحث وشرائح الترتيب (فلترة/ترتيب محلي فوري) وتحميل/تحديث القائمة لثالث تاب */
