@@ -16,9 +16,12 @@ import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener2;
 import android.hardware.SensorManager;
 import android.os.Build;
+import android.os.Handler;
+import android.os.HandlerThread;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.PowerManager;
+import android.os.Process;
 
 import androidx.core.app.NotificationCompat;
 import androidx.core.content.ContextCompat;
@@ -43,6 +46,10 @@ public class StepCounterForegroundService extends Service implements SensorEvent
     private static final SimpleDateFormat DAY_FORMAT =
             new SimpleDateFormat("yyyy-MM-dd", Locale.US);
 
+    static {
+        DAY_FORMAT.setTimeZone(java.util.TimeZone.getTimeZone("Africa/Cairo"));
+    }
+
     private static StepCounterForegroundService instance;
 
     private SensorManager sensorManager;
@@ -51,9 +58,153 @@ public class StepCounterForegroundService extends Service implements SensorEvent
     private boolean sensorListenerRegistered = false;
     private PowerManager.WakeLock wakeLock;
     private CountDownLatch flushLatch;
+    private HandlerThread sensorThread;
+    private Handler sensorHandler;
 
     public static StepCounterForegroundService getInstance() {
         return instance;
+    }
+
+    public synchronized void resetDailySteps(int newStepCount) {
+        SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
+        String todayKey = DAY_FORMAT.format(new Date());
+
+        // قراءة عتادية فورية ومباشرة من شريحة الحساس لتثبيت خط الأساس العتادي بدقة ومنع تسريب أي خطوات سابقة
+        float liveHardware = -1f;
+        ensureSensorRegistered();
+        if (sensorManager != null && stepCounterSensor != null) {
+            final float[] probeVal = new float[]{-1f};
+            final CountDownLatch latch = new CountDownLatch(1);
+            SensorEventListener probe = new SensorEventListener() {
+                @Override
+                public void onSensorChanged(SensorEvent event) {
+                    if (event.sensor.getType() == Sensor.TYPE_STEP_COUNTER && event.values != null && event.values.length > 0) {
+                        probeVal[0] = event.values[0];
+                        latch.countDown();
+                    }
+                }
+                @Override
+                public void onAccuracyChanged(Sensor sensor, int accuracy) {}
+            };
+            HandlerThread t = new HandlerThread("SakkawiResetProbe");
+            t.start();
+            try {
+                if (sensorManager.registerListener(probe, stepCounterSensor, SensorManager.SENSOR_DELAY_FASTEST, new Handler(t.getLooper()))) {
+                    latch.await(300, TimeUnit.MILLISECONDS);
+                }
+            } catch (Exception ignored) {
+            } finally {
+                try { sensorManager.unregisterListener(probe); } catch (Exception ignored) {}
+                t.quitSafely();
+            }
+            if (probeVal[0] >= 0) {
+                liveHardware = probeVal[0];
+            }
+        }
+
+        if (liveHardware < 0) {
+            liveHardware = prefs.getFloat("last_hardware_total_steps", -1);
+        }
+
+        SharedPreferences.Editor editor = prefs.edit();
+        editor.putInt("steps_today", newStepCount);
+        editor.putString("steps_today_date", todayKey);
+        editor.putString("baseline_date", todayKey);
+        if (liveHardware >= 0) {
+            editor.putFloat("baseline_total_steps", liveHardware);
+            editor.putFloat("last_hardware_total_steps", liveHardware);
+            editor.putString("last_hardware_step_date", todayKey);
+        }
+        editor.putInt("steps_before_reboot", newStepCount);
+        editor.commit();
+
+        updateNotification(newStepCount);
+    }
+
+
+    public int getCachedStepsToday() {
+        SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
+        String todayKey = DAY_FORMAT.format(new Date());
+        String savedDate = prefs.getString("steps_today_date", null);
+        if (savedDate == null || !savedDate.equals(todayKey)) {
+            return 0;
+        }
+        return prefs.getInt("steps_today", 0);
+    }
+
+    /**
+     * استعلام عتادي فوري ومباشر من شريحة حساس الخطوات (Hardware Sensor Probe).
+     * أندرويد بحسب المعيار الرسمي يرسل آخر قراءة عتادية تراكمية فور تسجيل أي Listener
+     * على حساس TYPE_STEP_COUNTER، مما يمكننا من قراءة خطوات المشوار بالكامل فور فتح
+     * التطبيق أو ضغط زر التحديث حتى لو كان الهاتف ثابتا تماما دون حركة.
+     */
+    public synchronized int forceSyncHardwareSteps(long timeoutMs) {
+        ensureSensorRegistered();
+        if (sensorManager == null) {
+            return getCachedStepsToday();
+        }
+
+        Sensor targetSensor = stepCounterSensor != null ? stepCounterSensor : stepDetectorSensor;
+        if (targetSensor == null) {
+            return getCachedStepsToday();
+        }
+
+        // تفريغ أي أحداث مخزنة في الـ FIFO العتادي
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
+                sensorManager.flush(this);
+            }
+        } catch (Exception ignored) {}
+
+        if (targetSensor.getType() != Sensor.TYPE_STEP_COUNTER) {
+            return getCachedStepsToday();
+        }
+
+        final float[] hardwareSteps = new float[]{-1f};
+        final CountDownLatch latch = new CountDownLatch(1);
+
+        SensorEventListener probeListener = new SensorEventListener() {
+            @Override
+            public void onSensorChanged(SensorEvent event) {
+                if (event.sensor.getType() == Sensor.TYPE_STEP_COUNTER && event.values != null && event.values.length > 0) {
+                    hardwareSteps[0] = event.values[0];
+                    latch.countDown();
+                }
+            }
+
+            @Override
+            public void onAccuracyChanged(Sensor sensor, int accuracy) {}
+        };
+
+        HandlerThread probeThread = new HandlerThread("SakkawiProbeThread");
+        probeThread.start();
+        Handler probeHandler = new Handler(probeThread.getLooper());
+
+        try {
+            boolean registered = sensorManager.registerListener(
+                    probeListener,
+                    targetSensor,
+                    SensorManager.SENSOR_DELAY_FASTEST,
+                    probeHandler
+            );
+
+            if (registered) {
+                latch.await(Math.max(150, timeoutMs), TimeUnit.MILLISECONDS);
+            }
+        } catch (Exception e) {
+            android.util.Log.w("Sakkawi", "forceSyncHardwareSteps probe failed", e);
+        } finally {
+            try {
+                sensorManager.unregisterListener(probeListener);
+            } catch (Exception ignored) {}
+            probeThread.quitSafely();
+        }
+
+        if (hardwareSteps[0] >= 0) {
+            return resolveTodayStepCount(hardwareSteps[0]);
+        }
+
+        return getCachedStepsToday();
     }
 
     public void flushSensor() {
@@ -61,6 +212,7 @@ public class StepCounterForegroundService extends Service implements SensorEvent
     }
 
     public void flushSensorWithTimeout(long timeoutMs) {
+        ensureSensorRegistered();
         if (sensorManager != null && sensorListenerRegistered) {
             Sensor targetSensor = stepCounterSensor != null ? stepCounterSensor : stepDetectorSensor;
             if (targetSensor != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
@@ -110,11 +262,33 @@ public class StepCounterForegroundService extends Service implements SensorEvent
         if (sensorListenerRegistered) return;
         Sensor targetSensor = stepCounterSensor != null ? stepCounterSensor : stepDetectorSensor;
         if (targetSensor != null && sensorManager != null) {
-            boolean registered = sensorManager.registerListener(
-                    this, targetSensor, SensorManager.SENSOR_DELAY_UI);
+            if (sensorThread == null || !sensorThread.isAlive()) {
+                sensorThread = new HandlerThread("SakkawiSensorThread", Process.THREAD_PRIORITY_MORE_FAVORABLE);
+                sensorThread.start();
+                sensorHandler = new Handler(sensorThread.getLooper());
+            }
+
+            boolean registered = false;
+            // تسجيل الحساس مع مهلة تجميع (batching latency) قدرها 5 ثواني
+            // هذا يوجه عتاد الهاتف (DSP/Sensor Hub) للاحتفاظ بالخطوات في الذاكرة العتادية وتفريغها كل 5 ثواني
+            // دون إغلاق الخدمة أو إجبار المعالج على الاستيقاظ مع كل خطوة مفردة، مما يوفر البطارية ويمنع نوم الحساس
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
+                try {
+                    registered = sensorManager.registerListener(
+                            this, targetSensor, SensorManager.SENSOR_DELAY_NORMAL, 5_000_000, sensorHandler);
+                } catch (Exception ignored) {}
+            }
+            if (!registered) {
+                try {
+                    registered = sensorManager.registerListener(
+                            this, targetSensor, SensorManager.SENSOR_DELAY_UI, sensorHandler);
+                } catch (Exception ignored) {}
+            }
             if (!registered && targetSensor != stepDetectorSensor && stepDetectorSensor != null) {
-                registered = sensorManager.registerListener(
-                        this, stepDetectorSensor, SensorManager.SENSOR_DELAY_UI);
+                try {
+                    registered = sensorManager.registerListener(
+                            this, stepDetectorSensor, SensorManager.SENSOR_DELAY_UI, sensorHandler);
+                } catch (Exception ignored) {}
             }
             sensorListenerRegistered = registered;
         }
@@ -124,6 +298,10 @@ public class StepCounterForegroundService extends Service implements SensorEvent
     public void onCreate() {
         super.onCreate();
         instance = this;
+        sensorThread = new HandlerThread("SakkawiSensorThread", Process.THREAD_PRIORITY_MORE_FAVORABLE);
+        sensorThread.start();
+        sensorHandler = new Handler(sensorThread.getLooper());
+
         sensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
         if (sensorManager != null) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
@@ -165,20 +343,14 @@ public class StepCounterForegroundService extends Service implements SensorEvent
             return START_STICKY;
         }
 
-        Sensor targetSensor = stepCounterSensor != null ? stepCounterSensor : stepDetectorSensor;
-        if (targetSensor != null && sensorManager != null) {
-            boolean registered = sensorManager.registerListener(
-                    this, targetSensor, SensorManager.SENSOR_DELAY_UI);
-            if (!registered && targetSensor != stepDetectorSensor && stepDetectorSensor != null) {
-                registered = sensorManager.registerListener(
-                        this, stepDetectorSensor, SensorManager.SENSOR_DELAY_UI);
-            }
-            sensorListenerRegistered = registered;
-            if (!registered) {
+        ensureSensorRegistered();
+        if (!sensorListenerRegistered) {
+            Sensor targetSensor = stepCounterSensor != null ? stepCounterSensor : stepDetectorSensor;
+            if (targetSensor == null) {
+                updateNotificationWithMessage("جهازك مفيهوش حساس خطوات - العداد مش متاح");
+            } else {
                 updateNotificationWithMessage("تعذر تشغيل حساس الخطوات على هذا الجهاز");
             }
-        } else {
-            updateNotificationWithMessage("جهازك مفيهوش حساس خطوات - العداد مش متاح");
         }
 
         return START_STICKY;
@@ -203,7 +375,7 @@ public class StepCounterForegroundService extends Service implements SensorEvent
         }
     }
 
-    private int resolveDetectorStep() {
+    private synchronized int resolveDetectorStep() {
         SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
         String todayKey = DAY_FORMAT.format(new Date());
         String savedDate = prefs.getString("steps_today_date", null);
@@ -218,7 +390,7 @@ public class StepCounterForegroundService extends Service implements SensorEvent
         SharedPreferences.Editor editor = prefs.edit();
         editor.putInt("steps_today", currentSteps);
         editor.putString("steps_today_date", todayKey);
-        editor.apply();
+        editor.commit();
 
         return currentSteps;
     }
@@ -227,7 +399,7 @@ public class StepCounterForegroundService extends Service implements SensorEvent
      * يحسب خطوات اليوم الحالي بدقة تامة مع الحفاظ على خطوات الصباح
      * وحماية ضد إعادة تشغيل الموبايل (Reboot Resilience).
      */
-    private int resolveTodayStepCount(float totalStepsSinceBoot) {
+    private synchronized int resolveTodayStepCount(float totalStepsSinceBoot) {
         SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
         String todayKey = DAY_FORMAT.format(new Date());
         String savedBaselineDay = prefs.getString("baseline_date", null);
@@ -280,7 +452,9 @@ public class StepCounterForegroundService extends Service implements SensorEvent
         editor.putString("steps_today_date", todayKey);
         editor.putFloat("last_hardware_total_steps", totalStepsSinceBoot);
         editor.putString("last_hardware_step_date", todayKey);
-        editor.apply();
+        editor.commit();
+
+        updateNotification(stepsToday);
 
         return stepsToday;
     }
@@ -393,6 +567,11 @@ public class StepCounterForegroundService extends Service implements SensorEvent
             sensorManager.unregisterListener(this);
         }
         sensorListenerRegistered = false;
+        if (sensorThread != null) {
+            sensorThread.quitSafely();
+            sensorThread = null;
+            sensorHandler = null;
+        }
         if (instance == this) {
             instance = null;
         }

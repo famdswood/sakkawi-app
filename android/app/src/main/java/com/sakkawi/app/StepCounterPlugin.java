@@ -161,28 +161,63 @@ public class StepCounterPlugin extends Plugin {
                 } catch (InterruptedException ignored) {}
             }
 
+            int stepsToday = 0;
+            SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd", Locale.US);
+            sdf.setTimeZone(java.util.TimeZone.getTimeZone("Africa/Cairo"));
+            String todayKey = sdf.format(new Date());
+
             if (service != null) {
-                service.flushSensorWithTimeout(300);
-            }
-
-            SharedPreferences prefs = getContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
-            int stepsToday = prefs.getInt("steps_today", 0);
-            String date = prefs.getString("steps_today_date", null);
-            String todayKey = new SimpleDateFormat("yyyy-MM-dd", Locale.US).format(new Date());
-
-            // إذا كان التاريخ المحفوظ يخص يوماً سابقاً (قبل أول حركة للجهاز اليوم)،
-            // نرجع صفر خطوات وتاريخ اليوم منعاً لقراءة رصيد الأمس الخامل
-            if (date != null && !date.equals(todayKey)) {
-                stepsToday = 0;
-                date = todayKey;
+                // استعلام عتادي فوري يفرغ ذاكرة الحساس ويقرأ القيمة الحقيقية مباشرة من شريحة الموبايل
+                stepsToday = service.forceSyncHardwareSteps(600);
+            } else {
+                SharedPreferences prefs = getContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+                stepsToday = prefs.getInt("steps_today", 0);
+                String date = prefs.getString("steps_today_date", null);
+                if (date != null && !date.equals(todayKey)) {
+                    stepsToday = 0;
+                }
             }
 
             JSObject result = new JSObject();
             result.put("steps", stepsToday);
-            result.put("date", date != null ? date : todayKey);
+            result.put("date", todayKey);
             call.resolve(result);
         });
     }
+
+    @PluginMethod
+    public void resetDailySteps(PluginCall call) {
+        getBridge().execute(() -> {
+            Integer steps = call.getInt("steps", 0);
+            int targetSteps = (steps != null) ? Math.max(0, steps) : 0;
+
+            StepCounterForegroundService service = StepCounterForegroundService.getInstance();
+            if (service != null) {
+                service.resetDailySteps(targetSteps);
+            } else {
+                SharedPreferences prefs = getContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+                float lastHardware = prefs.getFloat("last_hardware_total_steps", -1);
+                SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd", Locale.US);
+                sdf.setTimeZone(java.util.TimeZone.getTimeZone("Africa/Cairo"));
+                String todayKey = sdf.format(new Date());
+
+                SharedPreferences.Editor editor = prefs.edit();
+                editor.putInt("steps_today", targetSteps);
+                editor.putString("steps_today_date", todayKey);
+                editor.putString("baseline_date", todayKey);
+                if (lastHardware >= 0) {
+                    editor.putFloat("baseline_total_steps", lastHardware);
+                }
+                editor.putInt("steps_before_reboot", targetSteps);
+                editor.commit();
+            }
+
+            JSObject res = new JSObject();
+            res.put("success", true);
+            call.resolve(res);
+        });
+    }
+
 
     /**
      * [جديد] بيرجّع true لو التطبيق مستثنى بالفعل من "توفير البطارية"

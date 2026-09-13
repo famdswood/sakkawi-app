@@ -50,17 +50,34 @@ try {
 } catch (_) {}
 let lastNativeStepsSeen = 0;     // آخر قراءة لحساس الجهاز لهذا المستخدم لمنع تسريب خطوات الحسابات الأخرى
 let resetNativeBaselineOnNextSync = false; // علم إعادة ضبط الأساس عند تبديل الحساب
+let lastPowerCheckTime = 0;
+const POWER_CHECK_THROTTLE_MS = 600000; // فحص حالة البطارية والتشغيل التلقائي كل 10 دقائق
+let lastNativeSyncWarnTime = 0;
+const NATIVE_SYNC_WARN_THROTTLE_MS = 300000; // منع تكرار تحذيرات الحساس في الكونسول
 
 /**
- * إرجاع تاريخ اليوم الحالي بصيغة YYYY-MM-DD بالتوقيت المحلي للجهاز
- * (مش UTC، عشان مايحصلش فرق ساعات قرب منتصف الليل)
+ * إرجاع تاريخ اليوم الحالي بصيغة YYYY-MM-DD بتوقيت القاهرة الرسمي (Africa/Cairo)
  */
-function getTodayKey() {
-    const d = new Date();
-    const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
+export function getCairoDateString(instant = new Date()) {
+    try {
+        const formatter = new Intl.DateTimeFormat('en-CA', {
+            timeZone: 'Africa/Cairo',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit'
+        });
+        return formatter.format(instant);
+    } catch (_) {
+        const d = new Date();
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    }
+}
+
+export function getTodayKey() {
+    return getCairoDateString(new Date());
 }
 
 /**
@@ -146,7 +163,15 @@ export function ensureStillSameDay() {
         currentDayKey = todayKey;
         stepCount = 0;
         lastNativeStepsSeen = 0;
+        resetNativeBaselineOnNextSync = true;
         persistDailyState();
+
+        if (window.Capacitor?.isNativePlatform?.()) {
+            try {
+                window.Capacitor.Plugins.StepCounter?.resetDailySteps?.({ steps: 0 });
+            } catch (_) {}
+        }
+
         document.dispatchEvent(new CustomEvent('sensors:day-reset', {
             detail: { date: todayKey, previousDay }
         }));
@@ -284,24 +309,26 @@ export function resetSteps() {
  * أي خطوات أو تاريخ أو أرقام قياسية بين الحسابات على نفس الجهاز.
  * @param {string|null} userId
  */
-export function syncActiveUser(userId) {
+export async function syncActiveUser(userId) {
     const normalizedId = userId || null;
     if (currentOwnerUserId === normalizedId) return;
 
     // حفظ حالة المستخدم السابق قبل التبديل
-    const previousUserId = currentOwnerUserId;
     persistDailyState();
 
     currentOwnerUserId = normalizedId;
     loadPersistedDailyState();
 
-    // مهم جدا: لا نفعّل resetNativeBaselineOnNextSync إلا إذا كان تبديلا حقيقيا بين حسابين مختلفين أثناء التشغيل
-    // أما في أول فتح للتطبيق أو عند استرجاع الجلسة لنفس المستخدم، فلا نلغي الخطوات المقطوعة أثناء إغلاق التطبيق!
-    const isActualAccountSwitch = previousUserId !== null && previousUserId !== normalizedId;
-    if (isActualAccountSwitch) {
-        resetNativeBaselineOnNextSync = true;
-    } else {
-        resetNativeBaselineOnNextSync = false;
+    // تبديل صريح للحساب (سواء تسجيل خروج لزائر أو دخول مستخدم جديد)
+    // نفعّل علم إعادة ضبط الأساس العتادي وتصفير القراءة السابقة لمنع تسريب خطوات الحساب السابق
+    resetNativeBaselineOnNextSync = true;
+    lastNativeStepsSeen = 0;
+
+    // تصفير أو تحديث خدمة الأندرويد الأصلية لتتطابق مع رصيد خطوات الحساب النشط الحالي
+    if (window.Capacitor?.isNativePlatform?.()) {
+        try {
+            await window.Capacitor.Plugins.StepCounter?.resetDailySteps?.({ steps: stepCount });
+        } catch (_) {}
     }
 
     // إشعار فوري للواجهة بالخطوات الحالية لهذا المستخدم
@@ -352,10 +379,20 @@ function autoInit() {
 // شوية على أي حال)
 let isSyncingFromNative = false;
 
-export async function syncFromNativeStepCounter() {
+export async function syncFromNativeStepCounter(options = {}) {
+    const force = Boolean(options && options.force);
     ensureStillSameDay();
     if (!window.Capacitor?.isNativePlatform?.()) return;
-    if (isSyncingFromNative) return; // فيه مزامنة شغّالة بالفعل - نرفض عشان نمنع التضاعف
+
+    if (isSyncingFromNative) {
+        if (!force) return;
+        // عند طلب المزامنة الإجبارية من زر التحديث، ننتظر انتهاء أي مزامنة سارية بدلاً من الإلغاء
+        let waitAttempts = 0;
+        while (isSyncingFromNative && waitAttempts < 10) {
+            await new Promise((r) => setTimeout(r, 100));
+            waitAttempts++;
+        }
+    }
     isSyncingFromNative = true;
 
     // (ملاحظة): العداد المحلي يعمل للأعضاء وللزوار على السواء لاحتساب
@@ -377,19 +414,13 @@ export async function syncFromNativeStepCounter() {
         // نشغّل الخدمة الأمامية (لو شغّالة أصلاً، النداء ده آمن ومفيهوش أي تأثير)
         await StepCounter.startTracking();
 
-        // [جديد] نتأكد إن التطبيق مستثنى من "توفير البطارية" - لو
-        // لأ، بنبعت تنبيه للواجهة (مش alert مباشر زي notifySensorUnavailable
-        // عشان ده مش خطأ فوري بيمنع العداد من الشغل دلوقتي، لكنه سبب
-        // شائع جدًا إن أجهزة شاومي/هواوي/أوبو..إلخ توقف الخدمة بعد شوية
-        // في الخلفية - فبنسيب app.js يقرر يعرضه إزاي (بانر/زرار بدل
-        // ما نقاطع المستخدم بـ alert كل مرة يفتح فيها التطبيق)
-        checkBatteryOptimizationStatus();
-
-        // [جديد] نتأكد كمان هل الجهاز ده من الشركات المعروفة بتقييد
-        // Autostart بشدة (شاومي/هواوي/أوبو/فيفو..إلخ) - ده تقييد أخطر
-        // من توفير البطارية العادي لأنه بيقفل الـ Foreground Service
-        // بتاعنا تمامًا حتى لو مستثنى من توفير البطارية أصلاً
-        checkAutostartStatus();
+        // فحص حالة البطارية وAutostart بشكل مقنن (كل 10 دقائق) بدل تكرارها كل ثانيتين
+        const nowTime = Date.now();
+        if (nowTime - lastPowerCheckTime > POWER_CHECK_THROTTLE_MS) {
+            lastPowerCheckTime = nowTime;
+            checkBatteryOptimizationStatus().catch(() => {});
+            checkAutostartStatus().catch(() => {});
+        }
 
         // نجيب عدد خطوات اليوم من الحساس الأصلي
         const { steps: nativeSteps, date: nativeDate } = await StepCounter.getStepsToday();
@@ -398,43 +429,42 @@ export async function syncFromNativeStepCounter() {
 
         // نحتسب الخطوات اليومية المأخوذة من الحساس الأصلي
         if (nativeDate === currentDayKey && typeof nativeSteps === 'number' && Number.isFinite(nativeSteps)) {
-            if (resetNativeBaselineOnNextSync) {
-                // تبديل صريح بين حسابين مختلفين أثناء التشغيل - يبدأ الحساب الجديد بعدّ الخطوات من هذه النقطة
+            if (resetNativeBaselineOnNextSync || lastNativeStepsSeen <= 0) {
+                // تبديل حساب، أو أول تشغيل للحساب، أو بداية يوم جديد بتوقيت القاهرة:
+                // نثبت الأساس العتادي على قراءة الحساس الحالية للجهاز دون ترحيل أي خطوات سابقة
                 lastNativeStepsSeen = nativeSteps;
                 resetNativeBaselineOnNextSync = false;
                 persistDailyState();
             } else if (nativeSteps < lastNativeStepsSeen) {
-                // إعادة تشغيل الجهاز أو إعادة تعيين التاريخ
+                // إعادة تشغيل الجهاز أو إعادة تعيين الحساس العتادي
                 lastNativeStepsSeen = nativeSteps;
                 persistDailyState();
             } else {
-                // الحالة الطبيعية: حساب جديد، فتح بعد مشوار في الخلفية، أو حركة لحظية
-                let delta = 0;
-                if (lastNativeStepsSeen > 0 && nativeSteps >= lastNativeStepsSeen) {
-                    delta = nativeSteps - lastNativeStepsSeen;
-                } else if (lastNativeStepsSeen <= 0) {
-                    // أول قراءة على هذا الحساب أو بعد فتح التطبيق
-                    delta = Math.max(0, nativeSteps - stepCount);
-                }
-
+                // حركة فعلية جديدة لنفس الحساب
+                const delta = nativeSteps - lastNativeStepsSeen;
                 lastNativeStepsSeen = nativeSteps;
 
-                // تحديث رصيد الخطوات: نتأكد أن stepCount يعكس على الأقل خطوات الحساس الأصلي لليوم
-                const newStepCount = Math.max(stepCount + delta, nativeSteps);
-                const stepCountChanged = newStepCount !== stepCount;
-                stepCount = newStepCount;
+                if (delta > 0) {
+                    stepCount += delta;
+                    persistDailyState();
 
-                persistDailyState();
-
-                if (stepCountChanged || delta > 0) {
                     document.dispatchEvent(new CustomEvent('sensors:steps-update', {
-                        detail: { steps: stepCount, delta: Math.max(delta, 0), date: currentDayKey, source: 'native' }
+                        detail: { 
+                            steps: stepCount, 
+                            delta: delta, 
+                            date: currentDayKey, 
+                            source: 'native' 
+                        }
                     }));
                 }
             }
         }
     } catch (err) {
-        console.warn('[sensors.js] تعذر المزامنة مع StepCounter الأصلي:', err);
+        const nowWarn = Date.now();
+        if (nowWarn - lastNativeSyncWarnTime > NATIVE_SYNC_WARN_THROTTLE_MS) {
+            lastNativeSyncWarnTime = nowWarn;
+            console.warn('[sensors.js] تعذر المزامنة مع StepCounter الأصلي:', err?.message || err);
+        }
     } finally {
         // (إصلاح - باج Race Condition) لازم نفك القفل دايمًا هنا - سواء
         // نجحت المزامنة، فشلت، أو اترفضت مبكرًا (return جوه الـ try زي
@@ -481,8 +511,7 @@ export async function checkBatteryOptimizationStatus() {
         }
 
         return ignoring;
-    } catch (err) {
-        console.warn('[sensors.js] تعذر التحقق من حالة توفير البطارية:', err);
+    } catch (_) {
         return null;
     }
 }
@@ -539,8 +568,7 @@ export async function checkAutostartStatus() {
         }
 
         return { manufacturer, restrictive };
-    } catch (err) {
-        console.warn('[sensors.js] تعذر التحقق من حالة Autostart:', err);
+    } catch (_) {
         return null;
     }
 }
@@ -589,7 +617,7 @@ document.addEventListener('geofence:guest-mode-change', () => {
 document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') {
         ensureStillSameDay();
-        syncFromNativeStepCounter();
+        syncFromNativeStepCounter({ force: true });
         startNativeSyncPolling();
     } else {
         stopNativeSyncPolling();

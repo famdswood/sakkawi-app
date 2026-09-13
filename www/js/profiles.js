@@ -57,7 +57,7 @@ import { supabaseClient } from './supabase-config.js';
 // (إصلاح - باج حقيقي) عشان نزبط عداد الخطوات المحلي مع daily_steps
 // الحقيقية القادمة من Supabase وقت تحميل البروفايل - شوف
 // reconcileWithServerSteps تحت في loadAndRenderRealProfile
-import { reconcileWithServerSteps, reconcileServerBestSteps, syncActiveUser, getStepsCount, getStepsHistory, syncFromNativeStepCounter } from './sensors.js';
+import { reconcileWithServerSteps, reconcileServerBestSteps, syncActiveUser, getStepsCount, getStepsHistory, syncFromNativeStepCounter, ensureStillSameDay } from './sensors.js';
 import { pushModalState, closeModal, replaceModalState } from './modal-history.js';
 import { signOut, validateAvatarFile } from './auth.js';
 import { initChampionshipTabs, refreshActiveLeaderboard, getActiveMetric } from './leaderboard.js';
@@ -493,18 +493,27 @@ async function patchProfileRow(updates) {
     return finalRow;
 }
 
-/** إرجاع تاريخ النهاردة بصيغة YYYY-MM-DD حسب توقيت جهاز المستخدم (مش UTC، عشان مايحصلش فرق يوم غلط قرب منتصف الليل) */
+/** إرجاع تاريخ النهاردة بصيغة YYYY-MM-DD حسب توقيت القاهرة (Africa/Cairo) */
 function getLocalDateString(date = new Date()) {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
+    try {
+        const formatter = new Intl.DateTimeFormat('en-CA', {
+            timeZone: 'Africa/Cairo',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit'
+        });
+        return formatter.format(date);
+    } catch (_) {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    }
 }
 
-/** إرجاع تاريخ إمبارح (بالنسبة للنهاردة) بنفس صيغة YYYY-MM-DD */
+/** إرجاع تاريخ إمبارح (بالنسبة للنهاردة) بنفس صيغة YYYY-MM-DD بتوقيت القاهرة */
 function getLocalYesterdayString() {
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterday = new Date(Date.now() - 86400000);
     return getLocalDateString(yesterday);
 }
 
@@ -702,8 +711,10 @@ let isStepSyncInProgress = false;
  * (المرحلة 7) تطبيق التحديث الفعلي على Supabase لكل الخطوات والنقاط
  * المتراكمة محلياً منذ آخر Flush ناجح (Batch Update)، في UPDATE واحد
  * بس - بدل ما كل خطوة مفردة تعمل Request منفصل.
+/**
+ * إرسال دفعة الخطوات والنقاط المتراكمة إلى السيرفر
  */
-async function flushPendingStepsBatch() {
+export async function flushPendingStepsBatch() {
     if (stepsBatchFlushTimer) {
         clearTimeout(stepsBatchFlushTimer);
         stepsBatchFlushTimer = null;
@@ -723,6 +734,8 @@ async function flushPendingStepsBatch() {
         window.localStorage.setItem(PENDING_STEPS_STORAGE_KEY, JSON.stringify({
             stepsDelta: stepsToFlush,
             pointsDelta: pointsToFlush,
+            date: getLocalDateString(),
+            userId: currentAuthUser?.id || null
         }));
     } catch (err) {
         console.warn('تعذر تحديث رصيد الخطوات في localStorage قبل الـ Flush:', err);
@@ -771,6 +784,11 @@ export async function syncOfflineStepsToServerIfNeeded() {
 
     try {
         isStepSyncInProgress = true;
+
+        // التأكد الدفاعي من تاريخ اليوم لتفادي إرسال خطوات الأمس في حال تخطي منتصف الليل
+        if (typeof ensureStillSameDay === 'function') {
+            ensureStillSameDay();
+        }
 
         // مزامنة العداد مع حساس الموبايل الأصلي أولاً إن وجد
         if (typeof syncFromNativeStepCounter === 'function') {
@@ -1041,6 +1059,8 @@ function persistPendingStepsToStorage() {
         window.localStorage.setItem(PENDING_STEPS_STORAGE_KEY, JSON.stringify({
             stepsDelta: pendingStepsDelta,
             pointsDelta: pendingStepsPointsDelta,
+            date: getLocalDateString(),
+            userId: currentAuthUser?.id || null,
         }));
     } catch (err) {
         console.error('تعذر حفظ الخطوات المتراكمة محلياً قبل إغلاق الصفحة:', err);
@@ -1062,7 +1082,10 @@ function restorePendingStepsFromStorage() {
         window.localStorage.removeItem(PENDING_STEPS_STORAGE_KEY);
 
         const saved = JSON.parse(raw);
-        if (saved?.stepsDelta > 0) {
+        const todayStr = getLocalDateString();
+        const currentUserId = currentAuthUser?.id || null;
+        // أمان صارم: التأكد أن الخطوات المؤجلة تخص اليوم الحالي وتخص نفس المستخدم الحالي
+        if (saved?.stepsDelta > 0 && saved.date === todayStr && saved.userId && saved.userId === currentUserId) {
             pendingStepsDelta += saved.stepsDelta;
             pendingStepsPointsDelta += saved.pointsDelta || 0;
             scheduleStepsBatchFlush();
@@ -3346,7 +3369,7 @@ function buildFriendRowHtml(friend) {
             </button>
             <div class="flex items-center gap-2 shrink-0">
                 <span class="text-[11px] font-black text-gold-400">${friend.points.toLocaleString()} ن</span>
-                <button class="remove-friend-btn text-lux-500 hover:text-rose-400 text-xs" data-friend-id="${friend.id}" data-friend-name="${friend.name}" aria-label="حذف الصديق">✕</button>
+                <button class="remove-friend-btn p-1 text-lux-500 hover:text-rose-400 transition-colors rounded-lg hover:bg-rose-500/10" data-friend-id="${friend.id}" data-friend-name="${friend.name}" aria-label="حذف الصديق" title="حذف الصديق"><svg class="w-3.5 h-3.5 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg></button>
             </div>
         </div>
     `;
@@ -4802,7 +4825,7 @@ function bindPublicProfileEvents() {
     const lightbox = document.getElementById('avatarLightbox');
     if (lightbox) {
         lightbox.addEventListener('click', (event) => {
-            if (event.target === lightbox) closeAvatarLightbox(); // قفل لو ضغط برّه الصورة نفسها
+            if (event.target === lightbox || event.target.id === 'avatarLightboxImage') closeAvatarLightbox();
         });
     }
 
@@ -4869,7 +4892,7 @@ async function loadAndRenderRealProfile(user) {
     // الحالة المحلية باسمه (تبديل حساب على نفس الجهاز)، عشان
     // reconcileWithServerSteps تحت ماتحسبش خطوات الحساب القديم غلط
     // كـ"تقدم أعلى" للحساب الجديد
-    syncActiveUser(user.id);
+    await syncActiveUser(user.id);
 
     // (كاش الأوفلاين) كل الخطوات اللي كانت جوه الدالة دي قبل التعديل
     // (تسجيل حضور/مزامنة الخطوات/جلب الأوسمة والأصحاب) دلوقتي مجمّعة في
@@ -4916,8 +4939,18 @@ async function loadAndRenderRealProfile(user) {
                 window.localStorage.setItem(`sakkawi_steps_reset_${user.id}`, currentProfileRow.steps_reset_at);
                 clearPendingSteps();
                 reconcileWithServerSteps(0, true);
+                if (window.Capacitor?.isNativePlatform?.()) {
+                    try {
+                        window.Capacitor.Plugins.StepCounter?.resetDailySteps?.({ steps: 0 });
+                    } catch (_) {}
+                }
             } else {
                 reconcileWithServerSteps(safeServerDailySteps);
+                if (window.Capacitor?.isNativePlatform?.()) {
+                    try {
+                        window.Capacitor.Plugins.StepCounter?.resetDailySteps?.({ steps: safeServerDailySteps });
+                    } catch (_) {}
+                }
             }
 
             // (جديد) نفس فكرة السطر اللي فوق بالظبط بس للرقم القياسي
@@ -5036,10 +5069,17 @@ function populateEditTitleSelectOptions() {
     const titleSelect = document.getElementById('editTitleSelect');
     if (!titleSelect) return;
 
+    const isAdmin = currentProfileRow?.role === 'admin' || currentAuthUser?.id === '1d8feb21-c37f-4b27-a028-a668078dbbb5';
     const unlockedBadges = badgesData.filter((badge) => badge.unlocked);
     const currentTitle = currentProfileRow?.title || '';
 
-    if (unlockedBadges.length === 0) {
+    // إذا كان الحساب آدمن، نضيف له لقب "مُنشئ سِكّاوي" دائماً كخيار شرفي إداري دائم
+    let adminTitleOptionHtml = '';
+    if (isAdmin) {
+        adminTitleOptionHtml = `<option value="مُنشئ سِكّاوي">مُنشئ سِكّاوي (لقب إداري دائم)</option>`;
+    }
+
+    if (unlockedBadges.length === 0 && !isAdmin) {
         if (currentTitle) {
             titleSelect.disabled = false;
             titleSelect.innerHTML = `<option value="${escapeHtml(currentTitle)}">${escapeHtml(currentTitle)} (الحالي)</option><option value="">من غير لقب</option>`;
@@ -5067,11 +5107,12 @@ function populateEditTitleSelectOptions() {
         .join('');
 
     const matchesUnlockedBadge = unlockedBadges.some((badge) => badge.title === currentTitle);
-    const currentPreservedOptionHtml = (currentTitle && !matchesUnlockedBadge)
+    const isCurrentAdminTitle = currentTitle === 'مُنشئ سِكّاوي';
+    const currentPreservedOptionHtml = (currentTitle && !matchesUnlockedBadge && !isCurrentAdminTitle)
         ? `<option value="${escapeHtml(currentTitle)}">${escapeHtml(currentTitle)} (الحالي)</option>`
         : '';
 
-    titleSelect.innerHTML = currentPreservedOptionHtml + noneOptionHtml + badgeOptionsHtml;
+    titleSelect.innerHTML = adminTitleOptionHtml + currentPreservedOptionHtml + noneOptionHtml + badgeOptionsHtml;
     titleSelect.value = currentTitle;
 }
 
@@ -5311,7 +5352,7 @@ async function handleEditProfileSubmit(event) {
         const lastName = nameParts.slice(1).join(' ') || '';
 
         const matchingBadge = title ? badgesData.find((b) => b.title === title) : null;
-        const featuredBadgeId = matchingBadge ? matchingBadge.id : (title ? (currentProfileRow?.featured_badge_id || null) : null);
+        const featuredBadgeId = matchingBadge ? matchingBadge.id : (title === 'مُنشئ سِكّاوي' ? null : (title ? (currentProfileRow?.featured_badge_id || null) : null));
 
         const updates = {
             full_name: fullName,
@@ -5833,6 +5874,91 @@ function bindSupportHelpButton() {
     btn.addEventListener('click', () => openSupportChatWithAdmin());
 }
 
+/** true بمجرد ما نربط صفحة "عن سِكّاوي" مرة */
+let aboutSakkawiEventsBound = false;
+let previousTabIdBeforeAboutSakkawi = null;
+
+/**
+ * فتح صفحة "عن سِكّاوي.. الدليل الشامل" من تبويب البروفايل
+ */
+export function openAboutSakkawiPage() {
+    const page = document.getElementById('tab-about-sakkawi');
+    if (!page) return;
+
+    const currentActiveTab = document.querySelector('.tab-content.active');
+    if (currentActiveTab && currentActiveTab.id !== 'tab-about-sakkawi') {
+        previousTabIdBeforeAboutSakkawi = currentActiveTab.id.replace('tab-', '');
+    }
+
+    document.querySelectorAll('.tab-content').forEach((el) => el.classList.remove('active'));
+    page.classList.add('active');
+
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+
+    pushModalState(hideAboutSakkawiPage);
+}
+
+/**
+ * إخفاء صفحة "عن سِكّاوي" والعودة للتبويب السابق
+ */
+export function hideAboutSakkawiPage() {
+    const targetTabId = previousTabIdBeforeAboutSakkawi || 'profile';
+
+    document.querySelectorAll('.tab-content').forEach((el) => el.classList.remove('active'));
+    const targetTab = document.getElementById(`tab-${targetTabId}`);
+    if (targetTab) targetTab.classList.add('active');
+
+    previousTabIdBeforeAboutSakkawi = null;
+}
+
+/**
+ * إغلاق صفحة "عن سِكّاوي" مع استهلاك خطوة التاريخ
+ */
+export function closeAboutSakkawiPage() {
+    closeModal();
+}
+
+/**
+ * ربط أحداث صفحة "عن سِكّاوي" (فتح الصفحة، الرجوع، وتوسيع/طي بطاقات الدليل)
+ */
+function bindAboutSakkawiEvents() {
+    if (aboutSakkawiEventsBound) return;
+    aboutSakkawiEventsBound = true;
+
+    const btn = document.getElementById('btnAboutSakkawi');
+    const backBtn = document.getElementById('btnBackFromAboutSakkawi');
+
+    if (btn) {
+        btn.addEventListener('click', () => openAboutSakkawiPage());
+    }
+
+    if (backBtn) {
+        backBtn.addEventListener('click', () => closeAboutSakkawiPage());
+    }
+
+    const container = document.getElementById('aboutAccordionsContainer');
+    if (container) {
+        container.addEventListener('click', (e) => {
+            const toggleBtn = e.target.closest('.about-toggle-btn');
+            if (!toggleBtn) return;
+
+            const card = toggleBtn.closest('.about-card');
+            if (!card) return;
+
+            const content = card.querySelector('.about-content');
+            const chevron = toggleBtn.querySelector('.chevron-icon');
+
+            if (content) {
+                const isHidden = content.classList.contains('hidden');
+                content.classList.toggle('hidden', !isHidden);
+                if (chevron) {
+                    chevron.classList.toggle('rotate-180', isHidden);
+                }
+            }
+        });
+    }
+}
+
 /**
  * التبديل بين حالتي تبويب "بروفايلي": #profileGuestView (كارت واحد
  * "سجّل دلوقتي" بديل كامل) لو مفيش user.id، أو #profileAccountView
@@ -5919,7 +6045,7 @@ export async function initProfileUI(user) {
         } catch (e) {
             // تجاهل
         }
-        syncActiveUser(null);
+        await syncActiveUser(null);
         badgesData = [];
         badgesLoadedOnce = false;
         friendsData = [];
@@ -5980,6 +6106,9 @@ export async function initProfileUI(user) {
     // ربط زرار "المساعدة والشكاوى" بفتح شات دعم مباشر مع الأدمن
     bindSupportHelpButton();
 
+    // ربط صفحة "عن سِكّاوي" ودليل التطبيق الشامل
+    bindAboutSakkawiEvents();
+
     // ربط مودال تفاصيل الوسام والشارة
     bindBadgeDetailsModalEvents();
 
@@ -6021,4 +6150,7 @@ export async function refreshProfileFromServerIfNeeded() {
 
 if (typeof window !== 'undefined') {
     window.refreshProfileFromServerIfNeeded = refreshProfileFromServerIfNeeded;
+    window.openAboutSakkawiPage = openAboutSakkawiPage;
+    window.closeAboutSakkawiPage = closeAboutSakkawiPage;
+    window.flushPendingStepsBatch = flushPendingStepsBatch;
 }

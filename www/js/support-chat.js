@@ -457,7 +457,7 @@ function showMessageInfoPopover(messageId) {
             <div class="flex items-center justify-between mb-1">
                 <h3 class="text-sm font-extrabold text-lux-50">معلومات الرسالة</h3>
                 <button type="button" id="supportMsgInfoCloseBtn" aria-label="إغلاق"
-                        class="w-7 h-7 flex items-center justify-center rounded-full text-lux-400 hover:text-lux-100 hover:bg-lux-800/70 transition-colors">✕</button>
+                        class="text-xs font-bold text-lux-400 hover:text-lux-100 px-2 py-1 rounded-lg hover:bg-lux-800/70 transition-colors">إغلاق</button>
             </div>
             <div class="divide-y-0">${rowsHtml}</div>
             ${deleteSectionHtml}
@@ -766,12 +766,12 @@ function setHeaderExitMode(mode) {
     if (!btn) return;
 
     if (mode === 'back') {
-        btn.textContent = '→';
+        btn.innerHTML = '<span class="text-base leading-none">›</span><span>رجوع</span>';
         btn.setAttribute('aria-label', 'رجوع لقائمة المحادثات');
         headerExitAction = showConversationsList;
     } else {
-        btn.textContent = '✕';
-        btn.setAttribute('aria-label', 'إغلاق');
+        btn.innerHTML = '<span class="text-base leading-none">›</span><span>رجوع</span>';
+        btn.setAttribute('aria-label', 'رجوع');
         headerExitAction = () => closeModal();
     }
 }

@@ -438,6 +438,7 @@ async function recordSlotResultOnServer(slot, status, extra = {}) {
             isCorrect: row.out_is_correct ?? null,
             pointsAwarded: row.out_points_awarded ?? 0,
             alreadyRecorded: Boolean(row.out_already_recorded),
+            correctOptionId: row.out_correct_option_id ? String(row.out_correct_option_id) : null,
         };
     } catch (err) {
         console.error('[daily-question.js] استثناء غير متوقع أثناء تسجيل نتيجة السؤال اليومي:', err);
@@ -499,11 +500,16 @@ async function finalizeSlot(slot, status, extra = {}) {
         ? serverResult.isCorrect
         : (typeof extra.isCorrect === 'boolean' ? extra.isCorrect : null);
 
+    const correctOptionId = serverResult?.correctOptionId || slotRuntime[slot]?.questionDef?.correctOptionId || null;
+
     storeSlotStatus(slot, status, verifiedIsCorrect);
 
-    // إعادة رسم بطاقة الـ Slot في الواجهة بالنتيجة المؤكدة
-    const slots = getStoredDailyState();
-    applyLockedUIForSlot(slot, slots[slot]);
+    // تطبيق التغذية الراجعة البصرية المؤكدة فور وصول رد السيرفر
+    if (status === 'answered' && extra.optionId) {
+        applyAnswerFeedbackUI(slot, extra.optionId, verifiedIsCorrect, correctOptionId);
+    } else if (status === 'timeout') {
+        applyTimeoutFeedbackUI(slot, correctOptionId);
+    }
 
     if (status === 'answered' && serverResult && !serverResult.alreadyRecorded) {
         document.dispatchEvent(new CustomEvent('dailyQuestion:answered', {
@@ -632,7 +638,7 @@ async function fetchTodaysQuestionsFromServer() {
                     text: String(opt.text || ''),
                 }))
                 : [],
-            correctOptionId: String(row.correct_option_id ?? ''),
+            correctOptionId: row.correct_option_id ? String(row.correct_option_id) : null,
         };
     });
 
@@ -917,16 +923,23 @@ function disableAllOptions(slot) {
  * @param {string} selectedOptionId
  * @param {boolean} isCorrect
  */
-function applyAnswerFeedbackUI(slot, selectedOptionId, isCorrect) {
+function applyAnswerFeedbackUI(slot, selectedOptionId, isCorrect, correctOptionId = null) {
     const { optionsGrid } = getDailyQuestionElements(slot);
-    const questionDef = slotRuntime[slot].questionDef;
-    if (!optionsGrid || !questionDef) return;
+    const questionDef = slotRuntime[slot]?.questionDef;
+    if (!optionsGrid) return;
+
+    const resolvedCorrectId = correctOptionId || questionDef?.correctOptionId;
 
     const selectedBtn = optionsGrid.querySelector(`[data-option-id="${selectedOptionId}"]`);
-    if (selectedBtn) selectedBtn.classList.add(isCorrect ? 'is-correct' : 'is-incorrect');
+    if (selectedBtn) {
+        selectedBtn.classList.remove('is-selected');
+        if (typeof isCorrect === 'boolean') {
+            selectedBtn.classList.add(isCorrect ? 'is-correct' : 'is-incorrect');
+        }
+    }
 
-    if (!isCorrect) {
-        const correctBtn = optionsGrid.querySelector(`[data-option-id="${questionDef.correctOptionId}"]`);
+    if (isCorrect === false && resolvedCorrectId) {
+        const correctBtn = optionsGrid.querySelector(`[data-option-id="${resolvedCorrectId}"]`);
         if (correctBtn) correctBtn.classList.add('is-correct-reveal');
     }
 }
@@ -936,14 +949,19 @@ function applyAnswerFeedbackUI(slot, selectedOptionId, isCorrect) {
  * معيّن - بتتنادى في حالة "خلص الوقت من غير ما المستخدم يجاوب" عشان
  * يتعلم الإجابة الصح
  * @param {1|2} slot
+ * @param {string|null} [correctOptionId]
  */
-function applyTimeoutFeedbackUI(slot) {
+function applyTimeoutFeedbackUI(slot, correctOptionId = null) {
     const { optionsGrid } = getDailyQuestionElements(slot);
-    const questionDef = slotRuntime[slot].questionDef;
-    if (!optionsGrid || !questionDef) return;
+    const questionDef = slotRuntime[slot]?.questionDef;
+    if (!optionsGrid) return;
 
-    const correctBtn = optionsGrid.querySelector(`[data-option-id="${questionDef.correctOptionId}"]`);
-    if (correctBtn) correctBtn.classList.add('is-correct-reveal');
+    const resolvedCorrectId = correctOptionId || questionDef?.correctOptionId;
+
+    if (resolvedCorrectId) {
+        const correctBtn = optionsGrid.querySelector(`[data-option-id="${resolvedCorrectId}"]`);
+        if (correctBtn) correctBtn.classList.add('is-correct-reveal');
+    }
 }
 
 /**
@@ -964,21 +982,22 @@ function handleOptionClick(slot, event) {
     const { timerSeconds } = getDailyQuestionElements(slot);
     const remainingSeconds = timerSeconds ? Number(timerSeconds.textContent) : 0;
     const selectedOptionId = optionBtn.dataset.optionId;
-    const isCorrect = String(selectedOptionId) === String(runtime.questionDef.correctOptionId);
 
     optionBtn.classList.add('is-selected');
     optionBtn.setAttribute('aria-checked', 'true');
-    applyAnswerFeedbackUI(slot, selectedOptionId, isCorrect);
 
     stopTimer(slot);
     disableAllOptions(slot);
 
-    // (إصلاح أمني) الحدث 'dailyQuestion:answered' اللي profiles.js بيسمعه
-    // عشان يعكس النقاط بقى بيتطلق من finalizeSlot *بعد* ما السيرفر يتحقق
-    // من الإجابة (شوف recordSlotResultOnServer) - مش من هنا مباشرة بقيمة
-    // isCorrect المحسوبة في المتصفح. isCorrect هنا بتستخدم بس للتلوين
-    // البصري الفوري (أخضر/أحمر) قبل ما رد السيرفر يوصل.
-    completeSlotAndAdvance(slot, 'answered', { optionId: selectedOptionId, isCorrect, remainingSeconds });
+    // إذا كانت الإجابة الصحيحة متوفرة محلياً (Fallback دون اتصال)، نطبق الألوان فوراً
+    let localIsCorrect = null;
+    if (runtime.questionDef.correctOptionId) {
+        localIsCorrect = String(selectedOptionId) === String(runtime.questionDef.correctOptionId);
+        applyAnswerFeedbackUI(slot, selectedOptionId, localIsCorrect, runtime.questionDef.correctOptionId);
+    }
+
+    // (إصلاح أمني) الحدث 'dailyQuestion:answered' وتأكيد النتيجة يتم في finalizeSlot بعد رد السيرفر
+    completeSlotAndAdvance(slot, 'answered', { optionId: selectedOptionId, isCorrect: localIsCorrect, remainingSeconds });
 }
 
 /**
@@ -1173,8 +1192,8 @@ function forfeitDueToExit(slot) {
  * @param {'answered'|'timeout'|'forfeited'} status
  * @param {{optionId?: string, remainingSeconds?: number, isCorrect?: boolean}} [extra]
  */
-function completeSlotAndAdvance(slot, status, extra = {}) {
-    finalizeSlot(slot, status, extra);
+async function completeSlotAndAdvance(slot, status, extra = {}) {
+    await finalizeSlot(slot, status, extra);
 
     const delayMs = status === 'forfeited' ? 0 : FEEDBACK_DISPLAY_MS;
 

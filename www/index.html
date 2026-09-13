@@ -7,6 +7,34 @@
     <meta name="description" content="منافسة محلية Gamified: امشِ، جاوب، وتصدّر لوحة الأبطال في منطقتك">
     <meta name="theme-color" content="#0B0D12">
 
+    <!-- حماية استباقية لاعتراض وإسكات أخطاء إضافات المتصفح المحقونة (Extensions / Web Vitals / Live Server) -->
+    <script>
+        (function() {
+            var suppressStartTimeError = function(e) {
+                var msg = (e && e.message) ? String(e.message) : '';
+                var file = (e && e.filename) ? String(e.filename) : '';
+                if (msg.indexOf('startTime') !== -1 && (msg.indexOf('reading') !== -1 || file.indexOf('VM') !== -1)) {
+                    if (e.preventDefault) e.preventDefault();
+                    if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+                    return true;
+                }
+            };
+            window.addEventListener('error', suppressStartTimeError, true);
+            var origOnError = window.onerror;
+            window.onerror = function(msg, url, line, col, err) {
+                var m = msg ? String(msg) : '';
+                var u = url ? String(url) : '';
+                if (m.indexOf('startTime') !== -1 && (m.indexOf('reading') !== -1 || u.indexOf('VM') !== -1)) {
+                    return true;
+                }
+                if (typeof origOnError === 'function') {
+                    return origOnError.apply(this, arguments);
+                }
+                return false;
+            };
+        })();
+    </script>
+
     <!-- ربط PWA Manifest -->
     <link rel="manifest" href="manifest.json">
 
@@ -2280,6 +2308,15 @@
                         <span class="text-lux-600">‹</span>
                     </button>
 
+                    <button id="btnAboutSakkawi" 
+                            class="w-full text-right py-3 px-3 flex items-center justify-between text-xs font-bold text-lux-200 hover:bg-lux-800 rounded-xl transition-colors">
+                        <div class="flex items-center gap-2.5">
+                            <span class="text-base flex items-center text-gold-400"><svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg></span>
+                            <span>عن سِكّاوي.. الدليل الشامل</span>
+                        </div>
+                        <span class="text-lux-600">‹</span>
+                    </button>
+
                     <!-- زرار تسجيل الخروج - لونه مختلف (Rose) عمداً عشان يفضل
                          واضح إنه إجراء مختلف عن باقي عناصر القايمة (مش تنقل
                          عادي لصفحة تانية) - مُدار من bindLogoutButton في
@@ -2689,6 +2726,292 @@
                                 فتح إعدادات التشغيل التلقائي
                             </button>
                         </div>
+                    </div>
+
+                </div>
+
+            </section>
+
+            <!-- ================================================================= -->
+            <!-- صفحة "عن سِكّاوي" - صفحة مستقلة تشرح هوية التطبيق، مميزاته، ودليل -->
+            <!-- ضبط العداد في الخلفية - مُدارة بالكامل من js/profiles.js          -->
+            <!-- ================================================================= -->
+            <section id="tab-about-sakkawi" class="tab-content space-y-5">
+
+                <!-- زرار الرجوع للبروفايل -->
+                <button type="button" id="btnBackFromAboutSakkawi"
+                        class="flex items-center gap-1.5 text-xs font-extrabold text-lux-300 hover:text-lux-50 transition-colors">
+                    <span class="text-base leading-none">›</span>
+                    <span>رجوع</span>
+                </button>
+
+                <div class="space-y-4 md:max-w-[560px] lg:max-w-[640px] md:mx-auto">
+
+                    <!-- الهيدر التعريفي الرئيسي -->
+                    <div class="bg-lux-900 rounded-3xl p-6 shadow-soft-card border border-gold-500/15 text-center space-y-3">
+                        <div class="w-14 h-14 mx-auto rounded-2xl bg-gradient-to-br from-gold-400 to-gold-600 p-0.5 shadow-glow-amber">
+                            <div class="w-full h-full bg-lux-950 rounded-[14px] flex items-center justify-center">
+                                <span class="font-black text-xl text-gold-400 font-cairo">سِـ</span>
+                            </div>
+                        </div>
+                        <div>
+                            <h2 class="text-lg font-extrabold text-lux-50 tracking-tight">عن سِكّاوي.. الدليل الشامل</h2>
+                            <p class="text-xs text-lux-400 font-medium mt-1 leading-relaxed">
+                                دليلك الكامل للتعرف على مميزات المنصة، قواعد المنافسة الرياضية، وضبط هاتفك لأعلى دقة في احتساب الخطوات
+                            </p>
+                        </div>
+                        <div class="flex items-center justify-center gap-2 pt-1 flex-wrap">
+                            <span class="text-[11px] font-bold text-gold-400 bg-gold-500/10 border border-gold-500/20 px-2.5 py-1 rounded-xl">الإصدار 1.0.0</span>
+                            <span class="text-[11px] font-bold text-teal-400 bg-teal-500/10 border border-teal-500/20 px-2.5 py-1 rounded-xl">منصة نشاط وتنافس رياضي</span>
+                        </div>
+                    </div>
+
+                    <!-- الأقسام القابلة للطي والفتح (Accordions) -->
+                    <div class="space-y-3" id="aboutAccordionsContainer">
+
+                        <!-- القسم 1: حكاية ورسالة سِكّاوي -->
+                        <div class="about-card bg-lux-900 rounded-2xl border border-lux-800 overflow-hidden transition-all">
+                            <button type="button" class="about-toggle-btn w-full p-4 flex items-center justify-between text-right hover:bg-lux-800/40 transition">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-8 h-8 rounded-xl bg-gold-500/10 border border-gold-500/20 flex items-center justify-center text-gold-400 shrink-0">
+                                        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                                    </div>
+                                    <span class="text-xs font-black text-lux-100">حكاية "سِكّاوي" ورسالتنا</span>
+                                </div>
+                                <svg class="w-4 h-4 text-lux-400 transition-transform duration-200 chevron-icon rotate-180" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+                            </button>
+                            <div class="about-content px-4 pb-4 pt-1 text-xs text-lux-300 leading-relaxed space-y-2.5 border-t border-lux-800/60">
+                                <p>
+                                    <strong class="text-gold-400">سِكّاوي مش مجرد عداد لحساب الخطوات..</strong> هي فكرة بدأت من إيماننا بأن الحركة اليومية والمشي هما الركيزة الأساسية لصحة أفضل ونشاط دائم.
+                                </p>
+                                <p>
+                                    صممنا المنصة لتكون بيئة رياضية واجتماعية تفاعلية تجمع المشتركين في تحدي يومي مستمر، بنشجع بعض على المشي والابتعاد عن الكسل، وبنحول خطواتك اليومية المعتادة إلى نقاط ملموسة ومنافسة شريفة وممتعة.
+                                </p>
+                                <p class="text-[11px] text-lux-400 bg-lux-800/50 p-3 rounded-xl border border-lux-700/40">
+                                    رسالتنا ببساطة: المشي رياضة في متناول الجميع، ومع سِكّاوي كل خطوة بتمشيها ليها قيمة معنوية وتنافسية بتثبت مكانتك بين أبطال المجتمع.
+                                </p>
+                            </div>
+                        </div>
+
+                        <!-- القسم 2: دليل دقة العداد وتشغيله في الخلفية (هام جداً) -->
+                        <div class="about-card bg-lux-900 rounded-2xl border border-gold-500/30 overflow-hidden transition-all shadow-soft-card">
+                            <button type="button" class="about-toggle-btn w-full p-4 flex items-center justify-between text-right hover:bg-lux-800/40 transition">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-8 h-8 rounded-xl bg-amber-500/15 border border-amber-500/25 flex items-center justify-center text-amber-400 shrink-0">
+                                        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                                    </div>
+                                    <span class="text-xs font-black text-lux-100">دليل دقة العداد وضمان عمله في الخلفية</span>
+                                </div>
+                                <svg class="w-4 h-4 text-lux-400 transition-transform duration-200 chevron-icon rotate-180" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+                            </button>
+                            <div class="about-content px-4 pb-4 pt-1 text-xs text-lux-300 leading-relaxed space-y-3 border-t border-lux-800/60">
+                                <div class="bg-amber-500/10 border border-amber-500/20 p-3 rounded-xl text-amber-300 text-[11px] leading-relaxed">
+                                    <strong>ليه العداد ممكن يتأخر أو يقف والموبايل مقفول؟</strong><br>
+                                    معظم هواتف الأندرويد الحديثة (شاومي، وسامسونج، وأوبو، وريلمي، وفيفو، وهواوي) بتطبق سياسات توفير طاقة صارمة جداً. أول ما شاشة الهاتف تقفل أو يوضع في الجيب، النظام بيوقف التطبيقات التي تعمل في الخلفية فوراً، وده اللي بيعطل حساس الحركة الداخلي.
+                                </div>
+                                <div class="space-y-2">
+                                    <p class="font-bold text-lux-200">خطوات بسيطة لضمان احتساب خطواتك بدقة كاملة:</p>
+                                    <div class="space-y-2 text-[11px]">
+                                        <div class="p-2.5 rounded-xl bg-lux-800/70 border border-lux-700/50">
+                                            <span class="font-bold text-gold-400 block mb-0.5">1. استثناء التطبيق من توفير البطارية (Battery Optimization)</span>
+                                            ادخل على إعدادات الهاتف -> التطبيقات -> تطبيق سِكّاوي -> البطارية -> اختار "غير مقيد" (Unrestricted) أو "عدم تحسين استهلاك البطارية".
+                                        </div>
+                                        <div class="p-2.5 rounded-xl bg-lux-800/70 border border-lux-700/50">
+                                            <span class="font-bold text-gold-400 block mb-0.5">2. تفعيل التشغيل التلقائي (Auto-start)</span>
+                                            لهواتف شاومي، أوبو، فيفو، وريلمي؛ ادخل على إعدادات التطبيق وفعّل خيار "التشغيل التلقائي" واسمح بالنشاط في الخلفية بدون قيود.
+                                        </div>
+                                        <div class="p-2.5 rounded-xl bg-lux-800/70 border border-lux-700/50">
+                                            <span class="font-bold text-gold-400 block mb-0.5">3. قفل التطبيق في قائمة التطبيقات الأخيرة (Lock in Recents)</span>
+                                            افتح شاشة التطبيقات المفتوحة مؤخراً، واضغط مطولاً على سِكّاوي واختار علامة "القفل"؛ عشان النظام ميمسحش التطبيق من الذاكرة عند تنظيف الرام.
+                                        </div>
+                                        <div class="p-2.5 rounded-xl bg-lux-800/70 border border-lux-700/50">
+                                            <span class="font-bold text-gold-400 block mb-0.5">4. التأكد من إذن النشاط البدني (Physical Activity)</span>
+                                            تأكد دائماً من منح التطبيق صلاحية "حساس النشاط والحركة" ليعمل المستشعر بكفاءة تامة.
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="bg-lux-800/50 p-3 rounded-xl border border-lux-700/40 text-[11px]">
+                                    <span class="font-bold text-lux-200 block mb-1">الفارق بين عداد سِكّاوي وتطبيق Google Fit:</span>
+                                    سِكّاوي بيعتمد على قراءة مستشعر الحركة الفيزيائي المباشر مع فلترة الحركات العشوائية واهتزازات المواصلات؛ حرصاً منا على نزاهة المنافسة وعدم احتساب خطوات وهمية.
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- القسم 3: نظام البطولة والمتصدرين -->
+                        <div class="about-card bg-lux-900 rounded-2xl border border-lux-800 overflow-hidden transition-all">
+                            <button type="button" class="about-toggle-btn w-full p-4 flex items-center justify-between text-right hover:bg-lux-800/40 transition">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-8 h-8 rounded-xl bg-gold-500/10 border border-gold-500/20 flex items-center justify-center text-gold-400 shrink-0">
+                                        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 21h8M12 17v4M7 4h10v4a5 5 0 0 1-10 0V4Z"/><path d="M7 5H4a2 2 0 0 0 0 4h1M17 5h3a2 2 0 0 1 0 4h-1"/></svg>
+                                    </div>
+                                    <span class="text-xs font-black text-lux-100">نظام البطولة ولوحة المتصدرين</span>
+                                </div>
+                                <svg class="w-4 h-4 text-lux-400 transition-transform duration-200 chevron-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+                            </button>
+                            <div class="about-content px-4 pb-4 pt-1 text-xs text-lux-300 leading-relaxed space-y-2 border-t border-lux-800/60 hidden">
+                                <p>
+                                    تعتمد لوحة المتصدرين على التحديث الحي؛ كل خطوة بتمشيها بترفع ترتيبك مباشرة بين المتنافسين.
+                                </p>
+                                <ul class="space-y-1.5 list-disc list-inside text-[11px] text-lux-400">
+                                    <li><strong class="text-lux-200">البطولة اليومية:</strong> تنتهي منافساتها يومياً عند الساعة 11:59 مساءً، ويتم تتويج أصحاب المراكز الثلاثة الأولى وتوثيق الفوز في سجل بطولاتهم.</li>
+                                    <li><strong class="text-lux-200">البطولة الأسبوعية والشهرية:</strong> تُحتسب بناءً على مجموع النقاط والخطوات التراكمية، وتمنح أبطالها أوسمة وتكريمات خاصة.</li>
+                                    <li><strong class="text-lux-200">معادلة النقاط:</strong> خطواتك اليومية تتحول إلى نقاط، وتضاف إليها نقاط المسابقات وإنجازات الستريك لتحديد الترتيب العام.</li>
+                                </ul>
+                            </div>
+                        </div>
+
+                        <!-- القسم 4: سلسلة الالتزام (Streak) -->
+                        <div class="about-card bg-lux-900 rounded-2xl border border-lux-800 overflow-hidden transition-all">
+                            <button type="button" class="about-toggle-btn w-full p-4 flex items-center justify-between text-right hover:bg-lux-800/40 transition">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-8 h-8 rounded-xl bg-orange-500/10 border border-orange-500/20 flex items-center justify-center text-orange-400 shrink-0">
+                                        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2c0 4-4 6-4 10a5 5 0 0 0 10 0c0-4-4-6-4-10z"/></svg>
+                                    </div>
+                                    <span class="text-xs font-black text-lux-100">سلسلة الالتزام اليومي (Streak)</span>
+                                </div>
+                                <svg class="w-4 h-4 text-lux-400 transition-transform duration-200 chevron-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+                            </button>
+                            <div class="about-content px-4 pb-4 pt-1 text-xs text-lux-300 leading-relaxed space-y-2 border-t border-lux-800/60 hidden">
+                                <p>
+                                    الستريك هو مقياس انضباطك واستمراريتك؛ كل يوم بتحقق فيه هدفك اليومي من الخطوات قبل منتصف الليل، عداد الستريك بيزيد يوماً إضافياً ويمنحك شارة مضيئة في بروفايلك.
+                                </p>
+                                <div class="bg-orange-500/10 border border-orange-500/20 p-2.5 rounded-xl text-[11px] text-orange-300">
+                                    <strong>تنبيه هام:</strong> إذا انتهى اليوم (11:59 مساءً) دون إكمال الهدف المطلوب، يعود عداد الستريك إلى الصفر، لذلك احرص دائماً على عدم تفويت أي يوم للحفاظ على سلسلتك القياسية.
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- القسم 5: مسابقة الأسئلة اليومية -->
+                        <div class="about-card bg-lux-900 rounded-2xl border border-lux-800 overflow-hidden transition-all">
+                            <button type="button" class="about-toggle-btn w-full p-4 flex items-center justify-between text-right hover:bg-lux-800/40 transition">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-8 h-8 rounded-xl bg-teal-500/10 border border-teal-500/20 flex items-center justify-center text-teal-400 shrink-0">
+                                        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                                    </div>
+                                    <span class="text-xs font-black text-lux-100">مسابقة التحدي والأسئلة اليومية</span>
+                                </div>
+                                <svg class="w-4 h-4 text-lux-400 transition-transform duration-200 chevron-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+                            </button>
+                            <div class="about-content px-4 pb-4 pt-1 text-xs text-lux-300 leading-relaxed space-y-2 border-t border-lux-800/60 hidden">
+                                <p>
+                                    تحدٍ ثقافي ورياضي يتجدد يومياً بسؤالين يظهران في شاشتك الرئيسية عند منتصف الليل.
+                                </p>
+                                <ul class="space-y-1.5 list-disc list-inside text-[11px] text-lux-400">
+                                    <li><strong class="text-lux-200">المهلة الزمنية:</strong> 25 ثانية فقط لكل سؤال لضمان سرعة التفكير والنزاهة ومنع البحث.</li>
+                                    <li><strong class="text-lux-200">مكافأة الإجابة:</strong> كل إجابة صحيحة تمنحك نقاطاً فورية وتزيد من نسبة دقتك المسجلة في بروفايلك الشخصي.</li>
+                                </ul>
+                            </div>
+                        </div>
+
+                        <!-- القسم 6: المجتمع والمشاركة (القصص والمنشورات) -->
+                        <div class="about-card bg-lux-900 rounded-2xl border border-lux-800 overflow-hidden transition-all">
+                            <button type="button" class="about-toggle-btn w-full p-4 flex items-center justify-between text-right hover:bg-lux-800/40 transition">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-8 h-8 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400 shrink-0">
+                                        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                                    </div>
+                                    <span class="text-xs font-black text-lux-100">المجتمع والمشاركة (القصص والمنشورات)</span>
+                                </div>
+                                <svg class="w-4 h-4 text-lux-400 transition-transform duration-200 chevron-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+                            </button>
+                            <div class="about-content px-4 pb-4 pt-1 text-xs text-lux-300 leading-relaxed space-y-2 border-t border-lux-800/60 hidden">
+                                <p>
+                                    بيئة رياضية تفاعلية لمتابعة حماس المجتمع ومشاركة إنجازاتك وفق الضوابط التالية:
+                                </p>
+                                <ul class="space-y-1.5 list-disc list-inside text-[11px] text-lux-400">
+                                    <li><strong class="text-lux-200">القصص اليومية (Stories):</strong> يمكن للأعضاء نشر قصص نصية فقط تستمر لمدة 12 ساعة أو 24 ساعة، مع إمكانية إرفاق ملصق إنجاز الخطوات اليومية، ولا يُتاح نشر أي صور أو وسائط، فالمحتوى نصي وإنجاز خطوات فقط.</li>
+                                    <li><strong class="text-lux-200">المنشورات العامة (Feed):</strong> مخصصة وحصرية لإدارة سِكّاوي لنشر التحديثات والتوجيهات الرسمية، ويمكن لكافة الأعضاء التفاعل معها بالإعجابات والتعليقات دون إمكانية إنشاء منشورات عامة خاصة.</li>
+                                </ul>
+                            </div>
+                        </div>
+
+                        <!-- القسم 7: دولاب الأوسمة والشارات -->
+                        <div class="about-card bg-lux-900 rounded-2xl border border-lux-800 overflow-hidden transition-all">
+                            <button type="button" class="about-toggle-btn w-full p-4 flex items-center justify-between text-right hover:bg-lux-800/40 transition">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-8 h-8 rounded-xl bg-gold-500/10 border border-gold-500/20 flex items-center justify-center text-gold-400 shrink-0">
+                                        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="15" r="5"/><path d="M9 10.5 6 3M15 10.5 18 3"/></svg>
+                                    </div>
+                                    <span class="text-xs font-black text-lux-100">دولاب الأوسمة وألقاب الشرف</span>
+                                </div>
+                                <svg class="w-4 h-4 text-lux-400 transition-transform duration-200 chevron-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+                            </button>
+                            <div class="about-content px-4 pb-4 pt-1 text-xs text-lux-300 leading-relaxed space-y-2 border-t border-lux-800/60 hidden">
+                                <p>
+                                    يضم التطبيق منظومة شارات تفتح تدريجياً كلما حققت أرقاماً قياسية جديدة في المشي، أو حافظت على ستريك طويل، أو تفوقت في دقة الإجابات.
+                                </p>
+                                <p class="text-[11px] text-lux-400">
+                                    كل وسام تفتحه يمنحك لقباً شرفياً مميزاً يمكنك اختياره ليزين بطاقة بروفايلك أمام كافة المشتركين.
+                                </p>
+                            </div>
+                        </div>
+
+                        <!-- القسم 8: شبكة الأصدقاء والتحدي المباشر -->
+                        <div class="about-card bg-lux-900 rounded-2xl border border-lux-800 overflow-hidden transition-all">
+                            <button type="button" class="about-toggle-btn w-full p-4 flex items-center justify-between text-right hover:bg-lux-800/40 transition">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-8 h-8 rounded-xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-400 shrink-0">
+                                        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.5 3-5.5 6.5-5.5s6.5 2 6.5 5.5"/><circle cx="17" cy="8.5" r="3"/><path d="M14.5 14.7c.6-.15 1.2-.2 1.8-.2 3 0 5.7 1.8 5.7 5"/></svg>
+                                    </div>
+                                    <span class="text-xs font-black text-lux-100">شبكة الأصدقاء والتحدي المباشر</span>
+                                </div>
+                                <svg class="w-4 h-4 text-lux-400 transition-transform duration-200 chevron-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+                            </button>
+                            <div class="about-content px-4 pb-4 pt-1 text-xs text-lux-300 leading-relaxed space-y-2 border-t border-lux-800/60 hidden">
+                                <p>
+                                    يمكنك البحث عن أصدقائك وإضافتهم لمتابعة خطواتهم اليومية، بطولاتهم السابقة، وتحديهم بشكل مباشر؛ مما يخلق حافزاً قوياً للالتزام والتفوق.
+                                </p>
+                            </div>
+                        </div>
+
+                        <!-- القسم 9: الإشعارات الذكية -->
+                        <div class="about-card bg-lux-900 rounded-2xl border border-lux-800 overflow-hidden transition-all">
+                            <button type="button" class="about-toggle-btn w-full p-4 flex items-center justify-between text-right hover:bg-lux-800/40 transition">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-8 h-8 rounded-xl bg-gold-500/10 border border-gold-500/20 flex items-center justify-center text-gold-400 shrink-0">
+                                        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+                                    </div>
+                                    <span class="text-xs font-black text-lux-100">منظومة الإشعارات الذكية</span>
+                                </div>
+                                <svg class="w-4 h-4 text-lux-400 transition-transform duration-200 chevron-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+                            </button>
+                            <div class="about-content px-4 pb-4 pt-1 text-xs text-lux-300 leading-relaxed space-y-2 border-t border-lux-800/60 hidden">
+                                <p>
+                                    تعتمد المنصة على تنبيهات موجهة ذكية تظهر في التوقيت المناسب فقط:
+                                </p>
+                                <ul class="space-y-1.5 list-disc list-inside text-[11px] text-lux-400">
+                                    <li>تذكير الهدف اليومي في المساء إذا لم تكتمل خطواتك بعد.</li>
+                                    <li>تنبيه إنقاذ الستريك قبل إغلاق اليوم للحفاظ على سلسلتك.</li>
+                                    <li>إشعار تخطي المراكز عند تقدم المنافسين في جدول الترتيب.</li>
+                                </ul>
+                            </div>
+                        </div>
+
+                        <!-- القسم 10: الأمان والخصوصية والدعم الفني -->
+                        <div class="about-card bg-lux-900 rounded-2xl border border-lux-800 overflow-hidden transition-all">
+                            <button type="button" class="about-toggle-btn w-full p-4 flex items-center justify-between text-right hover:bg-lux-800/40 transition">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-8 h-8 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 shrink-0">
+                                        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                                    </div>
+                                    <span class="text-xs font-black text-lux-100">الخصوصية، النزاهة، والدعم الفني</span>
+                                </div>
+                                <svg class="w-4 h-4 text-lux-400 transition-transform duration-200 chevron-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+                            </button>
+                            <div class="about-content px-4 pb-4 pt-1 text-xs text-lux-300 leading-relaxed space-y-2.5 border-t border-lux-800/60 hidden">
+                                <p>
+                                    <strong class="text-lux-200">خصوصيتك خط أحمر:</strong> التطبيق لا يتتبع ولا يخزن أي مسارات جغرافية أو أماكن تزورها إطلاقاً؛ تتبعنا مقتصر حصراً على حركة الخطوات والنشاط البدني.
+                                </p>
+                                <p>
+                                    <strong class="text-lux-200">النزاهة الرياضية:</strong> نطبق أنظمة حماية لمنع التلاعب وحساب الخطوات غير الحقيقية، لتظل المنافسة شريفة ومستحقة.
+                                </p>
+                                <div class="pt-2 border-t border-lux-800/80 flex items-center justify-between text-[11px] text-lux-400">
+                                    <span>سِكّاوي — الإصدار 1.0.0</span>
+                                    <span class="text-gold-400 font-bold">كل خطوة تفرق</span>
+                                </div>
+                            </div>
+                        </div>
+
                     </div>
 
                 </div>
@@ -3455,7 +3778,7 @@
                  class="support-modal-card w-full max-w-sm bg-lux-900 rounded-[28px] p-6 text-center">
 
                 <!-- زر الإغلاق (أعلى يمين الكارت) -->
-                <button type="button" id="supportModalCloseBtn" class="support-modal-close-btn"
+                <button type="button" id="supportModalCloseBtn" class="support-modal-close-btn hidden"
                         aria-label="إغلاق مودال الدعم الفني">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"
                          stroke-linecap="round" stroke-linejoin="round">
@@ -3543,7 +3866,7 @@
 
                 <!-- زر الإغلاق (أعلى يمين الكارت) - إغلاق بس، مش "متسجلش
                      تاني أبداً" - هيرجع يظهر تاني بعد فترة تصفح كمان -->
-                <button type="button" id="guestReminderModalCloseBtn" class="support-modal-close-btn"
+                <button type="button" id="guestReminderModalCloseBtn" class="support-modal-close-btn hidden"
                         aria-label="إغلاق">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"
                          stroke-linecap="round" stroke-linejoin="round">
@@ -3654,10 +3977,10 @@
             <button id="storyDeleteBtn" type="button"
                     class="hidden absolute bottom-5 right-4 z-30 w-9 h-9 flex items-center justify-center rounded-full bg-black/40 hover:bg-rose-500/70 text-white/90 hover:text-white text-base leading-none transition-colors"
                     aria-label="حذف الاستوري"><svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"/><path d="M9 7V4h6v3"/><path d="M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13"/><path d="M10 11v6M14 11v6"/></svg></button>
-            <!-- زر إغلاق الاستوري - متمركز على اليسار بمحاذاة صاحب الاستوري وبعيداً عن أشرطة النظام -->
+            <!-- زر إغلاق الاستوري - مخفي لتوفير تجربة سحب ونقر نقية بدون أي علامة x -->
             <button id="storyCloseBtn"
-                    class="absolute top-[max(4.25rem,calc(env(safe-area-inset-top,0px)+2.25rem))] left-3.5 z-30 w-8 h-8 flex items-center justify-center rounded-full bg-black/40 hover:bg-black/60 text-white/90 hover:text-white text-sm leading-none backdrop-blur-sm transition-colors"
-                    aria-label="إغلاق الاستوري">x</button>
+                    class="hidden absolute top-[max(4.25rem,calc(env(safe-area-inset-top,0px)+2.25rem))] left-3.5 z-30 w-8 h-8 flex items-center justify-center rounded-full bg-black/40 hover:bg-black/60 text-white/90 hover:text-white text-sm leading-none backdrop-blur-sm transition-colors"
+                    aria-label="إغلاق الاستوري"></button>
         </div>
     </div>
 
@@ -3675,7 +3998,7 @@
                 <h2 class="text-base font-extrabold text-lux-50 tracking-tight">
                     <span class="inline-flex items-center gap-1.5"><svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg> شافها <span id="storyViewersModalCount">0</span></span>
                 </h2>
-                <button type="button" id="btnCloseStoryViewers" class="text-lux-400 hover:text-lux-100 text-lg leading-none">x</button>
+                <button type="button" id="btnCloseStoryViewers" class="hidden text-lux-400 hover:text-lux-100 text-lg leading-none"></button>
             </div>
 
             <div id="storyViewersList" class="space-y-2 overflow-y-auto flex-1 min-h-[80px]">
@@ -3760,7 +4083,7 @@
          class="hidden fixed inset-0 z-[10000] flex flex-col items-center justify-center bg-black/95 backdrop-blur-md p-4 select-none"
          role="dialog" aria-modal="true" aria-label="معاينة الصورة">
         <button type="button" id="postImageViewerCloseBtn"
-                class="absolute top-4 right-4 z-10 w-11 h-11 rounded-full bg-white/10 hover:bg-white/20 active:scale-95 text-white flex items-center justify-center transition-all focus:outline-none"
+                class="hidden absolute top-4 right-4 z-10 w-11 h-11 rounded-full bg-white/10 hover:bg-white/20 active:scale-95 text-white flex items-center justify-center transition-all focus:outline-none"
                 aria-label="إغلاق">
             <svg class="w-6 h-6 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <line x1="18" y1="6" x2="6" y2="18"></line>
@@ -3828,11 +4151,10 @@
         <!-- زر الإغلاق العلوي العائم (Minimal Floating Close Button) في مساحة آمنة -->
         <div class="absolute top-[max(2.8rem,calc(env(safe-area-inset-top,0px)+1rem))] left-4 z-40">
             <button type="button" id="btnCloseCreateStory"
-                    aria-label="إغلاق"
+                    aria-label="رجوع"
                     class="w-10 h-10 flex items-center justify-center rounded-full bg-lux-950/60 hover:bg-lux-900 border border-white/10 text-white/90 hover:text-white backdrop-blur-md shadow-lg transition-all active:scale-95">
                 <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                    <line x1="18" y1="6" x2="6" y2="18"></line>
-                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                    <path d="m9 18 6-6-6-6"/>
                 </svg>
             </button>
         </div>
@@ -3939,8 +4261,8 @@
     <div id="avatarLightbox"
          class="hidden fixed inset-0 z-[95] bg-black/90 backdrop-blur-sm flex items-center justify-center p-6">
         <button type="button" id="btnCloseAvatarLightbox"
-                class="absolute top-[max(2.75rem,calc(env(safe-area-inset-top,0px)+1.5rem))] left-1/2 -translate-x-1/2 z-10 w-9 h-9 flex items-center justify-center rounded-full bg-black/40 hover:bg-black/60 text-white/90 hover:text-white text-base leading-none transition-colors"
-                aria-label="إغلاق">x</button>
+                class="hidden absolute top-[max(2.75rem,calc(env(safe-area-inset-top,0px)+1.5rem))] left-1/2 -translate-x-1/2 z-10 w-9 h-9 flex items-center justify-center rounded-full bg-black/40 hover:bg-black/60 text-white/90 hover:text-white text-base leading-none transition-colors"
+                aria-label="إغلاق"></button>
         <img id="avatarLightboxImage" src="" alt="صورة مكبّرة"
              class="max-w-full max-h-full rounded-2xl object-contain shadow-2xl">
     </div>
@@ -4054,7 +4376,7 @@
                     </button>
                     <button type="button" id="btnCloseNotifications"
                             aria-label="إغلاق الإشعارات"
-                            class="text-lux-400 hover:text-lux-100 text-lg leading-none transition-colors">x</button>
+                            class="hidden text-lux-400 hover:text-lux-100 text-lg leading-none transition-colors"></button>
                 </div>
             </div>
 
@@ -4172,8 +4494,11 @@
                     <h2 id="supportChatTitle" class="text-base font-extrabold text-lux-50 tracking-tight truncate">شات الدعم</h2>
                 </div>
                 <button type="button" id="btnCloseSupportChat"
-                        aria-label="إغلاق"
-                        class="shrink-0 w-8 h-8 flex items-center justify-center rounded-full text-lux-400 hover:text-lux-100 hover:bg-lux-800/70 text-lg leading-none transition-colors">x</button>
+                        aria-label="رجوع"
+                        class="shrink-0 flex items-center gap-1 text-xs font-extrabold text-lux-400 hover:text-lux-100 hover:bg-lux-800/70 px-2.5 py-1.5 rounded-xl transition-colors">
+                    <span class="text-base leading-none">›</span>
+                    <span>رجوع</span>
+                </button>
             </div>
 
             <!-- قائمة المحادثات - الأدمن بس (initListSupportConversations) -->
@@ -4354,7 +4679,7 @@
     <!-- مودال الإعلان العام (In-App Announcement Modal) -->
     <div id="announcementModal" class="hidden fixed inset-0 z-[9990] bg-lux-950/80 backdrop-blur-md flex items-center justify-center p-4">
         <div class="bg-lux-900 border border-gold-500/20 rounded-3xl max-w-sm w-full p-5 space-y-4 shadow-2xl relative">
-            <button id="announcementModalCloseBtn" type="button" class="absolute top-4 left-4 text-lux-400 hover:text-lux-100 transition p-1">
+            <button id="announcementModalCloseBtn" type="button" class="hidden absolute top-4 left-4 text-lux-400 hover:text-lux-100 transition p-1">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
             </button>
             <img id="announcementModalImage" src="" alt="إعلان" class="hidden w-full max-h-56 object-contain rounded-2xl border border-lux-800 bg-lux-950/60">

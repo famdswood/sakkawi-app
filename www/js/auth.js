@@ -38,7 +38,7 @@
 import { supabaseClient } from './supabase-config.js';
 import { pushModalState, closeModal } from './modal-history.js';
 import { showAuthGate } from './onboarding.js';
-import { checkLocationForSignup, getUserCoordinates } from './geofence.js';
+import { checkLocationForSignup, getUserCoordinates, fetchGeofenceSettings, calculateDistanceMeters } from './geofence.js';
 import { DEFAULT_AVATAR_URI } from './profiles.js';
 
 /** يحدّد حالياً الفورم شغال في وضع دخول ولا تسجيل حساب جديد */
@@ -184,7 +184,7 @@ export function validateAvatarFile(file) {
 
 /* (تحديث): شيلنا أفاتارات placehold.co المنفصلة حسب النوع (ذكر/أنثى) اللي
    كانت هنا - كانت بترجع صورة بخلفية ملونة لكن بعلامة استفهام "؟" بدل
-   الإيموجي (👦/👧) لمشكلة في عرض الإيموجي عند placehold.co، فكانت بتتخزن
+   الرمز (ولد/بنت) لمشكلة في عرض الرموز عند placehold.co، فكانت بتتخزن
    كـ avatar_url حقيقية للمستخدم في قاعدة البيانات (مش مجرد fallback مؤقت)
    وتفضل ظاهرة كده في كل مكان (الليدربورد، البروفايل العام..إلخ) لحد ما
    يرفع صورة حقيقية. دلوقتي بنستخدم نفس أيقونة "مفيش صورة" الموحدة
@@ -1000,16 +1000,49 @@ async function signUpWithUsername(username, password, extraProfileData) {
     try {
         const fullName = `${extraProfileData.firstName} ${extraProfileData.lastName}`.trim();
 
+        // التقاط موقع التسجيل وحساب المسافة عن مركز نزلة عبيد
+        let signupLocationData = null;
+        try {
+            const rawCoords = await getUserCoordinates();
+            if (rawCoords && typeof rawCoords.latitude === 'number') {
+                const zoneSettings = await fetchGeofenceSettings();
+                const distMeters = Math.round(
+                    calculateDistanceMeters(
+                        rawCoords.latitude,
+                        rawCoords.longitude,
+                        zoneSettings.centerLatitude,
+                        zoneSettings.centerLongitude
+                    )
+                );
+                signupLocationData = {
+                    latitude: rawCoords.latitude,
+                    longitude: rawCoords.longitude,
+                    accuracyMeters: Math.round(rawCoords.accuracyMeters || 0),
+                    distanceMeters: distMeters,
+                };
+            }
+        } catch (locErr) {
+            console.warn('تعذر التقاط إحداثيات التسجيل بدقة:', locErr.message);
+        }
+
+        const authDataPayload = {
+            username: username.trim(),
+            first_name: extraProfileData.firstName,
+            last_name: extraProfileData.lastName,
+            full_name: fullName,
+        };
+        if (signupLocationData) {
+            authDataPayload.signup_lat = signupLocationData.latitude;
+            authDataPayload.signup_lng = signupLocationData.longitude;
+            authDataPayload.signup_distance_meters = signupLocationData.distanceMeters;
+            authDataPayload.signup_accuracy_meters = signupLocationData.accuracyMeters;
+        }
+
         const { data, error } = await supabaseClient.auth.signUp({
             email: internalEmail,
             password,
             options: {
-                data: {
-                    username: username.trim(),
-                    first_name: extraProfileData.firstName,
-                    last_name: extraProfileData.lastName,
-                    full_name: fullName,
-                },
+                data: authDataPayload,
             },
         });
 
@@ -1050,26 +1083,47 @@ async function signUpWithUsername(username, password, extraProfileData) {
             }
         }
 
-        const { error: insertError } = await supabaseClient
-            .from('profiles')
-            // upsert بدل insert: لو الـ Trigger الاحتياطي في الداتابيز
-            // سبق واتعمل صف مبدئي للمستخدم ده أول ما اتسجل في auth.users،
-            // insert العادي كان هيفشل بخطأ تكرار المفتاح الأساسي (duplicate key).
-            // upsert بيتعامل مع الحالتين بأمان: لو الصف مش موجود بينشئه، ولو
-            // موجود بيكمّله/يحدّثه بالبيانات الكاملة من فورم التسجيل.
-            // ملاحظة: أعمدة الإحصائيات (الخطوات والنقاط) محذوفة عمداً من هنا
-            // لأنها محمية على السيرفر ولا يصح للعميل محاولة تعديلها.
-            .upsert({
-                id: newUser.id,
-                username: username.trim(),
-                full_name: fullName,
-                first_name: extraProfileData.firstName,
-                last_name: extraProfileData.lastName,
-                birth_date: extraProfileData.birthDate,
-                gender: extraProfileData.gender,
-                phone: extraProfileData.phone || null,
-                avatar_url: avatarUrl,
-            }, { onConflict: 'id' });
+        const baseProfilePayload = {
+            id: newUser.id,
+            username: username.trim(),
+            full_name: fullName,
+            first_name: extraProfileData.firstName,
+            last_name: extraProfileData.lastName,
+            birth_date: extraProfileData.birthDate,
+            gender: extraProfileData.gender,
+            phone: extraProfileData.phone || null,
+            avatar_url: avatarUrl,
+            last_lat: signupLocationData ? signupLocationData.latitude : null,
+            last_lng: signupLocationData ? signupLocationData.longitude : null,
+        };
+
+        // محاولة الحفظ مع أعمدة موقع التسجيل أولاً، مع تراجع آمن في حال عدم وجود الأعمدة
+        let insertError = null;
+        if (signupLocationData) {
+            const extendedPayload = {
+                ...baseProfilePayload,
+                signup_lat: signupLocationData.latitude,
+                signup_lng: signupLocationData.longitude,
+                signup_distance_meters: signupLocationData.distanceMeters,
+                signup_accuracy_meters: signupLocationData.accuracyMeters,
+            };
+            const res = await supabaseClient
+                .from('profiles')
+                .upsert(extendedPayload, { onConflict: 'id' });
+            if (res.error && (res.error.code === '42703' || res.error.message?.includes('signup_'))) {
+                const fallbackRes = await supabaseClient
+                    .from('profiles')
+                    .upsert(baseProfilePayload, { onConflict: 'id' });
+                insertError = fallbackRes.error;
+            } else {
+                insertError = res.error;
+            }
+        } else {
+            const res = await supabaseClient
+                .from('profiles')
+                .upsert(baseProfilePayload, { onConflict: 'id' });
+            insertError = res.error;
+        }
 
         if (insertError) {
             console.error('خطأ في حفظ بروفايل المستخدم بعد التسجيل:', insertError.message);

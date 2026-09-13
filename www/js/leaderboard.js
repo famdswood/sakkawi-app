@@ -335,6 +335,8 @@ function tickCountdown(period) {
     // الجديدة تقفز لأعلى بفارق كبير عن القيمة اللي قبلها مباشرة (يعني
     // إحنا عدّينا نقطة النهاية القديمة ووصلنا لبداية دورة تانية بعيدة)
     if (lastKnownRemainingSeconds !== null && remainingSeconds > lastKnownRemainingSeconds + 5) {
+        leaderboardRows = [];
+        lastRenderedLeaderboardSignature = null;
         loadAndRenderPeriod(period);
     }
     lastKnownRemainingSeconds = remainingSeconds;
@@ -1488,6 +1490,38 @@ function clearLeaderboardLoadingState() {
  * نتيجته لما توصل متأخرة عشان بيانات بطولة غلط ماتظهرش فوق تبويب جديد.
  * @param {'today'|'week'|'month'} periodKey
  */
+/**
+ * توليد مفتاح كاش مرتبط بتاريخ الفترة بتوقيت القاهرة (Africa/Cairo)
+ * لضمان عدم عرض بيانات اليوم/الأسبوع/الشهر المنتهي عند حلول الساعة 12:00 ص بتوقيت القاهرة
+ * @param {'today'|'week'|'month'} periodKey
+ * @returns {string}
+ */
+export function getLeaderboardCacheKey(periodKey) {
+    const nowParts = getCairoWallClockParts(new Date());
+    const dateStr = `${nowParts.year}-${String(nowParts.month).padStart(2, '0')}-${String(nowParts.day).padStart(2, '0')}`;
+
+    if (periodKey === 'today') {
+        return `cached_leaderboard:daily:${dateStr}`;
+    }
+
+    if (periodKey === 'week') {
+        const dateOnlyUTC = Date.UTC(nowParts.year, nowParts.month - 1, nowParts.day);
+        const weekday = new Date(dateOnlyUTC).getUTCDay();
+        const daysSinceMonday = (weekday + 6) % 7;
+        const mondayUTC = new Date(dateOnlyUTC - daysSinceMonday * 86400000);
+        const monParts = getCairoWallClockParts(mondayUTC);
+        const weekStr = `${monParts.year}-${String(monParts.month).padStart(2, '0')}-${String(monParts.day).padStart(2, '0')}`;
+        return `cached_leaderboard:weekly:${weekStr}`;
+    }
+
+    if (periodKey === 'month') {
+        const monthStr = `${nowParts.year}-${String(nowParts.month).padStart(2, '0')}`;
+        return `cached_leaderboard:monthly:${monthStr}`;
+    }
+
+    return `cached_leaderboard:${periodKey}:${dateStr}`;
+}
+
 async function loadAndRenderPeriod(periodKey, options = {}) {
     const config = CHAMPIONSHIP_PERIODS[periodKey];
     if (!config) return;
@@ -1508,7 +1542,7 @@ async function loadAndRenderPeriod(periodKey, options = {}) {
 
     await Promise.all([
         fetchWithCache(
-            `cached_leaderboard:${periodKey}`,
+            getLeaderboardCacheKey(periodKey),
             () => fetchLeaderboardData(periodKey),
             (rows, _source) => {
                 if (requestToken !== leaderboardFetchToken) return;

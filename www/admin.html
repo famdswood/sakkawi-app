@@ -375,6 +375,33 @@
         .admin-color-input::-webkit-color-swatch-wrapper { padding: 0.15rem; }
         .admin-color-input::-webkit-color-swatch { border-radius: 0.25rem; border: none; }
         .admin-color-input::-moz-color-swatch { border-radius: 0.25rem; border: none; }
+
+        /* شارة الموقع الجغرافي والبعد عن مركز نزلة عبيد */
+        .admin-location-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+            font-size: 0.6rem;
+            font-weight: 700;
+            padding: 0.15rem 0.45rem;
+            border-radius: 9999px;
+            white-space: nowrap;
+        }
+        .admin-location-pill.is-inside {
+            background: rgba(16, 185, 129, 0.15);
+            color: #34d399;
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+        .admin-location-pill.is-outside {
+            background: rgba(245, 158, 11, 0.15);
+            color: #fbbf24;
+            border: 1px solid rgba(245, 158, 11, 0.3);
+        }
+        .admin-location-pill.is-unknown {
+            background: rgba(107, 114, 128, 0.15);
+            color: #9ca3af;
+            border: 1px solid rgba(107, 114, 128, 0.3);
+        }
     </style>
     <!-- Cropper.js - قص دائري لصورة هوية التطبيق (widget "identityWidget"
          جوه تاب المنشورات) - مكتبة خفيفة عن طريق CDN بدل ما تتبنى من
@@ -488,6 +515,12 @@
                             <rect x="16" y="3" width="4" height="17" rx="1"></rect>
                         </svg>
                         <span>الزوار والنشاط</span>
+                    </button>
+                    <button type="button" class="admin-nav-tab admin-nav-tab--side" data-tab-target="tabPanelSponsors">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4 text-gold-400">
+                            <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path>
+                        </svg>
+                        <span>إحصائيات الرعاة (Media Kit)</span>
                     </button>
                 </div>
 
@@ -690,6 +723,22 @@
             <!-- ------------------------------------------------------- -->
             <section id="tabPanelVisitors" class="admin-tab-panel space-y-4">
 
+                <!-- بطاقة تحويل سريعة لملف الرعاة والإعلانات -->
+                <div class="p-4 rounded-2xl bg-gradient-to-r from-amber-500/10 via-lux-900/60 to-lux-900/40 border border-gold-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-soft-card">
+                    <div class="space-y-0.5">
+                        <div class="flex items-center gap-2">
+                            <span class="w-2 h-2 rounded-full bg-gold-400"></span>
+                            <h3 class="text-xs font-black text-lux-100">ملف الرعاة والمعلنين (Sponsor Media Kit)</h3>
+                            <span class="px-2 py-0.5 rounded-full text-[9px] font-bold bg-gold-500/20 text-gold-300 border border-gold-500/30">جديد</span>
+                        </div>
+                        <p class="text-[11px] text-lux-400">بيانات القوة الشرائية، تكرار فتح التطبيق، ونسب الاحتفاظ جاهزة للتقديم للرعاة المحليين</p>
+                    </div>
+                    <button type="button" class="admin-nav-tab shrink-0 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-gold-500 to-amber-500 hover:from-gold-400 hover:to-amber-400 text-lux-950 text-xs font-black transition shadow flex items-center justify-center gap-1.5" data-tab-target="tabPanelSponsors">
+                        <span>فتح لوحة الرعاة</span>
+                        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                    </button>
+                </div>
+
                 <section id="visitorsWidget"
                          class="admin-card bg-lux-900/40 rounded-2xl p-5 md:p-6 border border-lux-800/70 space-y-5">
 
@@ -776,6 +825,240 @@
                         </div>
                     </div>
                 </section>
+
+            </section>
+
+            <!-- ------------------------------------------------------- -->
+            <!-- تاب إحصائيات الرعاة والشراكات والإعلانات (Media Kit) -->
+            <!-- ------------------------------------------------------- -->
+            <section id="tabPanelSponsors" class="admin-tab-panel hidden space-y-4">
+
+                <!-- الهيدر والترحيب بالرعاة وزر نسخ بطاقة العرض -->
+                <div class="admin-card bg-lux-900/40 rounded-2xl p-5 md:p-6 border border-lux-800/70 space-y-4">
+                    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <div class="space-y-1">
+                            <div class="flex items-center gap-2">
+                                <span class="w-2.5 h-2.5 rounded-full bg-gold-400 shadow-glow-amber"></span>
+                                <h2 class="text-base font-black text-lux-50">إحصائيات الرعاة والإعلانات (Sponsor Media Kit)</h2>
+                                <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-gold-500/20 text-gold-300 border border-gold-500/30">ملف الشركاء</span>
+                            </div>
+                            <p class="text-xs text-lux-400 font-medium">
+                                مؤشرات القوة التسويقية والتفاعل الحقيقي في نزلة عبيد لتقديمها للمعلنين والمحال التجارية
+                            </p>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <button type="button" id="btnRefreshSponsorStats" class="px-3 py-2 rounded-xl bg-lux-800 hover:bg-lux-700 text-lux-200 border border-lux-700 text-xs font-bold transition flex items-center gap-1.5" title="تحديث الأرقام">
+                                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+                                <span>تحديث</span>
+                            </button>
+                            <button type="button" id="btnCopyPitchCard" class="px-4 py-2 rounded-xl bg-gradient-to-r from-gold-500 to-amber-500 hover:from-gold-400 hover:to-amber-400 text-lux-950 text-xs font-black transition shadow flex items-center gap-2">
+                                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                                <span>نسخ بطاقة العرض للواتساب</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 1. إحصائيات تكرار الاستخدام والظهور البصري (Daily High-Frequency Usage) -->
+                <div class="admin-card bg-lux-900/40 rounded-2xl p-5 md:p-6 border border-lux-800/70 space-y-4">
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <span class="w-2 h-2 rounded-full bg-cyan-400"></span>
+                            <h3 class="text-sm font-extrabold text-lux-100">1. تكرار الاستخدام والظهور البصري (High-Frequency Impressions)</h3>
+                        </div>
+                        <p class="text-xs text-lux-400 font-medium mt-0.5">
+                            سِكّاوي ليس تطبيقاً عابراً، بل عادة يومية يفتحها البطل عدة مرات لمتابعة خطواته ومنافسة جيرانه
+                        </p>
+                    </div>
+
+                    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                        <div class="border border-lux-800/80 bg-lux-950/50 rounded-xl p-3.5 text-center">
+                            <div id="sponsorMonthlyImpressions" class="text-xl md:text-2xl font-mono font-black text-cyan-400 tabular-nums">—</div>
+                            <div class="text-[11px] font-bold text-lux-200 mt-1">مشاهدات بانر شهرية تقديرية</div>
+                            <div class="text-[9px] text-lux-500 mt-0.5">ظهور مستمر في صدارة التطبيق</div>
+                        </div>
+
+                        <div class="border border-lux-800/80 bg-lux-950/50 rounded-xl p-3.5 text-center">
+                            <div id="sponsorAvgDailySessions" class="text-xl md:text-2xl font-mono font-black text-emerald-400 tabular-nums">—</div>
+                            <div class="text-[11px] font-bold text-lux-200 mt-1">مرات فتح التطبيق يومياً</div>
+                            <div class="text-[9px] text-lux-500 mt-0.5">معدل تكرار المشاهدة لكل مستخدم</div>
+                        </div>
+
+                        <div class="border border-lux-800/80 bg-lux-950/50 rounded-xl p-3.5 text-center">
+                            <div id="sponsorPeakHoursRange" class="text-base md:text-lg font-mono font-bold text-amber-400">6 م - 10 م</div>
+                            <div class="text-[11px] font-bold text-lux-200 mt-1">ساعات الذروة المسائية</div>
+                            <div class="text-[9px] text-lux-500 mt-0.5">أعلى كثافة خروج وتفاعل بالقرية</div>
+                        </div>
+
+                        <div class="border border-lux-800/80 bg-lux-950/50 rounded-xl p-3.5 text-center">
+                            <div id="sponsorNotificationReach" class="text-xl md:text-2xl font-mono font-black text-purple-400 tabular-nums">100%</div>
+                            <div class="text-[11px] font-bold text-lux-200 mt-1">وصول مباشر عبر الجرس</div>
+                            <div class="text-[9px] text-lux-500 mt-0.5">إشعار فوري لجميع الأبطال</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 2. إحصائيات الالتزام الصارم والاحتفاظ (Retention & Habit-Forming Data) -->
+                <div class="admin-card bg-lux-900/40 rounded-2xl p-5 md:p-6 border border-lux-800/70 space-y-4">
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                            <h3 class="text-sm font-extrabold text-lux-100">2. الالتزام الصارم وتكوين العادات (Retention & Streaks)</h3>
+                        </div>
+                        <p class="text-xs text-lux-400 font-medium mt-0.5">
+                            سلاسل الأيام المتتالية تصنع ولاءً ثابتاً يضمن رؤية إعلانك يومياً دون انقطاع
+                        </p>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <!-- مؤشر الاحتفاظ 7 و30 يوم -->
+                        <div class="border border-lux-800/80 bg-lux-950/50 rounded-xl p-4 space-y-3">
+                            <div class="text-xs font-bold text-lux-300">معدل الاحتفاظ بالمستخدمين (Retention)</div>
+                            <div class="space-y-2">
+                                <div>
+                                    <div class="flex justify-between text-[11px] font-bold">
+                                        <span class="text-lux-400">احتفاظ أسبوعي (Day-7)</span>
+                                        <span id="sponsorRetention7dText" class="font-mono text-emerald-400">—%</span>
+                                    </div>
+                                    <div class="w-full bg-lux-900 rounded-full h-2 mt-1 overflow-hidden border border-lux-800">
+                                        <div id="sponsorRetention7dBar" class="bg-gradient-to-r from-emerald-500 to-teal-400 h-full rounded-full transition-all duration-500" style="width: 0%"></div>
+                                    </div>
+                                </div>
+                                <div>
+                                    <div class="flex justify-between text-[11px] font-bold">
+                                        <span class="text-lux-400">احتفاظ شهري (Day-30)</span>
+                                        <span id="sponsorRetention30dText" class="font-mono text-teal-300">—%</span>
+                                    </div>
+                                    <div class="w-full bg-lux-900 rounded-full h-2 mt-1 overflow-hidden border border-lux-800">
+                                        <div id="sponsorRetention30dBar" class="bg-gradient-to-r from-teal-500 to-cyan-400 h-full rounded-full transition-all duration-500" style="width: 0%"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- تفكيك سلاسل الأيام -->
+                        <div class="md:col-span-2 border border-lux-800/80 bg-lux-950/50 rounded-xl p-4 space-y-3">
+                            <div class="text-xs font-bold text-lux-300">أبطال السلاسل المتواصلة (Streaks Commitment)</div>
+                            <div class="grid grid-cols-3 gap-2 text-center pt-1">
+                                <div class="bg-lux-900/70 border border-lux-800 p-2.5 rounded-lg">
+                                    <div id="sponsorStreak7Plus" class="text-lg font-mono font-bold text-emerald-400 tabular-nums">—</div>
+                                    <div class="text-[10px] font-bold text-lux-300 mt-1">تحدي +7 أيام</div>
+                                    <div class="text-[8px] text-lux-500">مشتركون مستمرون أسبوعاً</div>
+                                </div>
+                                <div class="bg-lux-900/70 border border-lux-800 p-2.5 rounded-lg">
+                                    <div id="sponsorStreak14Plus" class="text-lg font-mono font-bold text-teal-400 tabular-nums">—</div>
+                                    <div class="text-[10px] font-bold text-lux-300 mt-1">تحدي +14 يوماً</div>
+                                    <div class="text-[8px] text-lux-500">مشتركون مستمرون أسبوعين</div>
+                                </div>
+                                <div class="bg-lux-900/70 border border-gold-500/30 p-2.5 rounded-lg bg-gold-500/5">
+                                    <div id="sponsorStreak30Plus" class="text-lg font-mono font-bold text-gold-400 tabular-nums">—</div>
+                                    <div class="text-[10px] font-bold text-gold-300 mt-1">تحدي +30 يوماً</div>
+                                    <div class="text-[8px] text-gold-500/80">أعلى درجات التعلق بالعلامة</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 3. إحصائيات القوة الشرائية والديموغرافيا المحلية (Hyper-Local Targeting) -->
+                <div class="admin-card bg-lux-900/40 rounded-2xl p-5 md:p-6 border border-lux-800/70 space-y-4">
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <span class="w-2 h-2 rounded-full bg-gold-400"></span>
+                            <h3 class="text-sm font-extrabold text-lux-100">3. القوة الشرائية والديموغرافيا المحلية (Hyper-Local Targeting)</h3>
+                        </div>
+                        <p class="text-xs text-lux-400 font-medium mt-0.5">
+                            وصول مباشر لجمهور نزلة عبيد بنسبة 100% دون إهدار الميزانية في مناطق خارج القرية
+                        </p>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <!-- التمركز الجغرافي والنوع -->
+                        <div class="border border-lux-800/80 bg-lux-950/50 rounded-xl p-4 space-y-3">
+                            <div>
+                                <div class="text-xs font-bold text-lux-300">نسبة التمركز في نزلة عبيد</div>
+                                <div class="flex items-baseline gap-2 mt-1">
+                                    <span id="sponsorLocalConcentration" class="text-2xl font-mono font-black text-emerald-400">—%</span>
+                                    <span class="text-[10px] text-lux-400">مقيمون فعلياً داخل النطاق</span>
+                                </div>
+                            </div>
+                            <div class="border-t border-lux-800 pt-3">
+                                <div class="text-xs font-bold text-lux-300 mb-2">التوزيع حسب النوع</div>
+                                <div class="grid grid-cols-2 gap-2 text-center">
+                                    <div class="p-2 rounded-lg bg-lux-900/80 border border-lux-800">
+                                        <div id="sponsorGenderMalePercent" class="text-sm font-mono font-bold text-cyan-400">—%</div>
+                                        <div id="sponsorGenderMaleCount" class="text-[10px] text-lux-400 mt-0.5">ذكور: —</div>
+                                    </div>
+                                    <div class="p-2 rounded-lg bg-lux-900/80 border border-lux-800">
+                                        <div id="sponsorGenderFemalePercent" class="text-sm font-mono font-bold text-rose-400">—%</div>
+                                        <div id="sponsorGenderFemaleCount" class="text-[10px] text-lux-400 mt-0.5">إناث: —</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- الشرائح العمرية المستهدفة -->
+                        <div class="md:col-span-2 border border-lux-800/80 bg-lux-950/50 rounded-xl p-4 space-y-3">
+                            <div class="flex items-center justify-between">
+                                <div class="text-xs font-bold text-lux-300">توزيع الشرائح العمرية (Age Demographics)</div>
+                                <span class="text-[10px] text-gold-400 font-bold">محسوبة من تاريخ الميلاد الموثق</span>
+                            </div>
+                            <div class="space-y-2 pt-1">
+                                <div>
+                                    <div class="flex justify-between text-[11px] font-bold">
+                                        <span class="text-lux-300">16 - 24 سنة (الشباب، طلاب الجامعات والرياضيين)</span>
+                                        <span id="sponsorAgeBracket1Text" class="font-mono text-lux-100">—%</span>
+                                    </div>
+                                    <div class="w-full bg-lux-900 rounded-full h-1.5 mt-1 overflow-hidden border border-lux-800">
+                                        <div id="sponsorAgeBracket1Bar" class="bg-cyan-400 h-full rounded-full transition-all duration-500" style="width: 0%"></div>
+                                    </div>
+                                </div>
+                                <div>
+                                    <div class="flex justify-between text-[11px] font-bold">
+                                        <span class="text-lux-300">25 - 34 سنة (القوة الشرائية الأساسية وأصحاب المهن)</span>
+                                        <span id="sponsorAgeBracket2Text" class="font-mono text-lux-100">—%</span>
+                                    </div>
+                                    <div class="w-full bg-lux-900 rounded-full h-1.5 mt-1 overflow-hidden border border-lux-800">
+                                        <div id="sponsorAgeBracket2Bar" class="bg-emerald-400 h-full rounded-full transition-all duration-500" style="width: 0%"></div>
+                                    </div>
+                                </div>
+                                <div>
+                                    <div class="flex justify-between text-[11px] font-bold">
+                                        <span class="text-lux-300">35 - 49 سنة (أرباب الأسر والقرارات العائلية)</span>
+                                        <span id="sponsorAgeBracket3Text" class="font-mono text-lux-100">—%</span>
+                                    </div>
+                                    <div class="w-full bg-lux-900 rounded-full h-1.5 mt-1 overflow-hidden border border-lux-800">
+                                        <div id="sponsorAgeBracket3Bar" class="bg-amber-400 h-full rounded-full transition-all duration-500" style="width: 0%"></div>
+                                    </div>
+                                </div>
+                                <div>
+                                    <div class="flex justify-between text-[11px] font-bold">
+                                        <span class="text-lux-300">50+ سنة (كبار البلد والمشاة الدائمون)</span>
+                                        <span id="sponsorAgeBracket4Text" class="font-mono text-lux-100">—%</span>
+                                    </div>
+                                    <div class="w-full bg-lux-900 rounded-full h-1.5 mt-1 overflow-hidden border border-lux-800">
+                                        <div id="sponsorAgeBracket4Bar" class="bg-purple-400 h-full rounded-full transition-all duration-500" style="width: 0%"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- معاينة بطاقة العرض التجاري (Sponsor Pitch Card) -->
+                <div class="admin-card bg-lux-900/40 rounded-2xl p-5 md:p-6 border border-lux-800/70 space-y-3">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                            <span class="w-2 h-2 rounded-full bg-gold-400"></span>
+                            <h3 class="text-sm font-extrabold text-lux-100">معاينة نص العرض التجاري للرعاة (WhatsApp Pitch Card)</h3>
+                        </div>
+                        <button type="button" id="btnCopyPitchCardSecondary" class="text-xs font-bold text-gold-400 hover:text-gold-300 transition flex items-center gap-1">
+                            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                            <span>نسخ النص</span>
+                        </button>
+                    </div>
+                    <pre id="sponsorPitchCardText" class="p-4 rounded-xl bg-lux-950 border border-lux-800 text-lux-300 text-xs font-sans leading-relaxed whitespace-pre-wrap select-all"></pre>
+                </div>
 
             </section>
 
@@ -2113,6 +2396,10 @@
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="w-4 h-4 text-emerald-400 shrink-0"><rect x="4" y="12" width="4" height="8" rx="1"></rect><rect x="10" y="7" width="4" height="13" rx="1"></rect><rect x="16" y="3" width="4" height="17" rx="1"></rect></svg>
                             <span>الزوار والنشاط وساعات الذروة</span>
                         </button>
+                        <button type="button" class="admin-nav-tab admin-nav-tab--side text-right w-full" data-tab-target="tabPanelSponsors">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="w-4 h-4 text-gold-400 shrink-0"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path></svg>
+                            <span>إحصائيات الرعاة وملف الشراكات (Media Kit)</span>
+                        </button>
                     </div>
                 </div>
 
@@ -2217,6 +2504,46 @@
                 <div>
                     <div class="text-[10px] text-lux-400 font-bold">حالة التوثيق</div>
                     <div id="userModalVerificationStatus" class="text-xs font-bold text-lux-300 truncate">—</div>
+                </div>
+            </div>
+
+            <!-- تدقيق موقع التسجيل والتواجد بنزلة عبيد -->
+            <div class="p-3.5 rounded-xl bg-lux-950/80 border border-lux-800/80 space-y-2.5">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <div class="text-xs font-bold text-lux-100 flex items-center gap-1.5">
+                            <span>تدقيق موقع التسجيل والتواجد بنزلة عبيد</span>
+                        </div>
+                        <div class="text-[10px] text-lux-400">رصد الإحداثيات والمسافة بالمتر للتأكد من الانتماء للقرية</div>
+                    </div>
+                    <span id="userModalLocationBadge" class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-lux-800 text-lux-400 border border-lux-700">
+                        قيد الفحص
+                    </span>
+                </div>
+
+                <div class="grid grid-cols-2 sm:grid-cols-3 gap-2 text-center">
+                    <div class="bg-lux-900/80 p-2 rounded-lg border border-lux-800/60">
+                        <div class="text-[9px] font-bold text-lux-400">المسافة عن المركز</div>
+                        <div id="userModalDistanceText" class="text-xs font-mono font-bold text-emerald-400 mt-0.5">—</div>
+                    </div>
+                    <div class="bg-lux-900/80 p-2 rounded-lg border border-lux-800/60">
+                        <div class="text-[9px] font-bold text-lux-400">إحداثيات الـ GPS</div>
+                        <div id="userModalCoordinatesText" class="text-[11px] font-mono font-bold text-lux-200 mt-0.5 truncate" dir="ltr">—</div>
+                    </div>
+                    <div class="col-span-2 sm:col-span-1 bg-lux-900/80 p-2 rounded-lg border border-lux-800/60">
+                        <div class="text-[9px] font-bold text-lux-400">دقة الإشارة</div>
+                        <div id="userModalAccuracyText" class="text-xs font-mono font-bold text-lux-300 mt-0.5">—</div>
+                    </div>
+                </div>
+
+                <div class="pt-1">
+                    <a id="userModalGoogleMapsLink" href="#" target="_blank" rel="noopener noreferrer" class="hidden w-full py-2 px-3 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 text-xs font-bold transition flex items-center justify-center gap-2">
+                        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="10" r="3"></circle>
+                            <path d="M12 21.7C17.3 17 20 13 20 10a8 8 0 1 0-16 0c0 3 2.7 7 8 11.7z"></path>
+                        </svg>
+                        <span>معاينة الموقع الفعلي على خرائط Google</span>
+                    </a>
                 </div>
             </div>
 

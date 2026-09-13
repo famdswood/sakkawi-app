@@ -456,9 +456,54 @@ export async function purgeNotificationRecord(matcher = {}) {
  * مستمعين لحالة تسجيل الدخول/الخروج عشان تجيب/تنضّف بيانات الإشعارات
  * تلقائياً مع كل تغيير في هوية المستخدم.
  */
+let hasBoundAppResumeListeners = false;
+
+/**
+ * ربط أحداث استئناف التطبيق (عودة الشاشة للنشاط أو عودة الاتصال)
+ * لتحديث الإشعارات فورياً بدون الحاجة لإعادة فتح التطبيق
+ */
+function bindAppResumeListeners() {
+    if (hasBoundAppResumeListeners) return;
+    hasBoundAppResumeListeners = true;
+
+    // 1. عند عودة التبويب للواجهة أو فتح قفل الشاشة (Web & WebView)
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible' && currentUser) {
+            fetchAndRenderNotifications({ silent: true }).catch(() => {});
+            if (!realtimeChannel) {
+                bindNotificationsRealtimeSubscription();
+            }
+        }
+    });
+
+    // 2. عند عودة الاتصال بالإنترنت
+    window.addEventListener('online', () => {
+        if (currentUser) {
+            fetchAndRenderNotifications({ silent: true }).catch(() => {});
+            bindNotificationsRealtimeSubscription();
+        }
+    });
+
+    // 3. أحداث أندرويد الأصلية عند استئناف التطبيق من الخلفية (Capacitor App State)
+    if (window.Capacitor?.isNativePlatform?.()) {
+        const { App } = window.Capacitor.Plugins || {};
+        if (App && typeof App.addListener === 'function') {
+            App.addListener('appStateChange', (state) => {
+                if (state?.isActive && currentUser) {
+                    fetchAndRenderNotifications({ silent: true }).catch(() => {});
+                    if (!realtimeChannel) {
+                        bindNotificationsRealtimeSubscription();
+                    }
+                }
+            });
+        }
+    }
+}
+
 export function initNotificationsUI() {
     console.log('[notifications.js] initNotificationsUI() اتنادت.');
     bindStaticListeners();
+    bindAppResumeListeners();
 
     // 'auth:login' بتتطلق من auth.js في حالتين: أول تشغيل للتطبيق لو
     // فيه جلسة محفوظة صحيحة، أو فور نجاح تسجيل دخول/تسجيل حساب جديد.
@@ -470,6 +515,13 @@ export function initNotificationsUI() {
     document.addEventListener('auth:signed-out', () => {
         handleUserSignedOut();
     });
+
+    // فحص احتياطي للجلسة إذا كان المستخدم مسجل دخول بالفعل قبل تهيئة الموديول
+    supabaseClient.auth.getSession().then(({ data }) => {
+        if (data?.session?.user && !currentUser) {
+            handleUserSignedIn(data.session.user);
+        }
+    }).catch(() => {});
 }
 
 /**
@@ -624,6 +676,32 @@ function bindStaticListeners() {
    3) دخول/خروج المستخدم
    ------------------------------------------------------------------ */
 
+let notificationsPollingIntervalId = null;
+const NOTIFICATIONS_POLL_INTERVAL_MS = 15000; // فحص دوري خفيف كل 15 ثانية لجلب أي جديد أوتوماتيك لايف
+
+/**
+ * تشغيل الفحص الدوري الخفيف في الخلفية لضمان وصول أي إشعار جديد تلقائياً
+ */
+function startNotificationsPolling() {
+    stopNotificationsPolling();
+    notificationsPollingIntervalId = setInterval(() => {
+        if (!currentUser) return;
+        if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+
+        fetchAndRenderNotifications({ silent: true }).catch(() => {});
+    }, NOTIFICATIONS_POLL_INTERVAL_MS);
+}
+
+/**
+ * إيقاف الفحص الدوري عند تسجيل الخروج
+ */
+function stopNotificationsPolling() {
+    if (notificationsPollingIntervalId) {
+        clearInterval(notificationsPollingIntervalId);
+        notificationsPollingIntervalId = null;
+    }
+}
+
 /**
  * تُستدعى مع كل حدث 'auth:login' - بتحدّث المستخدم الحالي، تجيب
  * إشعاراته، وتفتح اشتراك Realtime جديد ليه
@@ -635,13 +713,17 @@ async function handleUserSignedIn(user) {
     // لو نفس المستخدم بالظبط اللي كان مسجل بالفعل (مثلاً auth:login
     // اتطلقت أكتر من مرة لنفس الجلسة)، مفيش داعي نعيد الجلب والاشتراك
     // من الصفر تاني
-    if (currentUser && currentUser.id === user.id && realtimeChannel) return;
+    if (currentUser && currentUser.id === user.id && realtimeChannel) {
+        startNotificationsPolling();
+        return;
+    }
 
     currentUser = user;
     hasFetchedOnce = false;
 
     await fetchAndRenderNotifications();
     bindNotificationsRealtimeSubscription();
+    startNotificationsPolling();
 }
 
 /** تُستدعى مع 'auth:signed-out' - بتنضّف كل حاجة خاصة بالمستخدم اللي خرج */
@@ -649,6 +731,7 @@ function handleUserSignedOut() {
     currentUser = null;
     notificationsCache = [];
     hasFetchedOnce = false;
+    stopNotificationsPolling();
 
     if (realtimeChannel) {
         supabaseClient.removeChannel(realtimeChannel);
@@ -702,10 +785,14 @@ export async function openNotificationsModal() {
     void modal.offsetWidth;
     modal.classList.add('is-open');
 
-    // إخفاء نقطة شارة الجرس في الهيدر أثناء وجود المستخدم داخل اللوحة
+    // إخفاء نقطة شارة الجرس في الهيدر فوراً وتصفير العدد
     const headerBadge = document.getElementById('headerNotificationBadge');
+    const headerCount = document.getElementById('headerNotificationCount');
     if (headerBadge) {
         headerBadge.classList.add('hidden');
+    }
+    if (headerCount) {
+        headerCount.textContent = '0';
     }
 
     if (!currentUser) {
@@ -716,8 +803,17 @@ export async function openNotificationsModal() {
 
     setEmptyStateMessage('noNotifications');
 
+    // تعليم كل الإشعارات كمقروءة فوراً عند فتح الجرس وتصفير العداد
+    markAllNotificationsAsRead().catch(() => {});
+
     if (!hasFetchedOnce) {
         await fetchAndRenderNotifications();
+        await markAllNotificationsAsRead().catch(() => {});
+    } else {
+        // تحديث صامت بالخلفية لضمان تطابق القائمة مع أحدث إشعارات السيرفر فور الفتح
+        fetchAndRenderNotifications({ silent: true }).then(() => {
+            markAllNotificationsAsRead().catch(() => {});
+        }).catch(() => {});
     }
 }
 
@@ -871,9 +967,11 @@ async function cleanupDismissedAndInvalidNotifications(serverNotifications) {
 /**
  * يجيب كل صفوف notifications الخاصة بالمستخدم الحالي، بنمط Stale-While-Revalidate:
  * يعرض النسخة المخزنة محلياً فوراً حتى لو الجهاز بدون إنترنت، ويحدثها في الخلفية عند توفر الشبكة
+ * @param {{ silent?: boolean }} options
  */
-async function fetchAndRenderNotifications() {
+async function fetchAndRenderNotifications(options = {}) {
     if (!currentUser) return;
+    const isSilent = Boolean(options && options.silent);
 
     let hasRenderedAnyData = false;
 
@@ -882,7 +980,21 @@ async function fetchAndRenderNotifications() {
         () => fetchUserNotificationsFromServer(currentUser.id),
         (serverNotifications, source) => {
             const dismissedIds = getDismissedNotificationIds();
-            notificationsCache = (serverNotifications || []).filter((n) => !dismissedIds.has(String(n.id)));
+            const filteredNotifications = (serverNotifications || []).filter((n) => !dismissedIds.has(String(n.id)));
+
+            // عند وصول بيانات طازجة من الشبكة، نكشف أي إشعارات جديدة غير مقروءة لم تكن بالكاش
+            if (source === 'network' && notificationsCache.length > 0) {
+                const existingIds = new Set(notificationsCache.map((n) => String(n.id)));
+                const newlyArrived = filteredNotifications.filter((n) => !existingIds.has(String(n.id)) && !n.is_read);
+
+                if (newlyArrived.length > 0) {
+                    const latestNew = newlyArrived[0];
+                    playNewNotificationFeedback();
+                    showGlassyInAppNotification(latestNew);
+                }
+            }
+
+            notificationsCache = filteredNotifications;
             hasRenderedAnyData = true;
             hasFetchedOnce = true;
 
@@ -898,7 +1010,7 @@ async function fetchAndRenderNotifications() {
         }
     );
 
-    if (!hasRenderedAnyData && !hasFetchedOnce) {
+    if (!hasRenderedAnyData && !hasFetchedOnce && !isSilent) {
         document.dispatchEvent(new CustomEvent('app:toast', {
             detail: { message: 'تعذّر تحميل الإشعارات، حاول تاني', type: 'error' },
         }));
@@ -1797,8 +1909,6 @@ function bindNotificationsRealtimeSubscription() {
             },
         )
         .subscribe((status, err) => {
-            // نفس فلسفة تسجيل حالة الاشتراك في posts.js (bindPostsRealtimeSubscription) -
-            // شوف التعليق هناك لتفسير قيم status المختلفة وأسباب تعليقها
             console.log('[notifications.js] حالة اشتراك Realtime بتاع الإشعارات:', status);
             if (err) {
                 console.error('خطأ في اشتراك Realtime بتاع الإشعارات:', err.message || err);

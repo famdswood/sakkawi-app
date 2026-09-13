@@ -416,7 +416,8 @@ function handleStepsIncrease(delta, totalSteps) {
     // عداد التطبيق مساوياً له أو أكبر منه بالفعل، نتجاهل أي زيادة مكررة فوراً
     if (typeof totalSteps === 'number' && Number.isFinite(totalSteps)) {
         if (totalSteps <= appState.steps) return;
-        delta = Math.min(delta, totalSteps - appState.steps);
+        const missingFromHardware = totalSteps - appState.steps;
+        delta = (!delta || delta <= 0) ? missingFromHardware : Math.min(delta, missingFromHardware);
     }
 
     if (!delta || delta <= 0) return;
@@ -600,8 +601,8 @@ function applySilentStepsResync(newSteps) {
  * ونعيد رسم الواجهة فورًا - عشان الزائر يشوف صفر حقيقي دايمًا، مش رقم
  * حساب سابق متعتّم بس.
  */
-function resetStepsUIForGuestMode() {
-    syncActiveUser(null);
+async function resetStepsUIForGuestMode() {
+    await syncActiveUser(null);
 
     appState.steps = getStepsCount();
     appState.stageIndex = getStageIndexForSteps(appState.steps);
@@ -618,6 +619,51 @@ function resetStepsUIForGuestMode() {
  * (إصلاح ثغرة منتصف الليل): تصفير عداد ومراحل اليوم الحالي عند بداية يوم جديد
  * استجابةً لحدث 'sensors:day-reset' أو عند كشف تغيّر اليوم في visibilitychange.
  */
+let cairoMidnightTimerId = null;
+
+/**
+ * مراقب منتصف الليل بتوقيت القاهرة (Cairo Midnight Watchdog):
+ * يحدد موعد الساعة 12:00:00 ص بتوقيت القاهرة بالضبط ويضبط مؤقتاً للتنفيذ في اللحظة المحددة.
+ */
+function setupCairoMidnightWatchdog() {
+    if (cairoMidnightTimerId) {
+        clearTimeout(cairoMidnightTimerId);
+        cairoMidnightTimerId = null;
+    }
+
+    try {
+        const now = new Date();
+        const formatter = new Intl.DateTimeFormat('en-US', {
+            timeZone: 'Africa/Cairo',
+            hourCycle: 'h23',
+            year: 'numeric', month: '2-digit', day: '2-digit',
+            hour: '2-digit', minute: '2-digit', second: '2-digit'
+        });
+
+        const parts = formatter.formatToParts(now).reduce((acc, part) => {
+            if (part.type !== 'literal') acc[part.type] = parseInt(part.value, 10);
+            return acc;
+        }, {});
+
+        const asIfUTCNow = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second);
+        const offsetMinutes = Math.round((asIfUTCNow - now.getTime()) / 60000);
+
+        const targetNaiveUTC = Date.UTC(parts.year, parts.month - 1, parts.day + 1, 0, 0, 0, 50);
+        const targetInstant = new Date(targetNaiveUTC - offsetMinutes * 60000);
+
+        const msUntilMidnight = Math.max(500, targetInstant.getTime() - now.getTime());
+
+        cairoMidnightTimerId = setTimeout(() => {
+            console.log('[app.js] حلت الساعة 12:00 ص بتوقيت القاهرة - تنفيذ التصفير اليومي...');
+            ensureStillSameDay();
+            handleDayReset();
+            setupCairoMidnightWatchdog();
+        }, msUntilMidnight);
+    } catch (err) {
+        console.warn('[app.js] تعذر ضبط مراقب منتصف الليل بتوقيت القاهرة:', err);
+    }
+}
+
 function handleDayReset() {
     appState.steps = 0;
     appState.stageIndex = 0;
@@ -628,6 +674,10 @@ function handleDayReset() {
     appState.hitHardCapToday = false;
     renderStageDotsSkeleton();
     updateStepsUI();
+
+    if (typeof window.refreshActiveLeaderboard === 'function') {
+        window.refreshActiveLeaderboard();
+    }
 }
 
 function initStepsCounter() {
@@ -645,16 +695,26 @@ function initStepsCounter() {
         handleDayReset();
     });
 
-    // فحص تغيّر اليوم فور عودة المستخدم للتطبيق
+    // فحص تغيّر اليوم وضبط مراقب منتصف الليل بتوقيت القاهرة
+    setupCairoMidnightWatchdog();
+
     document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible') {
             ensureStillSameDay();
+            setupCairoMidnightWatchdog();
         }
     });
 
     // الاستماع لأي خطوات جاية لايف من js/sensors.js (حساس الحركة الحقيقي فقط)
     document.addEventListener('sensors:steps-update', (event) => {
-        handleStepsIncrease(event.detail.delta, event.detail.steps);
+        if (event.detail?.source === 'account-switch') {
+            appState.steps = Number(event.detail?.steps) || 0;
+            appState.stageIndex = getStageIndexForSteps(appState.steps);
+            appState.earnedFromSteps = Math.floor(appState.steps / STEPS_PER_POINT);
+            updateStepsUI();
+            return;
+        }
+        handleStepsIncrease(event.detail?.delta || 0, event.detail?.steps);
     });
 
     // (إصلاح - باج حقيقي) الاستماع لمزامنة العداد مع daily_steps القادمة
@@ -688,14 +748,27 @@ function initStepsCounter() {
                 btnRefreshHomeStepsIcon.classList.add('animate-spin');
             }
 
+            const stepsBefore = appState.steps;
+
             try {
-                await syncFromNativeStepCounter();
+                // مزامنة إجبارية تقرأ الحساس العتادي وتفرغ الذاكرة المؤقتة بالكامل
+                await syncFromNativeStepCounter({ force: true });
                 appState.steps = getStepsCount();
                 appState.stageIndex = getStageIndexForSteps(appState.steps);
                 appState.earnedFromSteps = Math.floor(appState.steps / STEPS_PER_POINT);
                 updateStepsUI();
 
-                showToast(`تم تحديث الخطوات بنجاح: ${appState.steps.toLocaleString()} خطوة`);
+                // مزامنة فورية للسيرفر والليدربورد بالخطوات المحتسبة دون انتظار الدفعة الدورية
+                if (typeof window.flushPendingStepsBatch === 'function') {
+                    await window.flushPendingStepsBatch();
+                }
+
+                const diff = appState.steps - stepsBefore;
+                if (diff > 0) {
+                    showToast(`تمت مزامنة الخطوات بنجاح: تم احتساب ${diff.toLocaleString()} خطوة جديدة من هاتفك!`);
+                } else {
+                    showToast(`تم فحص الحساس بنجاح: العداد متطابق مع هاتفك تماماً (${appState.steps.toLocaleString()} خطوة)`);
+                }
             } catch (err) {
                 console.error('خطأ أثناء تحديث الخطوات يدويا:', err);
                 showToast('تم فحص الحساس، العداد محدث بالفعل');
@@ -1149,9 +1222,9 @@ function initSharedUIBridge() {
     // الإصلاح: أول ما 'auth:signed-out' يتطلق، نصفّر واجهة البروفايل
     // فورًا (initProfileUI(null) بنفس النمط المستخدم وقت initApp لمستخدم
     // من غير جلسة) ونتأكد إن قيود وضع الزائر مفعّلة فورًا كمان.
-    document.addEventListener('auth:signed-out', () => {
-        resetStepsUIForGuestMode();
-        initProfileUI(null);
+    document.addEventListener('auth:signed-out', async () => {
+        await resetStepsUIForGuestMode();
+        await initProfileUI(null);
         applyGuestModeRestrictions(false);
 
         // وقف نبضة الحضور وتعليم المستخدم "أوفلاين" فورًا - قبل ما
@@ -1189,10 +1262,10 @@ function initSharedUIBridge() {
         }
     });
 
-    document.addEventListener('auth:login', (event) => {
+    document.addEventListener('auth:login', async (event) => {
         const user = event.detail?.user;
         if (user && user.id) {
-            syncActiveUser(user.id);
+            await syncActiveUser(user.id);
             appState.steps = getStepsCount();
             appState.stageIndex = getStageIndexForSteps(appState.steps);
             appState.earnedFromSteps = Math.floor(appState.steps / STEPS_PER_POINT);
@@ -1201,7 +1274,7 @@ function initSharedUIBridge() {
             updateStepsUI();
             applyGuestModeRestrictions(true);
         }
-        initProfileUI(user);
+        await initProfileUI(user);
     });
 
     // (إصلاح - باج "فلاش وضع الزائر لمستخدم مسجل دخول"): ده المصدر
