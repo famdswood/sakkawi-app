@@ -1030,7 +1030,7 @@ async function handleQuickStepAdjust(user, delta, li, btn, customReason = null) 
 
         if (error) {
             console.error('[admin.js] فشل التعديل السريع للخطوات:', error);
-            showUserCardStatus(li, error.message || 'تعذر تعديل الخطوات.', 'error');
+            if (li) showUserCardStatus(li, error.message || 'تعذر تعديل الخطوات.', 'error');
             return;
         }
 
@@ -1050,21 +1050,23 @@ async function handleQuickStepAdjust(user, delta, li, btn, customReason = null) 
             }
         }
 
-        const stepsEl = li.querySelector('.user-card-steps');
-        if (stepsEl) {
-            stepsEl.textContent = Number(newDaily).toLocaleString('ar-EG');
-            stepsEl.classList.add('text-emerald-300', 'scale-110');
-            setTimeout(() => stepsEl.classList.remove('text-emerald-300', 'scale-110'), 800);
+        const targetEl = li || document.querySelector(`.admin-user-row[data-user-id="${user.id}"]`);
+        if (targetEl) {
+            const stepsEl = targetEl.querySelector('.user-card-steps');
+            if (stepsEl) {
+                stepsEl.textContent = Number(newDaily).toLocaleString('ar-EG');
+                stepsEl.classList.add('text-emerald-300', 'scale-110');
+                setTimeout(() => stepsEl.classList.remove('text-emerald-300', 'scale-110'), 800);
+            }
+            const pointsEl = targetEl.querySelector('.user-card-points');
+            if (pointsEl) {
+                pointsEl.textContent = Number(newPoints).toLocaleString('ar-EG');
+            }
+            showUserCardStatus(targetEl, `تم ${delta > 0 ? 'إضافة' : 'خصم'} ${Math.abs(delta).toLocaleString('ar-EG')} خطوة بنجاح. رصيد اليوم: ${Number(newDaily).toLocaleString('ar-EG')}`, 'success');
         }
-        const pointsEl = li.querySelector('.user-card-points');
-        if (pointsEl) {
-            pointsEl.textContent = Number(newPoints).toLocaleString('ar-EG');
-        }
-
-        showUserCardStatus(li, `تم ${delta > 0 ? 'إضافة' : 'خصم'} ${Math.abs(delta).toLocaleString('ar-EG')} خطوة بنجاح. رصيد اليوم: ${Number(newDaily).toLocaleString('ar-EG')}`, 'success');
     } catch (err) {
         console.error('[admin.js] خطأ غير متوقع:', err);
-        showUserCardStatus(li, 'حدث خطأ أثناء تنفيذ التعديل.', 'error');
+        if (li) showUserCardStatus(li, 'حدث خطأ أثناء تنفيذ التعديل.', 'error');
     } finally {
         if (btn) btn.disabled = false;
     }
@@ -1233,7 +1235,7 @@ function buildUserRowElement(user) {
                 </div>
             </div>
 
-            <div class="flex items-center justify-between sm:justify-end gap-2 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-lux-800/60">
+            <div class="flex items-center justify-between sm:justify-end gap-2.5 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-lux-800/60">
                 <div class="flex items-center gap-1.5">
                     <div class="px-2.5 py-1 rounded-xl bg-lux-950/60 border border-lux-800/80 text-center">
                         <span class="block text-[9px] font-bold text-lux-400">خطوات اليوم</span>
@@ -1245,186 +1247,27 @@ function buildUserRowElement(user) {
                     </div>
                 </div>
 
-                <div class="flex items-center gap-1">
-                    <button type="button" class="user-card-expand-btn px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-gold-500/20 to-amber-500/10 hover:from-gold-500/30 hover:to-amber-500/20 border border-gold-500/40 text-gold-400 font-bold text-xs flex items-center gap-1.5 transition active:scale-95 shadow-sm" title="لوحة القيادة والتحكم">
+                <div class="flex items-center gap-1.5">
+                    <button type="button" class="user-card-expand-btn px-3.5 py-2 rounded-xl bg-gradient-to-r from-gold-500/20 to-amber-500/10 hover:from-gold-500/30 hover:to-amber-500/20 border border-gold-500/40 text-gold-300 font-bold text-xs flex items-center gap-1.5 transition active:scale-95 shadow-sm" title="لوحة القيادة والتحكم الشامل">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-3.5 h-3.5"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
                         <span>لوحة القيادة</span>
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="user-card-chevron w-3.5 h-3.5 transition-transform duration-200"><polyline points="6 9 12 15 18 9"></polyline></svg>
                     </button>
-                </div>
-            </div>
-        </div>
-
-        <div class="user-card-status hidden mt-2 text-[10px] font-bold p-2 rounded-xl transition"></div>
-
-        <div class="user-card-cockpit hidden mt-3 pt-3 border-t border-lux-800/80 space-y-3">
-            <div class="p-2.5 rounded-2xl bg-lux-950/60 border border-lux-800/60 flex items-center justify-between gap-2 flex-wrap">
-                <div class="flex items-center gap-1.5 flex-wrap">
-                    <button type="button" class="user-quick-step-plus px-3 py-1.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-300 text-xs font-black transition active:scale-95 flex items-center gap-1" title="إضافة 1000 خطوة فورياً">
-                        <span>+1000 خطوة</span>
-                    </button>
-                    <button type="button" class="user-quick-step-minus px-3 py-1.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 text-rose-300 text-xs font-black transition active:scale-95 flex items-center gap-1" title="خصم 1000 خطوة فورياً">
-                        <span>-1000 خطوة</span>
-                    </button>
-                    <button type="button" class="user-quick-verif-btn px-3 py-1.5 rounded-xl border ${isVerifiedOverride ? 'bg-gold-500/20 border-gold-500/40 text-gold-400 font-bold' : 'bg-lux-800/60 border-lux-700/60 text-lux-400 font-bold'} text-xs transition active:scale-95 flex items-center gap-1.5" title="تبديل التوثيق الفوري">
-                        <svg viewBox="0 0 24 24" fill="${isVerifiedOverride ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2" class="w-3.5 h-3.5">
-                            <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
-                        </svg>
-                        <span class="user-quick-verif-text">${isVerifiedOverride ? 'إلغاء التوثيق' : 'توثيق الحساب'}</span>
-                    </button>
-                </div>
-
-                ${isSelfRow ? '' : `
-                    <button type="button" class="admin-block-btn user-quick-block-btn px-3 py-1.5 rounded-xl border ${isBlocked ? 'bg-rose-500/20 border-rose-500/40 text-rose-300 font-bold' : 'bg-amber-500/15 border-amber-500/30 text-amber-300 hover:text-amber-200 font-bold'} text-xs transition active:scale-95 flex items-center gap-1.5" title="تجميد أو فك تجميد الحساب">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-3.5 h-3.5"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
-                        <span>${isBlocked ? 'فك التجميد' : 'حظر / تجميد'}</span>
-                    </button>
-                `}
-            </div>
-
-            <div class="p-2.5 rounded-2xl bg-lux-950/60 border border-lux-800/60 space-y-2">
-                <div class="flex items-center justify-between">
-                    <span class="text-[11px] font-bold text-lux-200 flex items-center gap-1.5">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-3.5 h-3.5 text-amber-400"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
-                        <span>إرسال تنبيه مباشر لهذا المستخدم</span>
-                    </span>
-                    <span class="text-[9px] text-lux-500">يصل فوراً لهاتفه</span>
-                </div>
-                <div class="flex gap-1.5">
-                    <input type="text" class="user-cockpit-notif-input flex-1 bg-lux-900 border border-lux-700/80 rounded-xl px-3 py-1.5 text-xs text-lux-100 placeholder-lux-500 focus:outline-none focus:border-gold-500/60" placeholder="اكتب التنبيه هنا...">
-                    <button type="button" class="user-cockpit-notif-send px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-lux-950 text-xs font-black transition active:scale-95">إرسال</button>
-                </div>
-            </div>
-
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                <div class="p-2.5 rounded-2xl bg-lux-950/60 border border-lux-800/60 space-y-2">
-                    <span class="text-[11px] font-bold text-lux-200 block">تعديل خطوات مخصص</span>
-                    <div class="flex gap-1.5">
-                        <input type="number" class="user-cockpit-steps-input flex-1 bg-lux-900 border border-lux-700/80 rounded-xl px-2.5 py-1.5 text-xs font-mono text-lux-100 placeholder-lux-500 focus:outline-none focus:border-gold-500/60" placeholder="القيمة (+/-)">
-                        <button type="button" class="user-cockpit-steps-apply px-3 py-1.5 rounded-xl bg-lux-800 hover:bg-lux-700 border border-lux-700 text-lux-100 text-xs font-bold transition active:scale-95">تطبيق</button>
-                    </div>
-                    <input type="text" class="user-cockpit-steps-reason w-full bg-lux-900 border border-lux-700/80 rounded-xl px-2.5 py-1 text-[10px] text-lux-300 placeholder-lux-600 focus:outline-none" placeholder="السبب (اختياري)">
-                </div>
-
-                <div class="p-2.5 rounded-2xl bg-lux-950/60 border border-lux-800/60 space-y-2 flex flex-col justify-between">
-                    <div>
-                        <span class="text-[11px] font-bold text-lux-200 block">تدقيق الموقع الجغرافي</span>
-                        <div class="text-[10px] text-lux-400 mt-1 flex items-center justify-between">
-                            <span>${hasLocation ? `إحداثيات: ${lat.toFixed(4)}, ${lng.toFixed(4)}` : 'لا توجد إحداثيات مرصودة'}</span>
-                            ${hasLocation ? `<a href="https://www.google.com/maps?q=${lat},${lng}" target="_blank" rel="noopener noreferrer" class="text-emerald-400 hover:underline font-bold">خرائط Google</a>` : ''}
-                        </div>
-                    </div>
-                    <div class="flex items-center justify-between gap-2 pt-1 border-t border-lux-800/60">
-                        <button type="button" class="user-cockpit-reset-steps text-[10px] font-bold text-rose-400 hover:text-rose-300 underline">
-                            تصفير خطوات اليوم
-                        </button>
-                        <button type="button" class="admin-user-manage-btn px-2.5 py-1 rounded-xl bg-lux-800 hover:bg-lux-700 text-lux-300 text-[10px] font-bold border border-lux-700 transition" title="فتح نافذة التدقيق التفصيلي">
-                            النافذة الشاملة
-                        </button>
-                    </div>
                 </div>
             </div>
         </div>
     `;
 
-    // ربط الأحداث التفاعلية
+    li.addEventListener('click', (e) => {
+        if (e.target.closest('a')) return;
+        openUserActionModal(user);
+    });
+
     const expandBtn = li.querySelector('.user-card-expand-btn');
-    const cockpitEl = li.querySelector('.user-card-cockpit');
-    const chevronEl = li.querySelector('.user-card-chevron');
-    if (expandBtn && cockpitEl) {
+    if (expandBtn) {
         expandBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            const isClosed = cockpitEl.classList.contains('hidden');
-            cockpitEl.classList.toggle('hidden', !isClosed);
-            if (chevronEl) {
-                chevronEl.style.transform = isClosed ? 'rotate(180deg)' : 'rotate(0deg)';
-            }
+            openUserActionModal(user);
         });
-    }
-
-    const plusBtn = li.querySelector('.user-quick-step-plus');
-    if (plusBtn) {
-        plusBtn.addEventListener('click', async (e) => {
-            e.stopPropagation();
-            await handleQuickStepAdjust(user, 1000, li, plusBtn);
-        });
-    }
-
-    const minusBtn = li.querySelector('.user-quick-step-minus');
-    if (minusBtn) {
-        minusBtn.addEventListener('click', async (e) => {
-            e.stopPropagation();
-            await handleQuickStepAdjust(user, -1000, li, minusBtn);
-        });
-    }
-
-    const verifBtn = li.querySelector('.user-quick-verif-btn');
-    if (verifBtn) {
-        verifBtn.addEventListener('click', async (e) => {
-            e.stopPropagation();
-            await handleQuickVerifToggle(user, li, verifBtn);
-            const verifTextEl = verifBtn.querySelector('.user-quick-verif-text');
-            if (verifTextEl) {
-                verifTextEl.textContent = user.is_verified_override ? 'إلغاء التوثيق' : 'توثيق الحساب';
-            }
-        });
-    }
-
-    const applyStepsBtn = li.querySelector('.user-cockpit-steps-apply');
-    if (applyStepsBtn) {
-        applyStepsBtn.addEventListener('click', async (e) => {
-            e.stopPropagation();
-            const valInput = li.querySelector('.user-cockpit-steps-input');
-            const reasonInput = li.querySelector('.user-cockpit-steps-reason');
-            const delta = parseInt(valInput?.value || '0', 10);
-            if (!delta || isNaN(delta)) {
-                showUserCardStatus(li, 'يرجى إدخال قيمة عددية صحيحة.', 'error');
-                return;
-            }
-            await handleQuickStepAdjust(user, delta, li, applyStepsBtn, reasonInput?.value?.trim());
-            if (valInput) valInput.value = '';
-            if (reasonInput) reasonInput.value = '';
-        });
-    }
-
-    const resetStepsBtn = li.querySelector('.user-cockpit-reset-steps');
-    if (resetStepsBtn) {
-        resetStepsBtn.addEventListener('click', async (e) => {
-            e.stopPropagation();
-            if (!confirm(`هل أنت متأكد من تصفير خطوات اليوم لـ (${displayName})؟`)) return;
-            await handleQuickStepSet(user, 0, li, resetStepsBtn, 'تصفير خطوات مشبوهة');
-        });
-    }
-
-    const sendNotifBtn = li.querySelector('.user-cockpit-notif-send');
-    if (sendNotifBtn) {
-        sendNotifBtn.addEventListener('click', async (e) => {
-            e.stopPropagation();
-            const notifInput = li.querySelector('.user-cockpit-notif-input');
-            const msg = (notifInput?.value || '').trim();
-            if (!msg) {
-                showUserCardStatus(li, 'يرجى كتابة نص التنبيه أولاً.', 'error');
-                return;
-            }
-            sendNotifBtn.disabled = true;
-            const ok = await sendAdminNotificationToUser(user.id, msg);
-            sendNotifBtn.disabled = false;
-            if (ok) {
-                if (notifInput) notifInput.value = '';
-                showUserCardStatus(li, 'تم إرسال التنبيه فورياً للمستخدم بنجاح.', 'success');
-            } else {
-                showUserCardStatus(li, 'تعذر إرسال التنبيه. حاول مرة أخرى.', 'error');
-            }
-        });
-    }
-
-    const manageBtn = li.querySelector('.admin-user-manage-btn');
-    if (manageBtn) {
-        manageBtn.addEventListener('click', () => openUserActionModal(user));
-    }
-
-    const blockBtn = li.querySelector('.admin-block-btn');
-    if (blockBtn) {
-        blockBtn.addEventListener('click', () => handleBlockButtonClick(blockBtn, user, displayName));
     }
 
     return li;
@@ -1432,7 +1275,7 @@ function buildUserRowElement(user) {
 
 /**
  * بتتعامل مع الضغط على زرار "حظر" / "إلغاء الحظر" في صف مستخدم -
- * إذا كان محظوراً/مجمداً تطلب تأكيد فك الحظر، وإذا كان نشطاً تتيح التجميد الفوري المباشر مع تحديد المدة
+ * إذا كان محظوراً/مجمداً تطلب تأكيد فك الحظر، وإذا كان نشطاً تفتح لوحة قيادة المشترك الشاملة
  * @param {HTMLButtonElement} blockBtn
  * @param {object} user
  * @param {string} displayName
@@ -1462,30 +1305,14 @@ async function handleBlockButtonClick(blockBtn, user, displayName) {
         user.blocked_until = null;
         renderFilteredUserList();
     } else {
-        const reason = window.prompt(`تجميد / حظر حساب (${displayName}) - يرجى كتابة السبب:`, 'تجميد إداري');
-        if (reason === null) return;
-        const hoursStr = window.prompt(`مدة التجميد بالساعات (مثال: 24 ليوم، 72 لـ 3 أيام، أو اتركه فارغاً للحظر الدائم):`, '24');
-        if (hoursStr === null) return;
-        const durationHours = hoursStr.trim() ? parseInt(hoursStr.trim(), 10) : null;
-
-        blockBtn.disabled = true;
-        blockBtn.classList.add('is-saving');
-
-        const res = await toggleUserBlock(user.id, true, reason.trim() || 'تجميد إداري', durationHours);
-
-        blockBtn.disabled = false;
-        blockBtn.classList.remove('is-saving');
-
-        if (!res) {
-            const statusEl = document.getElementById('userSearchStatus');
-            setStatusText(statusEl, `تعذّر تطبيق الحظر على ${displayName}. حاول تاني.`, 'error');
-            return;
-        }
-
-        user.is_blocked = true;
-        user.blocked_reason = reason.trim() || 'تجميد إداري';
-        user.blocked_until = durationHours ? new Date(Date.now() + durationHours * 3600000).toISOString() : null;
-        renderFilteredUserList();
+        openUserActionModal(user);
+        setTimeout(() => {
+            const freezeSection = document.getElementById('selectFreezeDuration');
+            if (freezeSection) {
+                freezeSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                freezeSection.focus();
+            }
+        }, 120);
     }
 }
 
@@ -5209,6 +5036,63 @@ function initUserActionModal() {
             }
 
             setStatusText(statusEl, 'تم تصفير خطوات اليوم لـ 0 بنجاح وتحديث نقاطها ومزامنة الحساس.', 'success');
+        });
+    }
+
+    // أزرار التعديل السريع للخطوات (+1000 / -1000) من داخل لوحة القيادة
+    const btnModalPlus1000 = document.getElementById('btnModalQuickPlus1000');
+    if (btnModalPlus1000) {
+        btnModalPlus1000.addEventListener('click', async () => {
+            if (!selectedUserForAction) return;
+            btnModalPlus1000.disabled = true;
+            setStatusText(statusEl, 'جاري إضافة 1000 خطوة…', 'loading');
+            await handleQuickStepAdjust(selectedUserForAction, 1000, null, btnModalPlus1000);
+            btnModalPlus1000.disabled = false;
+            const stepsEl = document.getElementById('userModalTodaySteps');
+            if (stepsEl) stepsEl.textContent = Number(selectedUserForAction.daily_steps || 0).toLocaleString('ar-EG');
+            const pointsEl = document.getElementById('userModalPoints');
+            if (pointsEl) pointsEl.textContent = Number(selectedUserForAction.points || 0).toLocaleString('ar-EG');
+            setStatusText(statusEl, `تمت إضافة 1000 خطوة بنجاح. رصيد خطوات اليوم: ${Number(selectedUserForAction.daily_steps || 0).toLocaleString('ar-EG')}`, 'success');
+        });
+    }
+
+    const btnModalMinus1000 = document.getElementById('btnModalQuickMinus1000');
+    if (btnModalMinus1000) {
+        btnModalMinus1000.addEventListener('click', async () => {
+            if (!selectedUserForAction) return;
+            btnModalMinus1000.disabled = true;
+            setStatusText(statusEl, 'جاري خصم 1000 خطوة…', 'loading');
+            await handleQuickStepAdjust(selectedUserForAction, -1000, null, btnModalMinus1000);
+            btnModalMinus1000.disabled = false;
+            const stepsEl = document.getElementById('userModalTodaySteps');
+            if (stepsEl) stepsEl.textContent = Number(selectedUserForAction.daily_steps || 0).toLocaleString('ar-EG');
+            const pointsEl = document.getElementById('userModalPoints');
+            if (pointsEl) pointsEl.textContent = Number(selectedUserForAction.points || 0).toLocaleString('ar-EG');
+            setStatusText(statusEl, `تم خصم 1000 خطوة بنجاح. رصيد خطوات اليوم: ${Number(selectedUserForAction.daily_steps || 0).toLocaleString('ar-EG')}`, 'success');
+        });
+    }
+
+    // إرسال تنبيه مباشر للمشترك من داخل لوحة القيادة
+    const modalNotifInput = document.getElementById('inputModalDirectNotif');
+    const btnModalSendNotif = document.getElementById('btnModalSendDirectNotif');
+    if (btnModalSendNotif && modalNotifInput) {
+        btnModalSendNotif.addEventListener('click', async () => {
+            if (!selectedUserForAction) return;
+            const msg = modalNotifInput.value.trim();
+            if (!msg) {
+                setStatusText(statusEl, 'يرجى كتابة نص التنبيه أولاً.', 'error');
+                return;
+            }
+            btnModalSendNotif.disabled = true;
+            setStatusText(statusEl, 'جاري إرسال التنبيه لهاتف المتسابق…', 'loading');
+            const ok = await sendAdminNotificationToUser(selectedUserForAction.id, msg);
+            btnModalSendNotif.disabled = false;
+            if (ok) {
+                modalNotifInput.value = '';
+                setStatusText(statusEl, 'تم إرسال التنبيه فورياً إلى هاتف المتسابق بنجاح.', 'success');
+            } else {
+                setStatusText(statusEl, 'تعذر إرسال التنبيه. تحقق من الاتصال وحاول ثانية.', 'error');
+            }
         });
     }
 
