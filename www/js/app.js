@@ -1207,6 +1207,8 @@ function initSharedUIBridge() {
     document.addEventListener('auth:signed-in', (event) => {
         const user = event.detail && event.detail.user;
         if (user && user.id) {
+            window.isGuestMode = false;
+            applyGuestModeRestrictions(true);
             scheduleVisitorSessionRegistration(user.id);
             startPresenceHeartbeat(user.id);
         }
@@ -1215,6 +1217,7 @@ function initSharedUIBridge() {
     document.addEventListener('auth:login', async (event) => {
         const user = event.detail?.user;
         if (user && user.id) {
+            window.isGuestMode = false;
             await syncActiveUser(user.id);
             appState.steps = getStepsCount();
             appState.stageIndex = getStageIndexForSteps(appState.steps);
@@ -1238,6 +1241,12 @@ function initSharedUIBridge() {
     // فمستخدم مسجل دخول كان بيشوف شريط الزائر يفلاش لحظة عند كل Refresh
     // قبل ما auth:login يرجّع كل حاجة لوضعها الصح.
     document.addEventListener('auth:confirmed-signed-out', () => {
+        const user = restoreSession();
+        if (user?.id || window.currentUser?.id) {
+            window.isGuestMode = false;
+            applyGuestModeRestrictions(true);
+            return;
+        }
         resetStepsUIForGuestMode();
         initProfileUI(null);
         applyGuestModeRestrictions(false);
@@ -1430,6 +1439,7 @@ function initApp() {
         // initSharedUIBridge فوق وهيطبّقوا الحالة الصح أول ما توصل،
         // من غير ما المستخدم يشوف أي حالة وسط غلط في الأثناء.
         if (currentUser) {
+            window.isGuestMode = false;
             applyGuestModeRestrictions(true);
         }
     });

@@ -15,6 +15,7 @@
    ================================================================== */
 
 import { showAuthGate } from './onboarding.js';
+import { restoreSession } from './auth.js';
 export { showAuthGate };
 
 // حالة الزائر الحالية - هيتم تحديثها لاحقاً من geofence.js بعد استدعاء
@@ -61,6 +62,13 @@ function updateGuestBannerSpacerHeight() {
 }
 
 function showGuestBanner() {
+    const user = restoreSession();
+    if (user?.id || window.currentUser?.id) {
+        window.isGuestMode = false;
+        hideGuestBanner();
+        return;
+    }
+
     const banner = document.getElementById('guestModeBanner');
     if (!banner) return;
 
@@ -138,25 +146,24 @@ function initGuestBanner() {
         }
     });
 
-    // الإظهار المبدئي بناءً على القيمة الحالية لـ isGuestMode وقت تحميل
-    // الصفحة (قيمة "متفائلة" مؤقتة قبل ما الفحص الجغرافي الفعلي يخلّص -
-    // شوف المستمع تحت لتحديثها ديناميكياً بمجرد ما geofence.js يرد فعليًا)
-    if (window.isGuestMode && !isDismissedThisSession) {
+    const user = restoreSession();
+    if (user?.id || window.currentUser?.id) {
+        window.isGuestMode = false;
+        hideGuestBanner();
+    } else if (window.isGuestMode && !isDismissedThisSession) {
         showGuestBanner();
     } else {
         hideGuestBanner();
     }
 
-    // (إصلاح): كان الشريط بيتحدد بس مرة واحدة هنا فوق وقت DOMContentLoaded،
-    // ومبيسمعش لحدث 'geofence:guest-mode-change' اللي geofence.js بيطلقه
-    // فعليًا من applyGuestModeRestrictions() لما الفحص الجغرافي (GPS +
-    // استدعاء check_and_update_user_location في Supabase) يخلّص لاحقًا
-    // بشكل Async. يعني حتى لو الفحص اشتغل صح وحدد إن المستخدم برّه النطاق،
-    // الشريط مكانش بيظهر أبدًا لأنه شاف القيمة الأولية (false غالبًا) بدري
-    // قوي وسكت. المستمع ده بيخلي الشريط يستجيب فوراً لأي تحديث حقيقي لاحق،
-    // سواء بعد أول فحص عند فتح التطبيق أو بعد أي retryGeofenceVerification
-    // يدوي (زرار "حاول التحقق من موقعي تاني" لو موجود).
     document.addEventListener('geofence:guest-mode-change', (event) => {
+        const currentUser = restoreSession();
+        if (currentUser?.id || window.currentUser?.id) {
+            window.isGuestMode = false;
+            hideGuestBanner();
+            return;
+        }
+
         if (event.detail?.isGuestMode) {
             if (!isDismissedThisSession) {
                 showGuestBanner();
@@ -169,6 +176,13 @@ function initGuestBanner() {
 
     document.addEventListener('auth:login', () => {
         isDismissedThisSession = false;
+        window.isGuestMode = false;
+        hideGuestBanner();
+    });
+
+    document.addEventListener('auth:signed-in', () => {
+        isDismissedThisSession = false;
+        window.isGuestMode = false;
         hideGuestBanner();
     });
 }

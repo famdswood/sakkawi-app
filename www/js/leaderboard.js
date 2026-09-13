@@ -926,10 +926,10 @@ function normalizeLeaderboardRow(row) {
     };
 }
 
-/** رجوع معرف المستخدم الحالي (لو مسجل دخول) - قراءة sync سريعة من الجلسة المحفوظة محلياً (نفس ما بيستخدمه auth.js)، من غير أي Request شبكة إضافي */
+/** رجوع معرف المستخدم الحالي (لو مسجل دخول) - قراءة sync سريعة من الجلسة المحفوظة محلياً أو الذاكرة العامة */
 function getCurrentUserId() {
     const user = restoreSession();
-    return user?.id || null;
+    return user?.id || window.currentUser?.id || window.currentProfileRow?.id || null;
 }
 
 /** رجوع قيمة عمود معين (points أو total_steps) من صف - بديفولت صفر لو مش موجود */
@@ -979,7 +979,10 @@ function renderRemainingParticipantsCount(totalUsersCount) {
     if (totalUsersCount === null) return; // فشل الجلب - سيبها مخفية زي ما هي، متفترضش صفر
 
     const currentUserId = getCurrentUserId();
-    const isGuest = Boolean(window.isGuestMode || !currentUserId);
+    if (currentUserId) {
+        window.isGuestMode = false;
+    }
+    const isGuest = !currentUserId;
 
     // صيغة تحفيزية خاصة بالزائر تبرز حجم المجتمع الرياضي وتدعوه للتسجيل
     if (isGuest) {
@@ -1347,7 +1350,10 @@ function renderSelfRankBar(rows, metric) {
     bindGuestLeaderboardCtas();
 
     const currentUserId = getCurrentUserId();
-    const isGuest = Boolean(window.isGuestMode || !currentUserId);
+    if (currentUserId) {
+        window.isGuestMode = false;
+    }
+    const isGuest = !currentUserId;
 
     // إدارة لافتة الزائر في أعلى لوحة الصدارة
     if (guestNotice) {
@@ -1727,3 +1733,20 @@ if (typeof window !== 'undefined') {
 document.addEventListener('app:online', () => {
     refreshActiveLeaderboard();
 });
+
+// الاستماع لتغييرات حالة المصادقة لتحديث لوحة الصدارة وشريط الترتيب فورياً
+if (typeof document !== 'undefined') {
+    document.addEventListener('auth:login', () => {
+        window.isGuestMode = false;
+        refreshActiveLeaderboard();
+    });
+
+    document.addEventListener('auth:signed-in', () => {
+        window.isGuestMode = false;
+        refreshActiveLeaderboard();
+    });
+
+    document.addEventListener('auth:signed-out', () => {
+        refreshActiveLeaderboard();
+    });
+}

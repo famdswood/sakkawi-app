@@ -1296,6 +1296,9 @@ export async function signOut() {
     // على scope الافتراضي بتاع Supabase.
     await supabaseClient.auth.signOut({ scope: 'local' });
     currentUser = null;
+    if (typeof window !== 'undefined') {
+        window.currentUser = null;
+    }
 
     // احتياط إضافي: نتأكد إن فلاج "استمرار وضع الزائر" مش فاضل محفوظ من
     // جلسة زائر قديمة قبل ما يسجّل هذا الحساب دخوله أصلاً - عشان تسجيل
@@ -1358,7 +1361,13 @@ export async function getCurrentUser() {
  * @returns {import('@supabase/supabase-js').User | null}
  */
 export function restoreSession() {
-    if (currentUser) return currentUser;
+    if (currentUser) {
+        if (typeof window !== 'undefined') {
+            window.currentUser = currentUser;
+            window.isGuestMode = false;
+        }
+        return currentUser;
+    }
 
     try {
         const raw = window.localStorage.getItem(AUTH_STORAGE_KEY);
@@ -1374,6 +1383,10 @@ export function restoreSession() {
 
             if (cachedUser) {
                 currentUser = cachedUser;
+                if (typeof window !== 'undefined') {
+                    window.currentUser = cachedUser;
+                    window.isGuestMode = false;
+                }
                 return cachedUser;
             }
         }
@@ -1388,6 +1401,10 @@ export function restoreSession() {
             const backupUser = JSON.parse(backupRaw);
             if (backupUser && backupUser.id) {
                 currentUser = backupUser;
+                if (typeof window !== 'undefined') {
+                    window.currentUser = backupUser;
+                    window.isGuestMode = false;
+                }
                 return backupUser;
             }
         }
@@ -1517,6 +1534,9 @@ async function rejectSignedInSessionDueToBlock(reason, blockedUntil = null) {
     dispatchToast(message, 'error');
     await supabaseClient.auth.signOut({ scope: 'local' });
     currentUser = null;
+    if (typeof window !== 'undefined') {
+        window.currentUser = null;
+    }
     document.dispatchEvent(new CustomEvent('auth:signed-out', { detail: {} }));
     showAuthGate();
 }
@@ -1916,6 +1936,9 @@ async function forceSignOutDueToOtherSession() {
     // أي مكان" بعد فترة قصيرة من نجاح تسجيل الدخول من الجهاز التاني.
     await supabaseClient.auth.signOut({ scope: 'local' });
     currentUser = null;
+    if (typeof window !== 'undefined') {
+        window.currentUser = null;
+    }
     document.dispatchEvent(new CustomEvent('auth:signed-out', { detail: {} }));
     // بدل ما نفتح authModal كمودال منبثق فوق التطبيق (Blur خلفه)، بنودّي
     // المستخدم لنفس صفحة اختيار الدخول/التسجيل الكاملة اللي شافها أول
@@ -1976,6 +1999,10 @@ async function finalizeSignedInSession(user, session, event) {
     hideAuthModal();
     hideAuthApprovalWaitingState();
     currentUser = user;
+    if (typeof window !== 'undefined') {
+        window.currentUser = user;
+        window.isGuestMode = false;
+    }
     isExplicitUserSignOut = false;
 
     try {
@@ -2411,11 +2438,25 @@ function listenToAuthStateChanges() {
         }
 
         if (event === 'SIGNED_OUT') {
-            // لو الحدث ده اتطلق بدون تسجيل خروج صريح وكان الجهاز أوفلاين وفيه جلسة محفوظة، نتجاهل الخروج التلقائي
+            // إذا لم يكن الخروج بطلب صريح من المستخدم، وكان هناك مستخدم أو جلسة محفوظة محلياً
+            // نتجاهل حدث SIGNED_OUT التلقائي الناتج عن انتهاء التوكن المؤقت أو إعادة الاتصال بعد السكون
             const cachedUser = restoreSession();
             const hasHint = hasAnyStoredSessionHint();
-            if (typeof navigator !== 'undefined' && !navigator.onLine && !isExplicitUserSignOut && (cachedUser || hasHint)) {
-                console.warn('[auth] تجاهل SIGNED_OUT التلقائي أثناء انقطاع الإنترنت لحماية الجلسة المحلية.');
+            if (!isExplicitUserSignOut && (cachedUser || hasHint)) {
+                console.warn('[auth] تم تجاهل حدث SIGNED_OUT التلقائي غير الصريح لحماية الجلسة المستمرة محلياً.');
+                if (cachedUser) {
+                    currentUser = cachedUser;
+                    if (typeof window !== 'undefined') {
+                        window.currentUser = cachedUser;
+                        window.isGuestMode = false;
+                    }
+                }
+                // محاولة صامتة لتجديد التوكن في الخلفية دون التأثير على المستخدم
+                supabaseClient.auth.refreshSession().then(({ data }) => {
+                    if (data?.session) {
+                        handleSignedInSession(data.session, 'SIGNED_IN');
+                    }
+                }).catch(() => {});
                 return;
             }
 
@@ -2444,10 +2485,8 @@ function listenToAuthStateChanges() {
 }
 
 /**
- * التحقق من وجود جلسة محفوظة أول ما التطبيق يفتح (Session Persistence).
- * لو موجودة، هتتبع مباشرة من خلال onAuthStateChange (اللي بيطلق
- * INITIAL_SESSION/SIGNED_IN تلقائياً)، ولو مش موجودة، بنعرض صفحة
- * اختيار الدخول/التسجيل الكاملة (showAuthGate) بدل أي مودال منبثق.
+ * التحقق من وجود جلسة محفوظة أول ما التطبيق يفتح أو يستيقظ (Session Persistence).
+ * يضمن بقاء المستخدم مسجل الدخول دون أي تسجيل خروج مفاجئ طالما لم يطلب الخروج صراحة.
  */
 export async function checkExistingSession() {
     const cachedUser = restoreSession();
@@ -2459,6 +2498,10 @@ export async function checkExistingSession() {
         console.log('[auth] أوفلاين: الإبقاء على جلسة المستخدم المحفوظة محلياً');
         if (cachedUser) {
             currentUser = cachedUser;
+            if (typeof window !== 'undefined') {
+                window.currentUser = cachedUser;
+                window.isGuestMode = false;
+            }
             document.dispatchEvent(new CustomEvent('auth:login', {
                 detail: { user: cachedUser, session: null, hasProfile: true, isOffline: true }
             }));
@@ -2467,111 +2510,77 @@ export async function checkExistingSession() {
     }
 
     try {
-        const { data, error } = await supabaseClient.auth.getSession();
-
-        if (error) {
-            const isNetworkError = (typeof navigator !== 'undefined' && !navigator.onLine) ||
-                error.message?.includes('Failed to fetch') ||
-                error.message?.includes('NetworkError') ||
-                error.message?.includes('network') ||
-                error.message?.includes('timeout') ||
-                error.status === 0;
-
-            if (isNetworkError && (cachedUser || hasHint)) {
-                console.warn('[auth] تعذر فحص الجلسة بسبب انقطاع الاتصال، استمرار الجلسة المحفوظة محلياً:', error.message);
-                if (cachedUser) {
-                    currentUser = cachedUser;
-                    document.dispatchEvent(new CustomEvent('auth:login', {
-                        detail: { user: cachedUser, session: null, hasProfile: true, isOffline: true }
-                    }));
-                }
-                return;
+        let sessionData = null;
+        try {
+            const { data, error } = await supabaseClient.auth.getSession();
+            if (!error && data?.session) {
+                sessionData = data.session;
             }
+        } catch (_) {}
 
-            console.error('خطأ في قراءة الجلسة الحالية:', error.message);
-            dispatchConfirmedSignedOut();
-            showAuthGate();
-            return;
-        }
-
-        if (!data.session) {
-            if ((typeof navigator !== 'undefined' && !navigator.onLine) && (cachedUser || hasHint)) {
-                console.warn('[auth] لا توجد جلسة مؤكدة من السيرفر أثناء عدم الاتصال، الإبقاء على الجلسة المحلية.');
-                if (cachedUser) {
-                    currentUser = cachedUser;
-                    document.dispatchEvent(new CustomEvent('auth:login', {
-                        detail: { user: cachedUser, session: null, hasProfile: true, isOffline: true }
-                    }));
-                }
-                return;
-            }
-
-            // (إصلاح - باج "فلاش فتحة الزائر لمستخدم مسجل دخول فعليًا"):
-            // هنا هي أول لحظة "مؤكدة" فعليًا (من سيرفر/تخزين Supabase
-            // نفسه، مش من قراءة متفائلة) إن مفيش جلسة خالص - فبنطلق
-            // dispatchConfirmedSignedOut() هنا بالتحديد (مش في initApp()
-            // بشكل فوري زي قبل كده) عشان app.js يقدر يطبّق قيود وضع
-            // الزائر (applyGuestModeRestrictions(false) + شريط الزائر)
-            // بس لما نتأكد فعلاً، مش بناءً على restoreSession() المتفائلة
-            // اللي ممكن ترجع null للحظة حتى لو فيه جلسة حقيقية شغالة
-            // (شوف تعليق restoreSession فوق) - وده بالظبط كان بيسبب ظهور
-            // شريط "بتتصفح كزائر"/قفل ميزات العضوية للحظة عند كل Refresh
-            // لمستخدم مسجل دخول، قبل ما auth:login الحقيقي يرجّع كل حاجة
-            // لوضعها الصح.
-            dispatchConfirmedSignedOut();
-
-            // (إصلاح - باج حقيقي): "مفيش Session محفوظة" هو نفسه حال
-            // الزائر دايمًا (هو مالوش حساب أصلاً) - فقبل الاستثناء ده،
-            // checkExistingSession() كانت بتفتح showAuthGate() في كل مرة
-            // (بما فيها أي Refresh) حتى لو المستخدم كان قرر بوعي إنه
-            // يكمّل كزائر من قبل، فيرجع يتقفل على صفحة التسجيل من غير
-            // أي سبب واضح رغم إن وضع الزائر نفسه (window.isGuestMode)
-            // كان بيتفعّل صح تحتها. لو المستخدم مسجّل قراره ده فعلاً
-            // (isGuestModeActive - شوف تعليقها فوق)، نسيبه في وضع الزائر
-            // ومنرجعوش لصفحة الدخول قسرًا - مستمع auth:confirmed-signed-out
-            // في js/app.js هو اللي هيفعّل وضع الزائر بصريًا (الشريط
-            // + القيود) زي ما بيحصل في أي تحميل تاني
-            if (isGuestModeActive()) {
-                return;
-            }
-
-            // بدل ما نفتح authModal كمودال منبثق فوق خلفية معتّمة (كان ده
-            // سبب ظهور "صفحة دخول" منفصلة الشكل عن باقي التطبيق) - بنودّي
-            // أي مستخدم من غير جلسة محفوظة لنفس صفحة اختيار الدخول/التسجيل
-            // الكاملة اللي بتظهر بعد الـ 7 سلايدات (شوف showAuthGate في
-            // js/onboarding.js)
-            showAuthGate();
-            return;
-        }
-
-        if (data.session?.user) {
+        // إذا لم نجد جلسة نشطة جاهزة ولكن توجد جلسة محلية سابقة، نحاول إنعاش التوكن بهدوء
+        if (!sessionData && (cachedUser || hasHint)) {
             try {
-                window.localStorage.setItem('sekkawy-cached-profile-user', JSON.stringify(data.session.user));
+                const refreshRes = await supabaseClient.auth.refreshSession();
+                if (refreshRes.data?.session) {
+                    sessionData = refreshRes.data.session;
+                }
             } catch (_) {}
         }
-        // في حالة وجود session فعلاً، onAuthStateChange هيتكفل بيها
-        // ويطلق handleSignedInSession تلقائياً (اللي بيخفي المودال).
-    } catch (err) {
-        const isNetworkError = (typeof navigator !== 'undefined' && !navigator.onLine) ||
-            err?.message?.includes('Failed to fetch') ||
-            err?.message?.includes('NetworkError') ||
-            err?.message?.includes('network') ||
-            err?.message?.includes('timeout');
 
-        if (isNetworkError && (cachedUser || hasHint)) {
-            console.warn('[auth] خطأ شبكة أثناء التحقق من الجلسة، الحفاظ على الجلسة الحالية محلياً:', err);
+        if (sessionData) {
+            if (sessionData.user) {
+                try {
+                    window.localStorage.setItem('sekkawy-cached-profile-user', JSON.stringify(sessionData.user));
+                } catch (_) {}
+            }
+            if (!currentUser || currentUser.id !== sessionData.user?.id) {
+                await handleSignedInSession(sessionData, 'INITIAL_SESSION');
+            }
+            return;
+        }
+
+        // إذا لم نصل لجلسة من السيرفر ولكن توجد جلسة محلية محفوظة ولم يطلب المستخدم الخروج صراحة
+        // لا نقوم بطرده أبداً؛ نبقي على حسابه نشطاً محلياً ونطلق حدث تسجيل الدخول
+        if (!isExplicitUserSignOut && (cachedUser || hasHint)) {
+            console.warn('[auth] تعذر تأكيد الجلسة من السيرفر حالياً، الحفاظ على الجلسة المحلية وتفادي تسجيل الخروج المفاجئ.');
             if (cachedUser) {
                 currentUser = cachedUser;
+                if (typeof window !== 'undefined') {
+                    window.currentUser = cachedUser;
+                    window.isGuestMode = false;
+                }
                 document.dispatchEvent(new CustomEvent('auth:login', {
-                    detail: { user: cachedUser, session: null, hasProfile: true, isOffline: true }
+                    detail: { user: cachedUser, session: null, hasProfile: true, isOffline: false }
                 }));
             }
             return;
         }
 
-        // أي خطأ غير متوقع (supabaseClient مش متظبط..إلخ)
-        // مينفعش يمنع ظهور واجهة تسجيل الدخول - أهم حاجة المستخدم
-        // يشوف طريقة يدخل بيها بدل ما يفضل التطبيق واقف على الفاضي.
+        // هنا فقط: نتأكد يقيناً أنه لا توجد أي جلسة للمستخدم أو أنه طلب تسجيل الخروج بنفسه
+        dispatchConfirmedSignedOut();
+
+        if (isGuestModeActive()) {
+            return;
+        }
+
+        showAuthGate();
+    } catch (err) {
+        if (!isExplicitUserSignOut && (cachedUser || hasHint)) {
+            console.warn('[auth] استثناء أثناء فحص الجلسة، الإبقاء على الجلسة المحلية:', err);
+            if (cachedUser) {
+                currentUser = cachedUser;
+                if (typeof window !== 'undefined') {
+                    window.currentUser = cachedUser;
+                    window.isGuestMode = false;
+                }
+                document.dispatchEvent(new CustomEvent('auth:login', {
+                    detail: { user: cachedUser, session: null, hasProfile: true, isOffline: false }
+                }));
+            }
+            return;
+        }
+
         console.error('خطأ غير متوقع أثناء التحقق من الجلسة:', err);
         dispatchConfirmedSignedOut();
         showAuthGate();

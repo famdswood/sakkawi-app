@@ -1018,6 +1018,25 @@ function setStepsCounterMutedVisual(shouldMute) {
  *               => تفعيل وضع الزائر وحجب الميزات الحساسة.
  */
 export function applyGuestModeRestrictions(isAllowed) {
+    // حماية قاطعة: إذا كان المستخدم مسجلاً دخول بالفعل ولديه حساب موثق محلياً أو في الذاكرة،
+    // فإنه ليس زائراً على الإطلاق وتتاح له كل الميزات فورياً
+    let hasActiveUser = false;
+    try {
+        if (window.currentUser?.id) {
+            hasActiveUser = true;
+        } else {
+            const raw = window.localStorage.getItem('sekkawy-cached-profile-user');
+            if (raw) {
+                const u = JSON.parse(raw);
+                if (u && u.id) hasActiveUser = true;
+            }
+        }
+    } catch (_) {}
+
+    if (hasActiveUser) {
+        isAllowed = true;
+    }
+
     const isGuestMode = isAllowed !== true;
 
     // (1) تفعيل العلم العام على window، عشان أي ملف تاني في التطبيق
