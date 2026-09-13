@@ -664,7 +664,8 @@ input,
 .story-creator-focus-mode #storySidebarTools,
 .story-creator-focus-mode #storyBottomBar,
 .story-creator-focus-mode #storyBgPaletteBar,
-.story-creator-focus-mode #quickInspirationChips {
+.story-creator-focus-mode #quickInspirationChips,
+.story-creator-focus-mode #storyTextSizeSliderContainer {
     opacity: 0 !important;
     pointer-events: none !important;
     transform: translateY(14px) !important;
@@ -838,7 +839,7 @@ input,
     max-width: calc(100% - 24px);
     overflow: hidden;
     text-overflow: ellipsis;
-    z-index: 2;
+    z-index: var(--sticker-z, 15);
     pointer-events: none;
 }
 
@@ -852,7 +853,7 @@ input,
    من عمل Scroll/Zoom افتراضي على الكبسولة وقت اللمس، عشان يسيب التحكم
    بالكامل للـ JS (راجع bindStickerDragAndResize في stories.js) */
 #storyPreviewSticker {
-    z-index: 30;
+    z-index: var(--sticker-z, 15);
     pointer-events: auto;
     cursor: grab;
     touch-action: none;
@@ -860,6 +861,39 @@ input,
 
 #storyPreviewSticker:active {
     cursor: grabbing;
+}
+
+/* حاوية النص الحرة القابلة للسحب والتحجيم في صانع الستوري */
+.story-text-container {
+    position: absolute;
+    left: var(--text-x, 50%);
+    top: var(--text-y, 50%);
+    transform: translate(-50%, -50%) scale(var(--text-scale, 1));
+    z-index: var(--text-z, 25);
+    width: 90%;
+    max-width: 420px;
+    touch-action: none;
+    cursor: grab;
+}
+
+.story-text-container:active {
+    cursor: grabbing;
+}
+
+/* حاوية النص في مشغل مشاهدة الستوري */
+.story-viewer-text-wrapper {
+    position: absolute;
+    left: var(--text-x, 50%);
+    top: var(--text-y, 50%);
+    transform: translate(-50%, -50%) scale(var(--text-scale, 1));
+    z-index: var(--text-z, 25);
+    width: 90%;
+    max-width: 420px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
 }
 
 .story-stat-sticker-icon {
@@ -3021,7 +3055,7 @@ html[dir='ltr'] .admin-toggle-switch input:checked ~ .admin-toggle-switch-thumb 
 
 /* أيقونة قفل صغيرة أعلى العنصر المقفول، عشان تبقى الحالة واضحة بصريًا
    من غير ما نحتاج نلمس أي Markup تاني غير data-requires-membership.
-   (تعديل - باج بصري): الإيموجي 🔒 القديم كان بيبان "رخيص" وسط هوية
+   رمز القفل النصي القديم كان بيبان غير متناسق وسط هوية
    Dark Luxury المبنية بالكامل على أيقونات SVG فاخرة (شكله ولونه كمان
    بيختلف من جهاز لجهاز حسب نظام التشغيل). استبدلناه بدايرة خلفية
    (::after) + أيقونة SVG حقيقية ملوّنة بالذهبي عن طريق mask-image
@@ -3648,7 +3682,7 @@ input[type="date"].admin-text-input {
 }
 
 /* ==================================================================
-   14) شارات استلام/مشاهدة رسايل شات الدعم (✓/✓✓) + كارت معلومات الرسالة
+   14) شارات استلام/مشاهدة رسايل شات الدعم + كارت معلومات الرسالة
    (المرحلة 9) - js/support-chat.js (buildTicksHtml/showMessageInfoPopover).
    الشارات نفسها متبنية بالكامل بـ Tailwind inline (كلاسات text-lux-500/
    text-gold-400 في الـ SVG)، فمحتاجين هنا بس أنيميشن ظهور خفيف لكارت

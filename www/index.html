@@ -1826,8 +1826,9 @@
                 <!-- كارت تحفيز الزائر داخل لوحة الصدارة -->
                 <div id="leaderboardGuestNotice" class="hidden relative overflow-hidden bg-gradient-to-l from-gold-500/15 via-lux-900 to-lux-900 border border-gold-500/25 rounded-3xl p-4 shadow-soft-card flex items-center justify-between gap-3">
                     <div class="flex items-center gap-3 min-w-0">
-                        <div class="w-10 h-10 rounded-2xl bg-gold-500/20 border border-gold-500/30 flex items-center justify-center shrink-0 text-xl shadow-inner">
-                            
+                        <div class="w-10 h-10 rounded-2xl bg-lux-800 border border-gold-500/30 flex items-center justify-center shrink-0 overflow-hidden shadow-inner">
+                            <img src="data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%20100%20100%27%3E%3Ccircle%20cx%3D%2750%27%20cy%3D%2750%27%20r%3D%2750%27%20fill%3D%27%2314171F%27%2F%3E%3Ccircle%20cx%3D%2750%27%20cy%3D%2738%27%20r%3D%2716%27%20fill%3D%27none%27%20stroke%3D%27%239A96A0%27%20stroke-width%3D%277%27%2F%3E%3Cpath%20d%3D%27M20%2084c0-18%2013.5-30%2030-30s30%2012%2030%2030%27%20fill%3D%27none%27%20stroke%3D%27%239A96A0%27%20stroke-width%3D%277%27%20stroke-linecap%3D%27round%27%2F%3E%3C%2Fsvg%3E"
+                                 alt="صورة زائر" class="w-full h-full object-cover">
                         </div>
                         <div class="min-w-0">
                             <h4 class="text-xs font-black text-lux-50 truncate">أنت تتابع السباق كزائر </h4>
@@ -2274,14 +2275,6 @@
                          القديم كله محفوظ في تاريخ الـ Git، مش محتاجين نعيد بناءه
                          من الصفر -->
 
-                    <button id="btnOpenAdminPanel" 
-                            class="hidden w-full text-right py-3 px-3 flex items-center justify-between text-xs font-bold text-amber-300 hover:bg-amber-500/10 rounded-xl transition-colors">
-                        <div class="flex items-center gap-2.5">
-                            <span class="text-base flex items-center text-amber-400"><svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></span>
-                            <span>لوحة تحكم الأدمن</span>
-                        </div>
-                        <span class="text-amber-400/60">‹</span>
-                    </button>
 
                     <button id="btnAccountSettings" 
                             class="w-full text-right py-3 px-3 flex items-center justify-between text-xs font-bold text-lux-200 hover:bg-lux-800 rounded-xl transition-colors">
@@ -2560,6 +2553,20 @@
                                 </button>
                             </div>
                             <input type="file" id="editProfileAvatarFileInput" accept="image/*" class="hidden">
+                        </div>
+
+                        <!-- اسم المستخدم (للعرض فقط - غير قابل للتعديل) -->
+                        <div>
+                            <div class="flex items-center justify-between mb-1.5">
+                                <label for="editUsernameDisplay" class="block text-xs font-bold text-lux-300">اسم المستخدم</label>
+                                <span class="text-[10px] text-lux-500 font-semibold">غير قابل للتعديل</span>
+                            </div>
+                            <div class="relative">
+                                <input type="text" id="editUsernameDisplay" readonly disabled
+                                       dir="ltr"
+                                       class="w-full bg-lux-950/70 border border-lux-700/50 rounded-2xl px-4 py-2.5 text-sm text-gold-400 font-bold font-mono tracking-wide cursor-not-allowed select-all">
+                            </div>
+                            <p class="text-[10px] text-lux-500 mt-1">يُستخدم لتسجيل الدخول السريع في حسابك</p>
                         </div>
 
                         <!-- الاسم الكامل -->
@@ -3933,8 +3940,8 @@
             <div id="storyProgressBars" class="absolute top-[max(2.75rem,calc(env(safe-area-inset-top,0px)+1rem))] left-3 right-3 z-20 flex gap-1.5"></div>
             <!-- رأس الستوري (اسم صاحبها + وقت النشر) - في أقصى اليمين وأسفل أشرطة التقدم مع مساحة آمنة لزر الإغلاق -->
             <div id="storyHeader" class="absolute top-[max(4.25rem,calc(env(safe-area-inset-top,0px)+2.25rem))] right-3.5 z-20 flex items-center max-w-[calc(100%-5rem)]"></div>
-            <!-- محتوى الستوري -->
-            <div id="storyContent" class="w-full h-full flex items-center justify-center text-white relative"></div>
+            <!-- محتوى الستوري - متطابق 1:1 هندسيًا مع storyPreviewArea لضمان المحاكاة الدقيقة -->
+            <div id="storyContent" class="w-full h-full flex flex-col items-center justify-center p-6 text-white relative"></div>
             <!-- منطقتا التنقل: يمين = السابقة، شمال = التالية (اتقلب الاتجاه
                  عمداً حسب طلب المستخدم عشان يماشي اتجاه القراءة العربي)،
                  right-0/left-0 دول خصائص فيزيائية ثابتة مش منطقية، والربط
@@ -4116,14 +4123,18 @@
             <div id="storyPreviewArea"
              class="absolute inset-0 w-full h-full flex flex-col items-center justify-center p-6 transition-all duration-300">
             
-            <!-- خانة الكتابة المباشرة في قلب الشاشة الحرة -->
-            <div class="w-full max-w-md relative z-10 flex flex-col items-center justify-center my-auto px-4 pointer-events-none">
-                <textarea id="createStoryTextarea" maxlength="120" rows="3"
+            <!-- حاوية النص الحرة القابلة للسحب والتحجيم وترتيب الطبقات -->
+            <div id="storyPreviewTextWrapper"
+                 class="story-text-container absolute flex flex-col items-center justify-center pointer-events-auto touch-none select-none cursor-grab active:cursor-grabbing"
+                 style="--text-x: 50%; --text-y: 50%; --text-scale: 1; --text-z: 25; width: 90%; max-width: 420px;">
+                <textarea id="createStoryTextarea" maxlength="120" rows="1"
                           placeholder="اكتب نص هنا.."
-                          class="w-full bg-transparent border-none text-center text-white text-2xl sm:text-3xl font-cairo font-black leading-relaxed placeholder:text-white/35 focus:outline-none resize-none overflow-hidden drop-shadow-md transition-all pointer-events-auto"></textarea>
-                
-                <!-- عداد الحروف خفيف وصغير أسفل النص مباشرة -->
-                <span id="createStoryCharCount" class="text-[10px] text-white/60 font-bold mt-2 bg-black/30 px-2.5 py-0.5 rounded-full backdrop-blur-sm shadow-sm pointer-events-none">0 / 120</span>
+                          class="w-full bg-transparent border-none text-center text-white font-cairo font-black leading-relaxed placeholder:text-white/35 focus:outline-none resize-none overflow-hidden drop-shadow-md transition-all pointer-events-auto p-0 m-0 min-h-[54px] select-text"></textarea>
+            </div>
+
+            <!-- عداد الحروف خفيف وصغير أسفل الشاشة خارج حاوية النص لضمان دقة التمركز -->
+            <div class="absolute bottom-[calc(env(safe-area-inset-bottom,0px)+4.8rem)] inset-x-0 z-30 flex justify-center pointer-events-none">
+                <span id="createStoryCharCount" class="text-[10px] text-white/60 font-bold bg-black/30 px-2.5 py-0.5 rounded-full backdrop-blur-sm shadow-sm pointer-events-none">0 / 120</span>
             </div>
 
             <!-- كبسولة ملصق الإنجاز الحي القابلة للسحب والتحريك على كامل أبعاد الشاشة -->
@@ -4152,6 +4163,37 @@
             </button>
         </div>
 
+        <!-- وحدة التحكم السريعة في حجم النص (تكبير/تصغير وسلايدر رأسي) -->
+        <div id="storyTextSizeSliderContainer"
+             class="absolute top-1/2 -translate-y-1/2 left-3.5 z-40 flex flex-col items-center gap-2 transition-all duration-300 select-none">
+            
+            <!-- زر تكبير النص -->
+            <button type="button" id="btnStoryTextScaleUp"
+                    aria-label="تكبير النص" title="تكبير النص"
+                    class="w-8 h-8 rounded-full bg-lux-950/70 hover:bg-lux-900 border border-white/15 text-white/90 hover:text-white flex items-center justify-center shadow-lg backdrop-blur-md active:scale-90 transition-all">
+                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg>
+            </button>
+
+            <!-- مسار السلايدر الرأسي -->
+            <div id="storyTextScaleTrack" class="relative w-2 h-28 bg-white/20 hover:bg-white/30 rounded-full cursor-pointer touch-none flex items-center justify-center">
+                <div id="storyTextScaleThumb"
+                     class="absolute w-4 h-4 rounded-full bg-gradient-to-tr from-gold-400 to-amber-300 shadow-glow-amber border border-lux-950/50 pointer-events-none transition-transform"
+                     style="top: 50%; transform: translate(-50%, -50%); left: 50%;"></div>
+            </div>
+
+            <!-- زر تصغير النص -->
+            <button type="button" id="btnStoryTextScaleDown"
+                    aria-label="تصغير النص" title="تصغير النص"
+                    class="w-8 h-8 rounded-full bg-lux-950/70 hover:bg-lux-900 border border-white/15 text-white/90 hover:text-white flex items-center justify-center shadow-lg backdrop-blur-md active:scale-90 transition-all">
+                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg>
+            </button>
+        </div>
+
         <!-- الشريط الجانبي العمودي العائم (Floating Vertical Sidebar) بأيقونات كودية SVG -->
         <div id="storySidebarTools"
              class="absolute top-[max(4.8rem,calc(env(safe-area-inset-top,0px)+3rem))] right-3.5 z-40 flex flex-col items-center gap-2.5 transition-all duration-300">
@@ -4174,7 +4216,17 @@
                 </svg>
             </button>
 
-            <!-- 3. زر تبديل مدة العرض -->
+            <!-- 3. زر نظام الطبقات (التحكم في ترتيب النص والملصق) -->
+            <button type="button" id="btnStoryToolLayers" class="story-sidebar-tool-btn" aria-label="ترتيب الطبقات" title="ترتيب الطبقات">
+                <svg class="w-4 h-4 text-lux-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+                    <polyline points="2 17 12 22 22 17"></polyline>
+                    <polyline points="2 12 12 17 22 12"></polyline>
+                </svg>
+                <span id="storyLayersBadge" class="text-[9px] font-black text-gold-400 leading-none mt-0.5">النص</span>
+            </button>
+
+            <!-- 4. زر تبديل مدة العرض -->
             <button type="button" id="btnStoryToolDuration" class="story-sidebar-tool-btn" aria-label="مدة العرض" title="مدة العرض">
                 <svg class="w-4 h-4 text-lux-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <circle cx="12" cy="12" r="10"></circle>
@@ -4183,7 +4235,7 @@
                 <span id="storyDurationBadge" class="text-[9px] font-black text-gold-400 leading-none mt-0.5">24س</span>
             </button>
 
-            <!-- 4. زر تبديل الخصوصية -->
+            <!-- 5. زر تبديل الخصوصية -->
             <button type="button" id="btnStoryToolVisibility" class="story-sidebar-tool-btn" aria-label="الخصوصية" title="مين يشوفها">
                 <svg class="w-4 h-4 text-lux-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
@@ -4194,7 +4246,7 @@
                 <span id="storyVisibilityBadge" class="text-[9px] font-black text-gold-400 leading-none mt-0.5">الكل</span>
             </button>
 
-            <!-- 5. زر إظهار رقائق الإلهام والعبارات الجاهزة -->
+            <!-- 6. زر إظهار رقائق الإلهام والعبارات الجاهزة -->
             <button type="button" id="btnStoryToolInspiration" class="story-sidebar-tool-btn" aria-label="عبارات سريعة" title="إلهام">
                 <svg class="w-5 h-5 text-amber-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"></path>

@@ -128,11 +128,11 @@ const STORY_BG_OPTIONS = [
 
 /** عبارات تحفيزية سريعة بنقرة واحدة لإنشاء الاستوري */
 const STORY_INSPIRATION_CHIPS = [
-    { label: '🔥 10,000 خطوة', text: 'قفلت الـ 10,000 خطوة النهاردة ومستمر! 🔥💪' },
-    { label: '💪 عاش يا أبطال', text: 'عاش يا وحوش سِكّاوي، الاستمرار سر الفوز! 💪' },
-    { label: '⚡ مين ينافسني؟', text: 'مين يقدر يكسر رقمي في الخطوات النهاردة؟ ⚡' },
-    { label: '🏆 في طريقي للقمة', text: 'عيني على المركز الأول في الليدربورد 🏆' },
-    { label: '🏃 خطواتي سر طاقتي', text: 'كل خطوة بتقربني من هدفي، متوقفش! 🏃‍♂️' },
+    { label: '10,000 خطوة', text: 'قفلت الـ 10,000 خطوة النهاردة ومستمر بقوة' },
+    { label: 'عاش يا أبطال', text: 'عاش يا وحوش سِكّاوي، الاستمرار هو سر الفوز' },
+    { label: 'مين ينافسني؟', text: 'مين يقدر يكسر رقمي في الخطوات النهاردة؟' },
+    { label: 'في طريقي للقمة', text: 'عيني على المركز الأول في الليدربورد' },
+    { label: 'خطواتي سر طاقتي', text: 'كل خطوة بتقربني من هدفي، مش هوقف' },
 ];
 
 /** خط الاستوري بقى ثابت (كايرو الأساسي بس) بدل ما كان فيه 4 خيارات -
@@ -169,6 +169,15 @@ const DEFAULT_STICKER_POSITION = { x: 50, y: 88, scale: 1, ratio: 9 / 16 };
 const STICKER_MIN_SCALE = 0.6;
 const STICKER_MAX_SCALE = 2.2;
 
+/** الإعدادات الافتراضية وحدود تحجيم نص الستوري */
+const DEFAULT_TEXT_POSITION = {
+    x: 50,
+    y: 50,
+    scale: 1,
+};
+const TEXT_MIN_SCALE = 0.5;
+const TEXT_MAX_SCALE = 2.5;
+
 /** الحالة المؤقتة لفورم إنشاء الاستوري الحالية (تُصفَّر بعد كل نشر) */
 const createStoryState = {
     selectedBg: STORY_BG_OPTIONS[0],
@@ -184,6 +193,10 @@ const createStoryState = {
     // الملصق وقت النشر (شوف publishStory) عشان يتحفظ نفس المكان بالظبط
     // في مشغل المشاهدة الفعلي كمان
     stickerPosition: { ...DEFAULT_STICKER_POSITION },
+    // موضع ومقاس نص الستوري الحالي في المعاينة (بالنسب المئوية)
+    textPosition: { ...DEFAULT_TEXT_POSITION },
+    // ترتيب الطبقات: 'text' (النص في الطبقة العليا) أو 'sticker' (ملصق الإنجاز في الطبقة العليا)
+    layerOrder: 'text',
 };
 
 /** هدف عدد الخطوات اليومي المستخدم لحساب نسبة الوصول في ملصق الإنجاز الحي */
@@ -462,23 +475,28 @@ function parseStatTagFromContent(rawContent) {
     let statData = null;
     try {
         const parsed = JSON.parse(match[1]);
-        if (parsed && typeof parsed.steps === 'number' && typeof parsed.percent === 'number') {
+        if (parsed && typeof parsed === 'object') {
+            const hasSticker = typeof parsed.steps === 'number' && typeof parsed.percent === 'number';
             statData = {
-                steps: parsed.steps,
-                percent: parsed.percent,
+                hasSticker,
+                steps: hasSticker ? parsed.steps : 0,
+                percent: hasSticker ? parsed.percent : 0,
                 x: typeof parsed.x === 'number' ? parsed.x : DEFAULT_STICKER_POSITION.x,
                 y: typeof parsed.y === 'number' ? parsed.y : DEFAULT_STICKER_POSITION.y,
                 scale: typeof parsed.scale === 'number' ? parsed.scale : DEFAULT_STICKER_POSITION.scale,
                 ar: typeof parsed.ar === 'number' ? parsed.ar : DEFAULT_STICKER_POSITION.ratio,
+                tx: typeof parsed.tx === 'number' ? parsed.tx : 50,
+                ty: typeof parsed.ty === 'number' ? parsed.ty : 50,
+                ts: typeof parsed.ts === 'number' ? parsed.ts : 1,
+                top: parsed.top === 'sticker' ? 'sticker' : 'text',
             };
         }
     } catch (err) {
-        // JSON بايظ - نتجاهله ونعامل الاستوري كأنها عادية من غير ملصق
+        // JSON غير صالح - نتجاهله
         statData = null;
     }
 
-    // بنقص الوسم من آخر النص فقط (match.index هو بداية الوسم)، ونشيل أي
-    // مسافات/أسطر فاضية زيادة فضلت في الآخر بعد القص
+    // قص الوسم من نهاية النص
     return { content: text.slice(0, match.index).trimEnd(), statData };
 }
 
@@ -1571,8 +1589,16 @@ function renderCurrentStory() {
         // عن صندوق المعاينة وقت الإنشاء - راجع تعليق الدالة دي لتفاصيل
         // المشكلة والحل. استوري عادية من غير ملصق (statData=null) هتفضل
         // تتعرض بالظبط زي ما كانت من غير أي تغيير - مفيش HTML إضافي بيتحقن خالص
-        const statStickerHtml = story.statData
-            ? `<div class="story-stat-sticker" aria-hidden="true">
+        const hasSticker = story.statData && story.statData.hasSticker !== false && typeof story.statData.steps === 'number';
+        const isStickerTop = story.statData?.top === 'sticker';
+        const textZ = isStickerTop ? 15 : 25;
+        const stickerZ = isStickerTop ? 25 : 15;
+        const tx = story.statData?.tx ?? 50;
+        const ty = story.statData?.ty ?? 50;
+        const ts = story.statData?.ts ?? 1;
+
+        const statStickerHtml = hasSticker
+            ? `<div class="story-stat-sticker" style="z-index: ${stickerZ};" aria-hidden="true">
                     <span class="story-stat-sticker-icon flex items-center justify-center text-amber-400">
                         <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
                             <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/>
@@ -1583,10 +1609,29 @@ function renderCurrentStory() {
                </div>`
             : '';
 
-        content.innerHTML = `<p class="text-white text-lg px-8 ${story.fontClass || 'font-cairo font-black'} text-center">${escapeHtml(story.content)}</p>${statStickerHtml}`;
+        let fontSizeRem = '1.9rem';
+        const textLen = (story.content || '').length;
+        if (textLen > 70) {
+            fontSizeRem = '1.2rem';
+        } else if (textLen > 35) {
+            fontSizeRem = '1.5rem';
+        }
 
-        if (story.statData) {
-            positionRenderedSticker(content, content.querySelector('.story-stat-sticker'), story.statData);
+        content.innerHTML = `
+            <div class="story-viewer-text-wrapper"
+                 style="position: absolute; left: ${tx}%; top: ${ty}%; transform: translate(-50%, -50%) scale(${ts}); z-index: ${textZ}; width: 90%; max-width: 420px; display: flex; flex-direction: column; align-items: center; justify-content: center; pointer-events: none;">
+                <p class="w-full text-center text-white ${story.fontClass || 'font-cairo font-black'} leading-relaxed drop-shadow-md m-0 p-0"
+                   style="font-size: ${fontSizeRem};">${escapeHtml(story.content)}</p>
+            </div>
+            ${statStickerHtml}
+        `;
+
+        if (hasSticker) {
+            const stickerEl = content.querySelector('.story-stat-sticker');
+            if (stickerEl) {
+                positionRenderedSticker(content, stickerEl, story.statData);
+                stickerEl.style.zIndex = stickerZ;
+            }
         }
     }
 
@@ -2459,9 +2504,10 @@ function updateLivePreview() {
         textarea.style.fontSize = '1.9rem';
     }
 
-    // تمدد تلقائي ناعم لارتفاع الخانة حسب عدد الأسطر
+    // تمدد تلقائي دقيق لارتفاع الخانة ليتطابق مع النص الفعلي تماماً مع حد أدنى 54px لظهور placeholder
     textarea.style.height = 'auto';
-    textarea.style.height = Math.min(260, Math.max(80, textarea.scrollHeight)) + 'px';
+    const computedHeight = Math.max(54, textarea.scrollHeight);
+    textarea.style.height = Math.min(320, computedHeight) + 'px';
 
     // مزامنة حالة التحديد في شريط ألوان الخلفية
     const bgContainer = document.getElementById('storyBgOptions');
@@ -2530,6 +2576,54 @@ function applyStickerTransform(stickerEl, position) {
     stickerEl.style.setProperty('--sticker-x', `${position.x}%`);
     stickerEl.style.setProperty('--sticker-y', `${position.y}%`);
     stickerEl.style.setProperty('--sticker-scale', position.scale);
+}
+
+/**
+ * تطبيق موضع ومقاس وترتيب طبقة نص الستوري (#storyPreviewTextWrapper)
+ * كمتغيرات CSS مخصصة (--text-x/-y/-scale/-z)
+ */
+function applyTextTransform() {
+    const wrapper = document.getElementById('storyPreviewTextWrapper');
+    if (!wrapper) return;
+    wrapper.style.setProperty('--text-x', `${createStoryState.textPosition.x}%`);
+    wrapper.style.setProperty('--text-y', `${createStoryState.textPosition.y}%`);
+    wrapper.style.setProperty('--text-scale', createStoryState.textPosition.scale);
+    wrapper.style.setProperty('--text-z', createStoryState.layerOrder === 'sticker' ? '15' : '25');
+
+    updateTextScaleSliderUI();
+}
+
+/**
+ * تحديث ترتيب طبقات العرض (z-index) والشارة الدالة في الشريط الجانبي
+ */
+function updateLayerZIndexes() {
+    const textWrapper = document.getElementById('storyPreviewTextWrapper');
+    const sticker = document.getElementById('storyPreviewSticker');
+    const badge = document.getElementById('storyLayersBadge');
+    const isStickerTop = createStoryState.layerOrder === 'sticker';
+
+    if (textWrapper) {
+        textWrapper.style.setProperty('--text-z', isStickerTop ? '15' : '25');
+    }
+    if (sticker) {
+        sticker.style.setProperty('--sticker-z', isStickerTop ? '25' : '15');
+    }
+    if (badge) {
+        badge.textContent = isStickerTop ? 'إنجاز' : 'النص';
+    }
+}
+
+/**
+ * تحديث موضع مؤشر سلايدر مقاس النص بناءً على createStoryState.textPosition.scale
+ */
+function updateTextScaleSliderUI() {
+    const thumb = document.getElementById('storyTextScaleThumb');
+    if (!thumb) return;
+    const currentScale = createStoryState.textPosition.scale;
+    const range = TEXT_MAX_SCALE - TEXT_MIN_SCALE;
+    const percent = Math.min(100, Math.max(0, ((currentScale - TEXT_MIN_SCALE) / range) * 100));
+    // السلايدر مقلوب رأسياً: الأعلى = أكبر مقاس (100% -> top: 0%)
+    thumb.style.top = `${100 - percent}%`;
 }
 
 /**
@@ -2624,6 +2718,12 @@ function resetCreateStoryForm() {
     createStoryState.stickerPosition = { ...DEFAULT_STICKER_POSITION };
     updateStatStickerPreview();
 
+    // تصفير موضع وحجم النص ونظام الطبقات
+    createStoryState.textPosition = { ...DEFAULT_TEXT_POSITION };
+    createStoryState.layerOrder = 'text';
+    applyTextTransform();
+    updateLayerZIndexes();
+
     // تصفير الأدراج العائمة وحالة الأزرار والشارات
     document.getElementById('storyBgPaletteBar')?.classList.add('hidden');
     document.getElementById('quickInspirationChips')?.classList.add('hidden');
@@ -2672,8 +2772,11 @@ function openCreateStoryModal() {
     pushModalState(hideCreateStoryModal);
     setTimeout(() => {
         const textarea = document.getElementById('createStoryTextarea');
-        if (textarea) textarea.focus();
-    }, 150);
+        if (textarea) {
+            updateLivePreview();
+            textarea.focus();
+        }
+    }, 120);
 }
 
 /** الإخفاء الخام لمودال إنشاء الاستوري فقط - استخدم closeCreateStoryModal تحت */
@@ -2760,11 +2863,18 @@ async function publishStory() {
     // بيبان في مكان مختلف عن اللي المستخدم حدده بالظبط (راجع
     // positionRenderedSticker لتفاصيل المشكلة والحل)
     // (مقرّبين لرقم عشري واحد/اتنين/تلاتة بس عشان الوسم يفضل صغير)
+    const previewArea = document.getElementById('storyPreviewArea');
+    const textLayout = {
+        tx: Math.round(createStoryState.textPosition.x * 10) / 10,
+        ty: Math.round(createStoryState.textPosition.y * 10) / 10,
+        ts: Math.round(createStoryState.textPosition.scale * 100) / 100,
+        top: createStoryState.layerOrder || 'text',
+    };
+
     let statPayload = null;
     if (createStoryState.includeStats) {
         const todaySteps = getStepsCount();
         const progressPercent = Math.min(100, Math.round((todaySteps / DAILY_STEPS_GOAL) * 100));
-        const previewArea = document.getElementById('storyPreviewArea');
         statPayload = {
             steps: todaySteps,
             percent: progressPercent,
@@ -2772,6 +2882,11 @@ async function publishStory() {
             y: Math.round(createStoryState.stickerPosition.y * 10) / 10,
             scale: Math.round(createStoryState.stickerPosition.scale * 100) / 100,
             ar: Math.round(measureAspectRatio(previewArea) * 1000) / 1000,
+            ...textLayout,
+        };
+    } else if (textLayout.tx !== 50 || textLayout.ty !== 50 || textLayout.ts !== 1) {
+        statPayload = {
+            ...textLayout,
         };
     }
 
@@ -2830,11 +2945,20 @@ async function publishStory() {
             // من mapRpcRowToStory بعد أي إعادة جلب لاحقة، عشان الاستوري
             // متتغيرش شكلها فجأة أول ما تُقرأ من السيرفر تاني
             content,
-            // (المرحلة 4-ب) بيانات ملصق الإنجاز الحي كخاصية مباشرة على
-            // كائن الاستوري - null لو includeStats كان متوقف (استوري
-            // عادية)، بالظبط زي شكل الخاصية الراجعة من mapRpcRowToStory
-            // (بما فيها x/y/scale الموضع/المقاس اللي المستخدم حدده)
-            statData: statPayload,
+            // بيانات الملصق والتموضع ونظام الطبقات
+            statData: statPayload ? {
+                hasSticker: createStoryState.includeStats,
+                steps: statPayload.steps ?? 0,
+                percent: statPayload.percent ?? 0,
+                x: statPayload.x ?? DEFAULT_STICKER_POSITION.x,
+                y: statPayload.y ?? DEFAULT_STICKER_POSITION.y,
+                scale: statPayload.scale ?? DEFAULT_STICKER_POSITION.scale,
+                ar: statPayload.ar ?? DEFAULT_STICKER_POSITION.ratio,
+                tx: statPayload.tx ?? 50,
+                ty: statPayload.ty ?? 50,
+                ts: statPayload.ts ?? 1,
+                top: statPayload.top ?? 'text',
+            } : null,
             background: createStoryState.selectedBg.value,
             fontClass: createStoryState.selectedFont.cssClass,
             createdAt: data?.created_at || new Date().toISOString(),
@@ -2900,17 +3024,10 @@ function bindStickerDragAndResize() {
     const activePointers = new Map();
     let pinchStartDistance = null;
     let pinchStartScale = 1;
+    let dragOffsetX = 0;
+    let dragOffsetY = 0;
 
     const clampPercent = (value) => Math.min(96, Math.max(4, value));
-
-    function positionFromClientPoint(clientX, clientY) {
-        const rect = area.getBoundingClientRect();
-        if (rect.width === 0 || rect.height === 0) return null;
-        return {
-            x: clampPercent(((clientX - rect.left) / rect.width) * 100),
-            y: clampPercent(((clientY - rect.top) / rect.height) * 100),
-        };
-    }
 
     const distanceBetween = (p1, p2) => Math.hypot(p1.x - p2.x, p1.y - p2.y);
 
@@ -2920,6 +3037,14 @@ function bindStickerDragAndResize() {
 
         // إخفاء التركيز ولوحة المفاتيح فوراً عند بدء سحب الملصق لضمان سلاسة الحركة ورؤية الشاشة كاملة
         document.getElementById('createStoryTextarea')?.blur();
+
+        const rect = area.getBoundingClientRect();
+        if (rect.width > 0 && rect.height > 0) {
+            const touchX = ((event.clientX - rect.left) / rect.width) * 100;
+            const touchY = ((event.clientY - rect.top) / rect.height) * 100;
+            dragOffsetX = touchX - createStoryState.stickerPosition.x;
+            dragOffsetY = touchY - createStoryState.stickerPosition.y;
+        }
 
         if (activePointers.size === 2) {
             const [p1, p2] = [...activePointers.values()];
@@ -2935,11 +3060,14 @@ function bindStickerDragAndResize() {
         activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
 
         if (activePointers.size === 1) {
-            // سحب بإصبع واحد: مركز الكبسولة بيتبع مكان الإصبع/الماوس مباشرة
-            const point = positionFromClientPoint(event.clientX, event.clientY);
-            if (!point) return;
-            createStoryState.stickerPosition.x = point.x;
-            createStoryState.stickerPosition.y = point.y;
+            const rect = area.getBoundingClientRect();
+            if (!rect.width || !rect.height) return;
+            const touchX = ((event.clientX - rect.left) / rect.width) * 100;
+            const touchY = ((event.clientY - rect.top) / rect.height) * 100;
+            const newX = clampPercent(touchX - dragOffsetX);
+            const newY = clampPercent(touchY - dragOffsetY);
+            createStoryState.stickerPosition.x = Math.round(newX * 10) / 10;
+            createStoryState.stickerPosition.y = Math.round(newY * 10) / 10;
             applyStickerTransform(sticker, createStoryState.stickerPosition);
         } else if (activePointers.size === 2 && pinchStartDistance) {
             // Pinch بإصبعين: نسبة تغيّر المسافة بين الإصبعين بتتضرب في
@@ -2965,9 +3093,141 @@ function bindStickerDragAndResize() {
         // لو رجعنا لإصبع واحد أو أقل، لازم نصفّر بداية الـ Pinch عشان لو
         // المستخدم ضم إصبع جديد تاني، الحساب يبدأ من الصفر مش من قيمة قديمة
         if (activePointers.size < 2) pinchStartDistance = null;
+        if (activePointers.size === 0) {
+            dragOffsetX = 0;
+            dragOffsetY = 0;
+        }
     }
     sticker.addEventListener('pointerup', releasePointer);
     sticker.addEventListener('pointercancel', releasePointer);
+
+    // تكبير/تصغير ملصق الإنجاز بعجلة الماوس على الكمبيوتر
+    sticker.addEventListener('wheel', (event) => {
+        event.preventDefault();
+        const factor = event.deltaY < 0 ? 1.05 : 0.95;
+        const newScale = Math.min(
+            STICKER_MAX_SCALE,
+            Math.max(STICKER_MIN_SCALE, createStoryState.stickerPosition.scale * factor)
+        );
+        createStoryState.stickerPosition.scale = Math.round(newScale * 100) / 100;
+        applyStickerTransform(sticker, createStoryState.stickerPosition);
+    }, { passive: false });
+}
+
+/**
+ * ربط سحب وتكبير وتصغير نص الستوري (#storyPreviewTextWrapper) في كانفاس المعاينة
+ * مع فصل ذكي بين النقر السريع (للكتابة) والسحب (للتحريك)
+ */
+function bindTextDragAndResize() {
+    const textWrapper = document.getElementById('storyPreviewTextWrapper');
+    const textarea = document.getElementById('createStoryTextarea');
+    const area = document.getElementById('storyPreviewArea');
+    if (!textWrapper || !textarea || !area) return;
+
+    const activePointers = new Map();
+    let pinchStartDistance = null;
+    let pinchStartScale = 1;
+    let dragOffsetX = 0;
+    let dragOffsetY = 0;
+    let pointerDownStartX = 0;
+    let pointerDownStartY = 0;
+    let pointerDownTime = 0;
+    let isDragging = false;
+
+    const clampPercent = (value) => Math.min(94, Math.max(6, value));
+    const distanceBetween = (p1, p2) => Math.hypot(p1.x - p2.x, p1.y - p2.y);
+
+    textWrapper.addEventListener('pointerdown', (event) => {
+        textWrapper.setPointerCapture(event.pointerId);
+        activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+
+        pointerDownStartX = event.clientX;
+        pointerDownStartY = event.clientY;
+        pointerDownTime = Date.now();
+        isDragging = false;
+
+        const rect = area.getBoundingClientRect();
+        if (rect.width > 0 && rect.height > 0) {
+            const touchX = ((event.clientX - rect.left) / rect.width) * 100;
+            const touchY = ((event.clientY - rect.top) / rect.height) * 100;
+            dragOffsetX = touchX - createStoryState.textPosition.x;
+            dragOffsetY = touchY - createStoryState.textPosition.y;
+        }
+
+        if (activePointers.size === 2) {
+            textarea.blur();
+            const [p1, p2] = [...activePointers.values()];
+            pinchStartDistance = distanceBetween(p1, p2);
+            pinchStartScale = createStoryState.textPosition.scale;
+        }
+    });
+
+    textWrapper.addEventListener('pointermove', (event) => {
+        if (!activePointers.has(event.pointerId)) return;
+        activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+
+        const moveDist = Math.hypot(event.clientX - pointerDownStartX, event.clientY - pointerDownStartY);
+        if (moveDist > 6) {
+            if (!isDragging) {
+                isDragging = true;
+                textarea.blur();
+            }
+        }
+
+        if (activePointers.size === 1 && isDragging) {
+            const rect = area.getBoundingClientRect();
+            if (!rect.width || !rect.height) return;
+            const touchX = ((event.clientX - rect.left) / rect.width) * 100;
+            const touchY = ((event.clientY - rect.top) / rect.height) * 100;
+            const newX = clampPercent(touchX - dragOffsetX);
+            const newY = clampPercent(touchY - dragOffsetY);
+            createStoryState.textPosition.x = Math.round(newX * 10) / 10;
+            createStoryState.textPosition.y = Math.round(newY * 10) / 10;
+            applyTextTransform();
+        } else if (activePointers.size === 2 && pinchStartDistance) {
+            const [p1, p2] = [...activePointers.values()];
+            const newDistance = distanceBetween(p1, p2);
+            const ratio = newDistance / pinchStartDistance;
+            const newScale = Math.min(
+                TEXT_MAX_SCALE,
+                Math.max(TEXT_MIN_SCALE, pinchStartScale * ratio)
+            );
+            createStoryState.textPosition.scale = Math.round(newScale * 100) / 100;
+            applyTextTransform();
+        }
+    });
+
+    function releasePointer(event) {
+        activePointers.delete(event.pointerId);
+
+        const moveDist = Math.hypot(event.clientX - pointerDownStartX, event.clientY - pointerDownStartY);
+        const duration = Date.now() - pointerDownTime;
+
+        if (moveDist < 6 && duration < 350) {
+            textarea.focus();
+        }
+
+        if (activePointers.size < 2) pinchStartDistance = null;
+        if (activePointers.size === 0) {
+            dragOffsetX = 0;
+            dragOffsetY = 0;
+            isDragging = false;
+        }
+    }
+
+    textWrapper.addEventListener('pointerup', releasePointer);
+    textWrapper.addEventListener('pointercancel', releasePointer);
+
+    textWrapper.addEventListener('wheel', (event) => {
+        event.preventDefault();
+        const factor = event.deltaY < 0 ? 1.05 : 0.95;
+        const newScale = Math.min(
+            TEXT_MAX_SCALE,
+            Math.max(TEXT_MIN_SCALE, createStoryState.textPosition.scale * factor)
+        );
+        createStoryState.textPosition.scale = Math.round(newScale * 100) / 100;
+        applyTextTransform();
+    }, { passive: false });
 }
 
 /**
@@ -2984,8 +3244,33 @@ function bindCreateStoryModalEvents() {
     renderCreateStoryOptionButtons();
     renderQuickInspirationChips();
     bindStickerDragAndResize();
+    bindTextDragAndResize();
 
     const previewArea = document.getElementById('storyPreviewArea');
+    if (previewArea) {
+        previewArea.addEventListener('pointerdown', (e) => {
+            // لو الضغط على أدراج أو أزرار جانبية أو ملصق أو حاوية النص أو وحدة الحجم أو زر الإغلاق
+            if (e.target.closest('#storyPreviewSticker') ||
+                e.target.closest('#storyPreviewTextWrapper') ||
+                e.target.closest('#storyTextSizeSliderContainer') ||
+                e.target.closest('#storySidebarTools') ||
+                e.target.closest('#storyBottomBar') ||
+                e.target.closest('#btnCloseCreateStory')) {
+                return;
+            }
+            // إغلاق الأدراج المنبثقة
+            if (!e.target.closest('#storyBgPaletteBar') && !e.target.closest('#quickInspirationChips')) {
+                document.getElementById('storyBgPaletteBar')?.classList.add('hidden');
+                document.getElementById('quickInspirationChips')?.classList.add('hidden');
+                document.getElementById('btnStoryToolBg')?.classList.remove('is-active');
+                document.getElementById('btnStoryToolInspiration')?.classList.remove('is-active');
+            }
+            // النقر في أي مساحة بالكانفاس يركز على حقل الكتابة فوراً للبدء في الكتابة
+            if (e.target !== textarea) {
+                setTimeout(() => textarea?.focus(), 50);
+            }
+        });
+    }
 
     if (textarea) {
         textarea.addEventListener('input', () => {
@@ -3079,6 +3364,83 @@ function bindCreateStoryModalEvents() {
         });
     }
 
+    // 6. زر نظام الطبقات (التبديل بين أسبقية ظهور النص أو ملصق الإنجاز)
+    const layersBtn = document.getElementById('btnStoryToolLayers');
+    if (layersBtn) {
+        layersBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            createStoryState.layerOrder = createStoryState.layerOrder === 'sticker' ? 'text' : 'sticker';
+            updateLayerZIndexes();
+            try { if (navigator.vibrate) navigator.vibrate(20); } catch (_) {}
+
+            const msg = createStoryState.layerOrder === 'sticker'
+                ? 'الطبقة العليا: ملصق الإنجاز (فوق النص)'
+                : 'الطبقة العليا: النص (فوق الإنجاز)';
+            document.dispatchEvent(new CustomEvent('app:toast', { detail: { message: msg } }));
+        });
+    }
+
+    // 7. ربط أزرار وسلايدر تكبير وتصغير النص على الحافة الجانبية
+    const btnScaleUp = document.getElementById('btnStoryTextScaleUp');
+    const btnScaleDown = document.getElementById('btnStoryTextScaleDown');
+    const scaleTrack = document.getElementById('storyTextScaleTrack');
+
+    if (btnScaleUp) {
+        btnScaleUp.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const newScale = Math.min(TEXT_MAX_SCALE, createStoryState.textPosition.scale + 0.15);
+            createStoryState.textPosition.scale = Math.round(newScale * 100) / 100;
+            applyTextTransform();
+            try { if (navigator.vibrate) navigator.vibrate(15); } catch (_) {}
+        });
+    }
+
+    if (btnScaleDown) {
+        btnScaleDown.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const newScale = Math.max(TEXT_MIN_SCALE, createStoryState.textPosition.scale - 0.15);
+            createStoryState.textPosition.scale = Math.round(newScale * 100) / 100;
+            applyTextTransform();
+            try { if (navigator.vibrate) navigator.vibrate(15); } catch (_) {}
+        });
+    }
+
+    if (scaleTrack) {
+        const updateFromTrack = (clientY) => {
+            const rect = scaleTrack.getBoundingClientRect();
+            if (rect.height <= 0) return;
+            const rawPercent = (clientY - rect.top) / rect.height;
+            const clampedPercent = Math.min(1, Math.max(0, 1 - rawPercent));
+            const newScale = TEXT_MIN_SCALE + (clampedPercent * (TEXT_MAX_SCALE - TEXT_MIN_SCALE));
+            createStoryState.textPosition.scale = Math.round(newScale * 100) / 100;
+            applyTextTransform();
+        };
+
+        let isTrackDragging = false;
+        scaleTrack.addEventListener('pointerdown', (e) => {
+            e.stopPropagation();
+            scaleTrack.setPointerCapture(e.pointerId);
+            isTrackDragging = true;
+            updateFromTrack(e.clientY);
+        });
+
+        scaleTrack.addEventListener('pointermove', (e) => {
+            if (isTrackDragging) {
+                e.stopPropagation();
+                updateFromTrack(e.clientY);
+            }
+        });
+
+        const stopTrackDrag = (e) => {
+            if (isTrackDragging) {
+                e.stopPropagation();
+                isTrackDragging = false;
+            }
+        };
+        scaleTrack.addEventListener('pointerup', stopTrackDrag);
+        scaleTrack.addEventListener('pointercancel', stopTrackDrag);
+    }
+
     // إيماءة السحب الأفقي عبر الكانفاس لتبديل التدرج اللوني (Swipe to change background)
     if (previewArea) {
         let swipeStartX = 0;
@@ -3088,7 +3450,9 @@ function bindCreateStoryModalEvents() {
 
         previewArea.addEventListener('pointerdown', (e) => {
             if (e.target.closest('#createStoryTextarea') ||
+                e.target.closest('#storyPreviewTextWrapper') ||
                 e.target.closest('#storyPreviewSticker') ||
+                e.target.closest('#storyTextSizeSliderContainer') ||
                 e.target.closest('button')) {
                 isPotentialSwipe = false;
                 return;

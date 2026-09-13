@@ -2293,7 +2293,7 @@ function initPostCreateWidget() {
     updatePostCreatePreview();
 }
 
-/** تجيب آخر 20 منشور وترسمهم في #postsManageList مع زرار حذف لكل واحد */
+/** تجيب آخر 20 منشور وترسمهم في #postsManageList مع زرار حذف وزرار عرض المعجبين */
 async function loadRecentPostsForAdmin() {
     const statusEl = document.getElementById('postsManageStatus');
     const listEl = document.getElementById('postsManageList');
@@ -2301,6 +2301,16 @@ async function loadRecentPostsForAdmin() {
 
     setStatusText(statusEl, 'جاري تحميل المنشورات…', 'loading');
 
+    // نحاول استدعاء admin_list_posts أولاً للحصول على عدد الإعجابات بدقة
+    const { data: rpcData, error: rpcError } = await supabaseClient.rpc('admin_list_posts');
+
+    if (!rpcError && rpcData) {
+        renderAdminPostsList(rpcData);
+        setStatusText(statusEl, rpcData.length ? '' : 'مفيش منشورات لسه.', rpcData.length ? null : 'empty');
+        return;
+    }
+
+    // بديل احتياطي إذا تعذر استدعاء الـ RPC
     const { data, error } = await supabaseClient
         .from('posts')
         .select('id, content, image_url, created_at')
@@ -2317,7 +2327,7 @@ async function loadRecentPostsForAdmin() {
     setStatusText(statusEl, (data && data.length) ? '' : 'مفيش منشورات لسه.', (data && data.length) ? null : 'empty');
 }
 
-/** @param {Array<{id:string, content:string|null, image_url:string|null, created_at:string}>} posts */
+/** @param {Array<{id:string, content:string|null, image_url:string|null, created_at:string, likes_count?:number|string}>} posts */
 function renderAdminPostsList(posts) {
     const listEl = document.getElementById('postsManageList');
     if (!listEl) return;
@@ -2333,6 +2343,7 @@ function renderAdminPostsList(posts) {
         // السريعة والحذف، مش لعرض المنشور كامل
         const rawExcerpt = (post.content || (post.image_url ? '(صورة بدون نص)' : '')).trim();
         const excerpt = rawExcerpt.length > 60 ? `${rawExcerpt.slice(0, 60)}…` : rawExcerpt;
+        const likesCount = Number(post.likes_count || 0);
 
         li.innerHTML = `
             ${post.image_url
@@ -2340,12 +2351,20 @@ function renderAdminPostsList(posts) {
                 : `<span class="admin-user-avatar post-card-app-avatar" aria-hidden="true">س</span>`}
             <div class="admin-user-info">
                 <div class="admin-user-name">${escapeHtml(excerpt) || '—'}</div>
-                <div class="admin-user-username">${timeText}</div>
+                <div class="admin-user-username">${timeText} · <span class="text-gold-400 font-bold">${likesCount.toLocaleString('ar-EG')} إعجاب</span></div>
             </div>
-            <div class="admin-user-actions">
+            <div class="admin-user-actions flex items-center gap-1.5">
+                <button type="button" class="post-likers-btn px-2.5 py-1 rounded-lg bg-lux-800 hover:bg-lux-700 text-gold-400 border border-gold-500/30 text-xs font-bold transition">
+                    المعجبين
+                </button>
                 <button type="button" class="admin-notify-clear-btn post-delete-btn">حذف</button>
             </div>
         `;
+
+        const likersBtn = li.querySelector('.post-likers-btn');
+        if (likersBtn) {
+            likersBtn.addEventListener('click', () => openPostLikersModal(post.id, excerpt));
+        }
 
         const deleteBtn = li.querySelector('.post-delete-btn');
         if (deleteBtn) {
@@ -2354,6 +2373,85 @@ function renderAdminPostsList(posts) {
 
         listEl.appendChild(li);
     });
+}
+
+/** فتح نافذة عرض قائمة المعجبين بالمنشور */
+async function openPostLikersModal(postId, postExcerpt) {
+    const modal = document.getElementById('postLikersModal');
+    const statusEl = document.getElementById('postLikersStatus');
+    const listEl = document.getElementById('postLikersList');
+    const countSubtitle = document.getElementById('postLikersCountSubtitle');
+    if (!modal || !listEl) return;
+
+    modal.classList.remove('hidden');
+    listEl.innerHTML = '';
+    setStatusText(statusEl, 'جاري تحميل قائمة المعجبين…', 'loading');
+    if (countSubtitle) countSubtitle.textContent = 'جاري التحميل…';
+
+    const { data: likers, error } = await supabaseClient.rpc('admin_get_post_likes', {
+        p_post_id: postId
+    });
+
+    if (error) {
+        console.error('[admin.js] فشل جلب المعجبين بالمنشور:', error);
+        setStatusText(statusEl, 'تعذر تحميل المعجبين بهذا المنشور.', 'error');
+        if (countSubtitle) countSubtitle.textContent = 'خطأ في التحميل';
+        return;
+    }
+
+    if (!likers || likers.length === 0) {
+        setStatusText(statusEl, 'لم يقم أي مستخدم بالإعجاب بهذا المنشور حتى الآن.', 'empty');
+        if (countSubtitle) countSubtitle.textContent = 'لا توجد إعجابات';
+        return;
+    }
+
+    setStatusText(statusEl, '', null);
+    if (countSubtitle) {
+        countSubtitle.textContent = `${likers.length.toLocaleString('ar-EG')} مستخدم أعجبهم المنشور`;
+    }
+
+    likers.forEach((user) => {
+        const row = document.createElement('div');
+        row.className = 'flex items-center justify-between p-2.5 rounded-xl bg-lux-950 border border-lux-800/80 hover:border-lux-700 transition';
+
+        const avatar = user.avatar_url || buildFallbackAvatarUrl(user.full_name || '?');
+        const name = escapeHtml(user.full_name || 'مستخدم');
+        const username = user.username ? `@${escapeHtml(user.username)}` : '';
+        const likedTime = formatRelativeArabicTime(user.liked_at);
+
+        row.innerHTML = `
+            <div class="flex items-center gap-2.5 min-w-0">
+                <img src="${avatar}" class="w-8 h-8 rounded-full border border-lux-700 object-cover shrink-0" alt="">
+                <div class="min-w-0">
+                    <div class="text-xs font-bold text-lux-100 truncate">${name}</div>
+                    <div class="text-[10px] text-lux-400 font-mono truncate">${username}</div>
+                </div>
+            </div>
+            <div class="text-[10px] font-mono text-gold-400/90 shrink-0 text-left">
+                ${likedTime}
+            </div>
+        `;
+
+        listEl.appendChild(row);
+    });
+}
+
+function initPostLikersModal() {
+    const modal = document.getElementById('postLikersModal');
+    const closeBtn = document.getElementById('btnClosePostLikersModal');
+    const closeBottomBtn = document.getElementById('btnClosePostLikersModalBottom');
+
+    const closeModal = () => {
+        if (modal) modal.classList.add('hidden');
+    };
+
+    if (closeBtn) closeBtn.addEventListener('click', closeModal);
+    if (closeBottomBtn) closeBottomBtn.addEventListener('click', closeModal);
+    if (modal) {
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) closeModal();
+        });
+    }
 }
 
 /** حذف منشور - عن طريق admin_delete_post RPC بس، بعد تأكيد من الأدمن */
@@ -2380,6 +2478,7 @@ async function handleDeletePost(postId, rowEl) {
 /** تهيئة تاب المنشورات بالكامل - تُستدعى مرة واحدة من initAdminPage */
 function initPostsWidget() {
     initPostCreateWidget();
+    initPostLikersModal();
     loadRecentPostsForAdmin();
 }
 
@@ -4890,12 +4989,103 @@ function updateUserModalLocationDisplay(user) {
    12) إدارة ومراقبة القصص (Stories Moderation)
    ================================================================== */
 
+const ADMIN_STAT_TAG_REGEX = /\n?<!--stat:(\{[^}]*\})-->\s*$/;
+
+function parseAdminStoryContent(rawContent) {
+    const text = rawContent || '';
+    const match = text.match(ADMIN_STAT_TAG_REGEX);
+    if (!match) return { content: text, statData: null };
+
+    let statData = null;
+    try {
+        const parsed = JSON.parse(match[1]);
+        if (parsed && typeof parsed === 'object') {
+            statData = parsed;
+        }
+    } catch (_) {}
+
+    return {
+        content: text.slice(0, match.index).trimEnd(),
+        statData
+    };
+}
+
+function getStoryFontCssClass(fontStyle) {
+    switch (fontStyle) {
+        case 'tajawal-bold': return 'font-tajawal font-bold';
+        case 'amiri-quran': return 'font-serif font-bold';
+        case 'ruqaa': return 'font-ruqaa font-bold';
+        case 'kufi': return 'font-kufi font-bold';
+        case 'naskh': return 'font-naskh font-bold';
+        case 'cairo-black':
+        default:
+            return 'font-cairo font-black';
+    }
+}
+
+let activeViewingStory = null;
+
 function initStoriesModerationWidget() {
     const btnPosts = document.getElementById('btnSubTabPostsView');
     const btnStories = document.getElementById('btnSubTabStoriesView');
     const postsContainer = document.getElementById('subTabPostsContainer');
     const storiesContainer = document.getElementById('subTabStoriesContainer');
     const btnRefresh = document.getElementById('btnRefreshAdminStories');
+
+    const modal = document.getElementById('adminStoryViewerModal');
+    const btnClose = document.getElementById('btnCloseAdminStoryViewer');
+    const btnCloseBottom = document.getElementById('btnAdminViewerCloseBottom');
+    const btnDelete = document.getElementById('btnAdminViewerDeleteStory');
+
+    const closeViewer = () => {
+        if (modal) {
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+            modal.style.display = 'none';
+        }
+        activeViewingStory = null;
+    };
+
+    if (btnClose) btnClose.addEventListener('click', closeViewer);
+    if (btnCloseBottom) btnCloseBottom.addEventListener('click', closeViewer);
+    if (modal) {
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) closeViewer();
+        });
+    }
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && activeViewingStory && modal && !modal.classList.contains('hidden')) {
+            closeViewer();
+        }
+    });
+
+    if (btnDelete) {
+        btnDelete.addEventListener('click', async () => {
+            if (!activeViewingStory) return;
+            const reason = prompt('اكتب سبب حذف القصة (سيتم تسجيله وإرسال إشعار للمستخدم):', 'مخالفة معايير النشر');
+            if (!reason) return;
+
+            btnDelete.disabled = true;
+            btnDelete.textContent = 'جاري الحذف…';
+
+            const { error: delErr } = await supabaseClient.rpc('admin_delete_story', {
+                p_story_id: activeViewingStory.id,
+                p_reason: reason,
+            });
+
+            btnDelete.disabled = false;
+            btnDelete.textContent = 'حذف هذه القصة';
+
+            if (delErr) {
+                alert('فشل حذف القصة: ' + (delErr.message || delErr));
+                return;
+            }
+
+            closeViewer();
+            loadAdminStories();
+        });
+    }
 
     if (!btnPosts || !btnStories || !postsContainer || !storiesContainer) return;
 
@@ -4916,6 +5106,92 @@ function initStoriesModerationWidget() {
 
     if (btnRefresh) {
         btnRefresh.addEventListener('click', loadAdminStories);
+    }
+}
+
+function openAdminStoryViewer(story, cleanText, statData) {
+    try {
+        const modal = document.getElementById('adminStoryViewerModal');
+        const avatarEl = document.getElementById('adminStoryViewerAvatar');
+        const authorEl = document.getElementById('adminStoryViewerAuthor');
+        const metaEl = document.getElementById('adminStoryViewerMeta');
+        const contentEl = document.getElementById('adminStoryViewerContent');
+        const textWrapper = document.getElementById('adminStoryViewerTextWrapper');
+        const textEl = document.getElementById('adminStoryViewerText');
+        const stickerEl = document.getElementById('adminStoryViewerSticker');
+        const stickerSteps = document.getElementById('adminStoryViewerStickerSteps');
+        const stickerPercent = document.getElementById('adminStoryViewerStickerPercent');
+        if (!modal) return;
+
+        activeViewingStory = story;
+
+        const avatar = story.author_avatar || buildFallbackAvatarUrl(story.author_name || '?');
+        const authorName = escapeHtml(story.author_name || 'مستخدم');
+        const username = story.author_username ? `@${escapeHtml(story.author_username)}` : '';
+        const timeAgo = formatRelativeArabicTime(story.created_at);
+
+        if (avatarEl) avatarEl.src = avatar;
+        if (authorEl) authorEl.textContent = authorName;
+        if (metaEl) metaEl.textContent = `${username} · ${timeAgo}`;
+
+        if (contentEl) {
+            if (story.media_url) {
+                contentEl.style.backgroundImage = `url("${escapeHtml(story.media_url)}")`;
+                contentEl.style.backgroundSize = 'cover';
+                contentEl.style.backgroundPosition = 'center';
+                contentEl.style.backgroundColor = '#0b0e14';
+            } else {
+                contentEl.style.backgroundImage = 'none';
+                contentEl.style.background = story.background_color || '#1e1b4b';
+            }
+        }
+
+        const isStickerTop = statData?.top === 'sticker';
+        const textZ = isStickerTop ? 15 : 25;
+        const stickerZ = isStickerTop ? 25 : 15;
+        const tx = statData?.tx ?? 50;
+        const ty = statData?.ty ?? 50;
+        const ts = statData?.ts ?? 1;
+
+        if (textWrapper) {
+            textWrapper.style.position = 'absolute';
+            textWrapper.style.left = `${tx}%`;
+            textWrapper.style.top = `${ty}%`;
+            textWrapper.style.transform = `translate(-50%, -50%) scale(${ts})`;
+            textWrapper.style.zIndex = textZ;
+        }
+
+        if (textEl) {
+            textEl.textContent = cleanText;
+            textEl.className = `w-full text-center text-white font-bold leading-relaxed break-words select-none m-0 p-0 ${getStoryFontCssClass(story.font_style)}`;
+            if (cleanText.length > 70) {
+                textEl.style.fontSize = '1.2rem';
+            } else if (cleanText.length > 35) {
+                textEl.style.fontSize = '1.5rem';
+            } else {
+                textEl.style.fontSize = '1.9rem';
+            }
+        }
+
+        if (stickerEl) {
+            if (statData && typeof statData.steps === 'number') {
+                stickerEl.classList.remove('hidden');
+                if (stickerSteps) stickerSteps.textContent = `${Number(statData.steps).toLocaleString('en-US')} خطوة`;
+                if (stickerPercent) stickerPercent.textContent = `${statData.percent}%`;
+                stickerEl.style.setProperty('--sticker-x', `${statData.x ?? 50}%`);
+                stickerEl.style.setProperty('--sticker-y', `${statData.y ?? 88}%`);
+                stickerEl.style.setProperty('--sticker-scale', statData.scale ?? 1);
+                stickerEl.style.zIndex = stickerZ;
+            } else {
+                stickerEl.classList.add('hidden');
+            }
+        }
+
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+        modal.style.display = 'flex';
+    } catch (err) {
+        console.error('[admin.js] خطأ أثناء فتح معاينة القصة:', err);
     }
 }
 
@@ -4944,7 +5220,7 @@ async function loadAdminStories() {
 
     stories.forEach((story) => {
         const card = document.createElement('div');
-        card.className = 'p-4 rounded-xl bg-lux-950 border border-lux-800 space-y-3 flex flex-col justify-between';
+        card.className = 'p-4 rounded-2xl bg-lux-950 border border-lux-800/90 space-y-3 flex flex-col justify-between hover:border-lux-700 transition';
 
         const avatar = story.author_avatar || buildFallbackAvatarUrl(story.author_name || '?');
         const authorName = escapeHtml(story.author_name || 'مستخدم');
@@ -4953,40 +5229,94 @@ async function loadAdminStories() {
         const expiresAt = new Date(story.expires_at);
         const remainingHours = Math.max(0, Math.round((expiresAt.getTime() - Date.now()) / (1000 * 60 * 60)));
 
-        const mediaHtml = story.media_url
-            ? `<div class="w-full h-44 rounded-lg overflow-hidden bg-black/40 border border-lux-800">
-                 <img src="${escapeHtml(story.media_url)}" class="w-full h-full object-cover" alt="">
-               </div>`
-            : story.text_content
-                ? `<div class="w-full h-32 rounded-lg p-3 flex items-center justify-center text-center font-bold text-sm text-white" style="background-color: ${escapeHtml(story.background_color || '#1e1b4b')}">
-                     ${escapeHtml(story.text_content)}
-                   </div>`
-                : '';
+        const { content: cleanText, statData } = parseAdminStoryContent(story.text_content);
 
-        const captionHtml = story.media_url && story.text_content
-            ? `<p class="text-xs text-lux-200 mt-1">${escapeHtml(story.text_content)}</p>`
-            : '';
+        const isStickerTop = statData?.top === 'sticker';
+        const textZ = isStickerTop ? 15 : 25;
+        const stickerZ = isStickerTop ? 25 : 15;
+        const tx = statData?.tx ?? 50;
+        const ty = statData?.ty ?? 50;
+        const ts = statData?.ts ?? 1;
+
+        const stickerHtml = (statData && typeof statData.steps === 'number') ? `
+            <div class="story-stat-sticker absolute flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-black/60 border border-gold-500/40 backdrop-blur-md shadow-lg pointer-events-none"
+                 style="left: ${statData.x}%; top: ${statData.y}%; transform: translate(-50%, -50%) scale(${statData.scale || 1}); z-index: ${stickerZ};">
+                <span class="text-amber-400">
+                    <svg class="w-3 h-3" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/>
+                    </svg>
+                </span>
+                <span class="text-[11px] font-bold text-white font-mono">${Number(statData.steps).toLocaleString('en-US')} خطوة</span>
+                <span class="text-[10px] font-bold text-gold-400 font-mono">${statData.percent}%</span>
+            </div>
+        ` : '';
+
+        const fontClass = getStoryFontCssClass(story.font_style);
+
+        const previewCardHtml = story.media_url
+            ? `<div class="story-preview-box w-full aspect-[9/14] max-h-72 rounded-2xl relative overflow-hidden bg-black/40 border border-lux-800 shadow-xl cursor-pointer hover:border-gold-500/50 transition group">
+                 <img src="${escapeHtml(story.media_url)}" class="w-full h-full object-cover" alt="">
+                 <div class="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 flex items-center justify-center transition backdrop-blur-[2px]">
+                     <span class="px-3 py-1.5 rounded-full bg-lux-900/90 text-gold-400 text-xs font-bold border border-gold-500/40 shadow-lg">معاينة القصة</span>
+                 </div>
+               </div>`
+            : `<div class="story-preview-box w-full aspect-[9/14] max-h-72 rounded-2xl relative overflow-hidden p-4 border border-lux-800 shadow-xl cursor-pointer hover:border-gold-500/50 transition group"
+                    style="background: ${escapeHtml(story.background_color || '#1e1b4b')}">
+                 <div class="absolute flex flex-col items-center justify-center pointer-events-none" style="left: ${tx}%; top: ${ty}%; transform: translate(-50%, -50%) scale(${ts}); z-index: ${textZ}; width: 90%;">
+                     <p class="text-white text-center font-bold text-sm sm:text-base leading-relaxed break-words select-none ${fontClass}">
+                         ${escapeHtml(cleanText)}
+                     </p>
+                 </div>
+                 ${stickerHtml}
+                 <div class="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 flex items-center justify-center transition backdrop-blur-[2px] z-30">
+                     <span class="px-3 py-1.5 rounded-full bg-lux-900/90 text-gold-400 text-xs font-bold border border-gold-500/40 shadow-lg">
+                         معاينة القصة بالكامل
+                     </span>
+                 </div>
+               </div>`;
 
         card.innerHTML = `
-            <div class="space-y-2">
-                <div class="flex items-center gap-2.5">
-                    <img src="${avatar}" class="w-8 h-8 rounded-full border border-lux-700 object-cover" alt="">
-                    <div>
-                        <div class="text-xs font-bold text-lux-100">${authorName}</div>
-                        <div class="text-[10px] text-lux-400 font-mono">${username} · ${timeAgo}</div>
+            <div class="space-y-3">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2.5">
+                        <img src="${avatar}" class="w-8 h-8 rounded-full border border-lux-700 object-cover" alt="">
+                        <div>
+                            <div class="text-xs font-bold text-lux-100">${authorName}</div>
+                            <div class="text-[10px] text-lux-400 font-mono">${username} · ${timeAgo}</div>
+                        </div>
                     </div>
+                    <span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${story.visibility === 'friends' ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'}">
+                        ${story.visibility === 'friends' ? 'للأصدقاء' : 'عامة'}
+                    </span>
                 </div>
-                ${mediaHtml}
-                ${captionHtml}
-                <div class="text-[10px] font-mono text-lux-500">
-                    تنتهي بعد حوالي ${remainingHours} ساعة
+
+                ${previewCardHtml}
+
+                <div class="flex items-center justify-between text-[10px] font-mono text-lux-500 pt-1">
+                    <span>تنتهي بعد حوالي ${remainingHours} ساعة</span>
+                    <button type="button" class="btn-preview-story text-gold-400 hover:text-gold-300 font-bold transition">
+                        تكبير الشاشة ↗
+                    </button>
                 </div>
             </div>
 
-            <button type="button" class="btn-delete-story w-full py-1.5 rounded-lg bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-600/40 text-xs font-bold transition mt-2">
+            <button type="button" class="btn-delete-story w-full py-2 rounded-xl bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-600/40 text-xs font-bold transition mt-2">
                 حذف القصة فوراً
             </button>
         `;
+
+        const previewBox = card.querySelector('.story-preview-box');
+        const previewBtn = card.querySelector('.btn-preview-story');
+        const openViewerHandler = (e) => {
+            if (e) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+            openAdminStoryViewer(story, cleanText, statData);
+        };
+
+        if (previewBox) previewBox.addEventListener('click', openViewerHandler);
+        if (previewBtn) previewBtn.addEventListener('click', openViewerHandler);
 
         const delBtn = card.querySelector('.btn-delete-story');
         if (delBtn) {

@@ -1337,9 +1337,6 @@ export function renderProfileHeader(profile, user) {
     }
 
     if (isGuestHeader) {
-        const adminPanelBtn = document.getElementById('btnOpenAdminPanel');
-        if (adminPanelBtn) adminPanelBtn.classList.add('hidden');
-
         if (headerNameEl) {
             headerNameEl.classList.remove('header-name-skeleton');
             headerNameEl.textContent = 'زائر';
@@ -1465,18 +1462,6 @@ export function renderProfileHeader(profile, user) {
         renderFeaturedBadgeInline(headerNameEl, profile?.featured_badge_id);
     });
 
-    // إظهار زرار لوحة تحكم الأدمن لو المستخدم الحالي يحمل دور admin
-    const adminPanelBtn = document.getElementById('btnOpenAdminPanel');
-    if (adminPanelBtn) {
-        const isAdmin = profile?.role === 'admin';
-        adminPanelBtn.classList.toggle('hidden', !isAdmin);
-        if (isAdmin && !adminPanelBtn.dataset.bound) {
-            adminPanelBtn.dataset.bound = 'true';
-            adminPanelBtn.addEventListener('click', () => {
-                window.location.href = 'admin.html';
-            });
-        }
-    }
 }
 
 /**
@@ -5166,11 +5151,16 @@ function openAccountSettingsPage() {
         return;
     }
 
+    const usernameDisplay = document.getElementById('editUsernameDisplay');
     const nameInput = document.getElementById('editFullNameInput');
     const previewImg = document.getElementById('editProfileAvatarPreview');
     const currentAvatarEl = document.getElementById('profileAvatar');
     const birthDateInput = document.getElementById('editBirthDateInput');
 
+    if (usernameDisplay) {
+        const uName = currentProfileRow?.username || currentAuthUser?.user_metadata?.username || '';
+        usernameDisplay.value = uName ? `@${uName.replace(/^@+/, '')}` : '—';
+    }
     if (nameInput) nameInput.value = currentProfileRow?.full_name || '';
     // (إصلاح - "لقب الشرف" بقى مرتبط بالأوسمة): بدل ما نحط قيمة ثابتة
     // هنا، بنبني قايمة الاختيارات نفسها ديناميكيًا من الأوسمة المفتوحة

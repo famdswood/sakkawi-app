@@ -149,12 +149,47 @@ const NOTIFICATION_ICONS = {
             <path d="M5 22h14M5 2h14M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2"/>
         </svg>
     `,
+    system: `
+        <svg viewBox="0 0 24 24" class="w-4 h-4 text-amber-400 stroke-current fill-none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            <line x1="12" y1="8" x2="12" y2="12"/>
+            <line x1="12" y1="16" x2="12.01" y2="16"/>
+        </svg>
+    `,
+    admin_alert: `
+        <svg viewBox="0 0 24 24" class="w-4 h-4 text-amber-400 stroke-current fill-none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            <line x1="12" y1="8" x2="12" y2="12"/>
+            <line x1="12" y1="16" x2="12.01" y2="16"/>
+        </svg>
+    `,
+    admin_notification: `
+        <svg viewBox="0 0 24 24" class="w-4 h-4 text-amber-400 stroke-current fill-none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            <line x1="12" y1="8" x2="12" y2="12"/>
+            <line x1="12" y1="16" x2="12.01" y2="16"/>
+        </svg>
+    `,
+    warning: `
+        <svg viewBox="0 0 24 24" class="w-4 h-4 text-amber-400 stroke-current fill-none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="8" x2="12" y2="12"/>
+            <line x1="12" y1="16" x2="12.01" y2="16"/>
+        </svg>
+    `,
     championship_won: `
         <svg viewBox="0 0 24 24" class="w-4 h-4 text-yellow-400 stroke-current fill-none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6M18 9h1.5a2.5 2.5 0 0 0 0-5H18M4 4h16v5a8 8 0 0 1-16 0V4zM12 17v4M8 21h8"/>
         </svg>
     `,
 };
+
+/** أيقونة افتراضية عالية الجودة لأي إشعار عام لا يملك أيقونة مخصصة لمنع ظهور دوائر فارغة */
+const DEFAULT_NOTIFICATION_SVG = `
+    <svg viewBox="0 0 24 24" class="w-4 h-4 text-gold-400 stroke-current fill-none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0"/>
+    </svg>
+`;
 
 /**
  * (تعديل) صورة بروفايل احتياطية لإشعارات فيها "مُرسل" (طلب صداقة/قبول
@@ -1143,15 +1178,16 @@ function buildNotificationCard(notification) {
         }
     } else if (BADGE_NOTIFICATION_TYPES.includes(notification.type)) {
         if (iconWrapEl) iconWrapEl.innerHTML = ACHIEVEMENT_BADGE_SVG;
-    } else if (
-        iconEl
-        // (تعديل - المرحلة 8) admin_reply (رد الأدمن) وsupport_message
-        // (رسالة مستخدم جديدة للأدمن) بنفس معاملة admin_message - كارت
-        // نصي بالكامل من غير دايرة/أيقونة (شوف .notif-card[data-notif-type]
-        // في css/style.css)
-        && !['admin_message', 'admin_reply', 'support_message'].includes(notification.type)
-    ) {
-        iconEl.innerHTML = NOTIFICATION_ICONS[notification.type] || '';
+    } else if (['admin_message', 'admin_reply', 'support_message'].includes(notification.type)) {
+        // كارت نصي بالكامل من غير دايرة/أيقونة
+        if (iconWrapEl) iconWrapEl.style.display = 'none';
+    } else {
+        const svgContent = NOTIFICATION_ICONS[notification.type] || DEFAULT_NOTIFICATION_SVG;
+        if (iconEl) {
+            iconEl.innerHTML = svgContent;
+        } else if (iconWrapEl) {
+            iconWrapEl.innerHTML = `<span class="notif-icon">${svgContent}</span>`;
+        }
     }
 
     const titleEl = card.querySelector('.notif-title');
