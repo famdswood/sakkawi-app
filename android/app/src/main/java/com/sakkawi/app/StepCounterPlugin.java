@@ -167,8 +167,7 @@ public class StepCounterPlugin extends Plugin {
             String todayKey = sdf.format(new Date());
 
             if (service != null) {
-                // استعلام عتادي فوري يفرغ ذاكرة الحساس ويقرأ القيمة الحقيقية مباشرة من شريحة الموبايل
-                stepsToday = service.forceSyncHardwareSteps(600);
+                stepsToday = service.getCachedStepsToday();
             } else {
                 SharedPreferences prefs = getContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
                 stepsToday = prefs.getInt("steps_today", 0);

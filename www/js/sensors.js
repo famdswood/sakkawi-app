@@ -259,6 +259,7 @@ export function reconcileWithServerSteps(serverDailySteps, isForcedReset = false
     if (serverDailySteps <= stepCount) return; // العداد المحلي أصلاً مساوي أو أكبر - مفيش داعي نعمل حاجة
 
     stepCount = serverDailySteps;
+    lastNativeStepsSeen = Math.max(lastNativeStepsSeen, stepCount);
     persistDailyState();
 
     document.dispatchEvent(new CustomEvent('sensors:steps-resynced', {
@@ -316,19 +317,20 @@ export async function syncActiveUser(userId) {
     // حفظ حالة المستخدم السابق قبل التبديل
     persistDailyState();
 
+    const previousOwner = currentOwnerUserId;
     currentOwnerUserId = normalizedId;
     loadPersistedDailyState();
 
-    // تبديل صريح للحساب (سواء تسجيل خروج لزائر أو دخول مستخدم جديد)
-    // نفعّل علم إعادة ضبط الأساس العتادي وتصفير القراءة السابقة لمنع تسريب خطوات الحساب السابق
-    resetNativeBaselineOnNextSync = true;
-    lastNativeStepsSeen = 0;
+    // تبديل صريح للحساب (فقط لو كان فيه مستخدم سابق حقيقي وتم تسجيل الخروج أو التبديل لمستخدم آخر مختلف)
+    if (previousOwner !== null && previousOwner !== normalizedId) {
+        lastNativeStepsSeen = 0;
 
-    // تصفير أو تحديث خدمة الأندرويد الأصلية لتتطابق مع رصيد خطوات الحساب النشط الحالي
-    if (window.Capacitor?.isNativePlatform?.()) {
-        try {
-            await window.Capacitor.Plugins.StepCounter?.resetDailySteps?.({ steps: stepCount });
-        } catch (_) {}
+        // تصفير أو تحديث خدمة الأندرويد الأصلية لتتطابق مع رصيد خطوات الحساب الجديد
+        if (window.Capacitor?.isNativePlatform?.()) {
+            try {
+                await window.Capacitor.Plugins.StepCounter?.resetDailySteps?.({ steps: stepCount });
+            } catch (_) {}
+        }
     }
 
     // إشعار فوري للواجهة بالخطوات الحالية لهذا المستخدم
@@ -429,34 +431,24 @@ export async function syncFromNativeStepCounter(options = {}) {
 
         // نحتسب الخطوات اليومية المأخوذة من الحساس الأصلي
         if (nativeDate === currentDayKey && typeof nativeSteps === 'number' && Number.isFinite(nativeSteps)) {
-            if (resetNativeBaselineOnNextSync || lastNativeStepsSeen <= 0) {
-                // تبديل حساب، أو أول تشغيل للحساب، أو بداية يوم جديد بتوقيت القاهرة:
-                // نثبت الأساس العتادي على قراءة الحساس الحالية للجهاز دون ترحيل أي خطوات سابقة
-                lastNativeStepsSeen = nativeSteps;
-                resetNativeBaselineOnNextSync = false;
-                persistDailyState();
-            } else if (nativeSteps < lastNativeStepsSeen) {
-                // إعادة تشغيل الجهاز أو إعادة تعيين الحساس العتادي
-                lastNativeStepsSeen = nativeSteps;
-                persistDailyState();
-            } else {
-                // حركة فعلية جديدة لنفس الحساب
-                const delta = nativeSteps - lastNativeStepsSeen;
-                lastNativeStepsSeen = nativeSteps;
+            const safeNativeSteps = Math.max(0, Math.floor(nativeSteps));
 
-                if (delta > 0) {
-                    stepCount += delta;
-                    persistDailyState();
+            if (safeNativeSteps > stepCount) {
+                const delta = safeNativeSteps - stepCount;
+                stepCount = safeNativeSteps;
+                lastNativeStepsSeen = safeNativeSteps;
+                persistDailyState();
 
-                    document.dispatchEvent(new CustomEvent('sensors:steps-update', {
-                        detail: { 
-                            steps: stepCount, 
-                            delta: delta, 
-                            date: currentDayKey, 
-                            source: 'native' 
-                        }
-                    }));
-                }
+                document.dispatchEvent(new CustomEvent('sensors:steps-update', {
+                    detail: { 
+                        steps: stepCount, 
+                        delta: delta, 
+                        date: currentDayKey, 
+                        source: 'native' 
+                    }
+                }));
+            } else if (safeNativeSteps === stepCount) {
+                lastNativeStepsSeen = safeNativeSteps;
             }
         }
     } catch (err) {

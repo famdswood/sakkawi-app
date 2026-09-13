@@ -4945,11 +4945,13 @@ async function loadAndRenderRealProfile(user) {
                     } catch (_) {}
                 }
             } else {
-                reconcileWithServerSteps(safeServerDailySteps);
-                if (window.Capacitor?.isNativePlatform?.()) {
-                    try {
-                        window.Capacitor.Plugins.StepCounter?.resetDailySteps?.({ steps: safeServerDailySteps });
-                    } catch (_) {}
+                if (safeServerDailySteps > getStepsCount()) {
+                    reconcileWithServerSteps(safeServerDailySteps);
+                    if (window.Capacitor?.isNativePlatform?.()) {
+                        try {
+                            window.Capacitor.Plugins.StepCounter?.resetDailySteps?.({ steps: safeServerDailySteps });
+                        } catch (_) {}
+                    }
                 }
             }
 

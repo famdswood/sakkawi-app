@@ -733,56 +733,6 @@ function initStepsCounter() {
             && appState.steps > appState.previousBestSteps;
         updateStepsUI();
     });
-
-    // زر تحديث الخطوات في كارت العداد بالصفحة الرئيسية
-    const btnRefreshHomeSteps = document.getElementById('btnRefreshHomeSteps');
-    const btnRefreshHomeStepsIcon = document.getElementById('btnRefreshHomeStepsIcon');
-
-    if (btnRefreshHomeSteps) {
-        let isRefreshingSteps = false;
-        btnRefreshHomeSteps.addEventListener('click', async () => {
-            if (isRefreshingSteps) return;
-            isRefreshingSteps = true;
-            btnRefreshHomeSteps.disabled = true;
-            if (btnRefreshHomeStepsIcon) {
-                btnRefreshHomeStepsIcon.classList.add('animate-spin');
-            }
-
-            const stepsBefore = appState.steps;
-
-            try {
-                // مزامنة إجبارية تقرأ الحساس العتادي وتفرغ الذاكرة المؤقتة بالكامل
-                await syncFromNativeStepCounter({ force: true });
-                appState.steps = getStepsCount();
-                appState.stageIndex = getStageIndexForSteps(appState.steps);
-                appState.earnedFromSteps = Math.floor(appState.steps / STEPS_PER_POINT);
-                updateStepsUI();
-
-                // مزامنة فورية للسيرفر والليدربورد بالخطوات المحتسبة دون انتظار الدفعة الدورية
-                if (typeof window.flushPendingStepsBatch === 'function') {
-                    await window.flushPendingStepsBatch();
-                }
-
-                const diff = appState.steps - stepsBefore;
-                if (diff > 0) {
-                    showToast(`تمت مزامنة الخطوات بنجاح: تم احتساب ${diff.toLocaleString()} خطوة جديدة من هاتفك!`);
-                } else {
-                    showToast(`تم فحص الحساس بنجاح: العداد متطابق مع هاتفك تماماً (${appState.steps.toLocaleString()} خطوة)`);
-                }
-            } catch (err) {
-                console.error('خطأ أثناء تحديث الخطوات يدويا:', err);
-                showToast('تم فحص الحساس، العداد محدث بالفعل');
-            } finally {
-                setTimeout(() => {
-                    if (btnRefreshHomeStepsIcon) {
-                        btnRefreshHomeStepsIcon.classList.remove('animate-spin');
-                    }
-                    btnRefreshHomeSteps.disabled = false;
-                    isRefreshingSteps = false;
-                }, 600);
-            }
-        });
-    }
 }
 
 /* ------------------------------------------------------------------
