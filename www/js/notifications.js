@@ -1967,7 +1967,21 @@ function handleIncomingNotification(newNotification) {
             if (typeof window.clearPendingSteps === 'function') {
                 window.clearPendingSteps();
             }
+            if (window.Capacitor?.isNativePlatform?.()) {
+                try {
+                    window.Capacitor.Plugins.StepCounter?.resetDailySteps?.({ steps: 0 });
+                } catch (_) {}
+            }
             document.dispatchEvent(new CustomEvent('sensors:force-reset'));
+            try {
+                const currentUid = currentAuthUserId || window.supabaseClient?.auth?.user?.()?.id;
+                if (currentUid && notifData.reset_at) {
+                    window.localStorage.setItem(`sakkawi_steps_reset_${currentUid}`, String(notifData.reset_at));
+                }
+            } catch (_) {}
+            if (typeof window.refreshProfileFromServerIfNeeded === 'function') {
+                window.refreshProfileFromServerIfNeeded();
+            }
         } else if (notifData.action === 'adjust_points' || notifData.action === 'restore_streak') {
             if (typeof window.refreshProfileFromServerIfNeeded === 'function') {
                 window.refreshProfileFromServerIfNeeded();

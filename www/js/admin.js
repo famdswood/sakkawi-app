@@ -4511,6 +4511,17 @@ function initUserActionModal() {
             if (stepsEl) stepsEl.textContent = '0';
             selectedUserForAction.daily_steps = 0;
             selectedUserForAction.daily_points = 0;
+
+            if (Array.isArray(allUsersList)) {
+                const targetInList = allUsersList.find((u) => u.id === selectedUserForAction.id);
+                if (targetInList) {
+                    targetInList.daily_steps = 0;
+                    targetInList.daily_points = 0;
+                }
+            }
+            if (typeof renderFilteredUserList === 'function') {
+                renderFilteredUserList();
+            }
         });
     }
 

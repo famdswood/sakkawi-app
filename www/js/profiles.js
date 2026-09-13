@@ -772,6 +772,31 @@ export async function flushPendingStepsBatch() {
 }
 
 /**
+ * التحقق من وجود أمر تصفير خطوات صادر من الإدارة وتنفيذه فوراً
+ * @param {object|null} profileRow
+ * @returns {boolean} هل تم تطبيق تصفير خطوات الآن
+ */
+export function checkAndApplyStepsReset(profileRow) {
+    if (!profileRow || !currentAuthUser?.id) return false;
+    const resetAt = profileRow.steps_reset_at;
+    if (!resetAt) return false;
+
+    const lastAppliedReset = window.localStorage.getItem(`sakkawi_steps_reset_${currentAuthUser.id}`);
+    if (resetAt === lastAppliedReset) return false;
+
+    console.log(`[profiles.js] تم رصد أمر تصفير خطوات جديد من الإدارة (${resetAt})، جاري تصفير العداد المحلي ومستشعر الجهاز فوراً.`);
+    window.localStorage.setItem(`sakkawi_steps_reset_${currentAuthUser.id}`, String(resetAt));
+    clearPendingSteps();
+    reconcileWithServerSteps(0, true);
+    if (window.Capacitor?.isNativePlatform?.()) {
+        try {
+            window.Capacitor.Plugins.StepCounter?.resetDailySteps?.({ steps: 0 });
+        } catch (_) {}
+    }
+    return true;
+}
+
+/**
  * مزامنة خطوات اليوم المقطوعة أثناء انقطاع الإنترنت أو إغلاق التطبيق.
  * تقارن بين عدد الخطوات المسجل محلياً في حساس الجهاز لليوم الحالي،
  * وبين daily_steps المسجل في السيرفر لليوم الحالي.
@@ -788,6 +813,11 @@ export async function syncOfflineStepsToServerIfNeeded() {
         // التأكد الدفاعي من تاريخ اليوم لتفادي إرسال خطوات الأمس في حال تخطي منتصف الليل
         if (typeof ensureStillSameDay === 'function') {
             ensureStillSameDay();
+        }
+
+        // فحص ما إذا كان هناك أمر تصفير خطوات صادر من الإدارة قبل المزامنة
+        if (checkAndApplyStepsReset(currentProfileRow)) {
+            return;
         }
 
         // مزامنة العداد مع حساس الموبايل الأصلي أولاً إن وجد
@@ -4932,19 +4962,9 @@ async function loadAndRenderRealProfile(user) {
             const isRowFromToday = currentProfileRow.last_active_date === todayStr;
             const safeServerDailySteps = isRowFromToday ? (currentProfileRow.daily_steps ?? 0) : 0;
 
-            const lastAppliedReset = window.localStorage.getItem(`sakkawi_steps_reset_${user.id}`);
-            const isResetPending = currentProfileRow.steps_reset_at && currentProfileRow.steps_reset_at !== lastAppliedReset;
+            const isResetPending = checkAndApplyStepsReset(currentProfileRow);
 
-            if (isResetPending) {
-                window.localStorage.setItem(`sakkawi_steps_reset_${user.id}`, currentProfileRow.steps_reset_at);
-                clearPendingSteps();
-                reconcileWithServerSteps(0, true);
-                if (window.Capacitor?.isNativePlatform?.()) {
-                    try {
-                        window.Capacitor.Plugins.StepCounter?.resetDailySteps?.({ steps: 0 });
-                    } catch (_) {}
-                }
-            } else {
+            if (!isResetPending) {
                 if (safeServerDailySteps > getStepsCount()) {
                     reconcileWithServerSteps(safeServerDailySteps);
                     if (window.Capacitor?.isNativePlatform?.()) {
@@ -4989,6 +5009,7 @@ async function loadAndRenderRealProfile(user) {
     // تلقائياً بعد كل قراءة ناجحة من الشبكة
     await fetchWithCache(`cached_profile:${user.id}`, () => fetchUserProfileFromServer(user.id), async ({ profile }) => {
         if (profile) {
+            checkAndApplyStepsReset(profile);
             // دمج الخطوات والنقاط المتراكمة محلياً التي لم تُرسل بعد (Offline Progress)
             // مع البيانات المخزنة مؤقتاً حتى لا تظهر شاشة البروفايل أرقاماً قديمة أو أقل أثناء انقطاع النت
             profile.total_steps = (profile.total_steps ?? 0) + pendingStepsDelta;

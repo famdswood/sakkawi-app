@@ -239,6 +239,11 @@ export function forceResetDailySteps() {
     stepCount = 0;
     lastNativeStepsSeen = 0;
     resetNativeBaselineOnNextSync = true;
+    if (window.Capacitor?.isNativePlatform?.()) {
+        try {
+            window.Capacitor.Plugins.StepCounter?.resetDailySteps?.({ steps: 0 });
+        } catch (_) {}
+    }
     persistDailyState();
 
     document.dispatchEvent(new CustomEvent('sensors:steps-resynced', {
