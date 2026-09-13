@@ -62,6 +62,8 @@ public class StepCounterForegroundService extends Service implements SensorEvent
     private HandlerThread sensorThread;
     private Handler sensorHandler;
 
+    private volatile float latestHardwareReading = -1f;
+
     public static StepCounterForegroundService getInstance() {
         return instance;
     }
@@ -71,6 +73,9 @@ public class StepCounterForegroundService extends Service implements SensorEvent
         String todayKey = DAY_FORMAT.format(new Date());
 
         float lastHardware = prefs.getFloat("last_hardware_total_steps", -1);
+        if (latestHardwareReading > 0) {
+            lastHardware = latestHardwareReading;
+        }
 
         SharedPreferences.Editor editor = prefs.edit();
         editor.putInt("steps_today", newStepCount);
@@ -78,6 +83,7 @@ public class StepCounterForegroundService extends Service implements SensorEvent
         editor.putString("baseline_date", todayKey);
         if (lastHardware >= 0) {
             editor.putFloat("baseline_total_steps", lastHardware);
+            editor.putFloat("last_hardware_total_steps", lastHardware);
         }
         editor.putInt("steps_before_reboot", newStepCount);
         editor.commit();
@@ -253,6 +259,7 @@ public class StepCounterForegroundService extends Service implements SensorEvent
     public void onSensorChanged(SensorEvent event) {
         if (event.sensor.getType() == Sensor.TYPE_STEP_COUNTER) {
             float totalStepsSinceBoot = event.values[0];
+            latestHardwareReading = totalStepsSinceBoot;
             int stepsToday = resolveTodayStepCount(totalStepsSinceBoot);
             updateNotification(stepsToday);
         } else if (event.sensor.getType() == Sensor.TYPE_STEP_DETECTOR) {

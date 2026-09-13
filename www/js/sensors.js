@@ -326,9 +326,9 @@ export async function syncActiveUser(userId) {
     currentOwnerUserId = normalizedId;
     loadPersistedDailyState();
 
-    // تبديل صريح للحساب (فقط لو كان فيه مستخدم سابق حقيقي وتم تسجيل الخروج أو التبديل لمستخدم آخر مختلف)
-    if (previousOwner !== null && previousOwner !== normalizedId) {
-        lastNativeStepsSeen = 0;
+    // تبديل صريح للحساب (سواء من مستخدم لآخر، أو بعد تسجيل الخروج، أو من زائر لمستخدم)
+    if (previousOwner !== normalizedId) {
+        lastNativeStepsSeen = stepCount;
 
         // تصفير أو تحديث خدمة الأندرويد الأصلية لتتطابق مع رصيد خطوات الحساب الجديد
         if (window.Capacitor?.isNativePlatform?.()) {

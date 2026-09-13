@@ -241,6 +241,13 @@ let isCustomSignUpInProgress = false;
 let isHandlingSessionConflictRejection = false;
 
 /**
+ * true فقط عندما يطلب المستخدم تسجيل الخروج بنفسه صراحةً (عبر زر الخروج).
+ * تُستخدم لمنع أحداث SIGNED_OUT التلقائية الناتجة عن انقطاع الإنترنت أو فشل
+ * تجديد التوكن في الخلفية من طرد المستخدم وإخراجه في وضع الأوفلاين.
+ */
+let isExplicitUserSignOut = false;
+
+/**
  * نسخة مخزّنة داخلياً (In-Memory Cache) من المستخدم الحالي، بتتحدث
  * تلقائياً عند تسجيل الدخول والخروج، عشان أي كود يحتاج قراءة سريعة
  * ومتزامنة (Sync) لهوية المستخدم من غير ما يستنى رد من الشبكة.
@@ -1265,6 +1272,11 @@ function translateAuthError(error) {
  * تسجيل الخروج من الحساب الحالي
  */
 export async function signOut() {
+    isExplicitUserSignOut = true;
+    try {
+        window.localStorage.removeItem('sekkawy-cached-profile-user');
+    } catch (_) {}
+
     unbindProfileSessionRealtimeSubscription();
     unbindIncomingLoginApprovalSubscription();
     stopSingleSessionHeartbeat();
@@ -1350,34 +1362,38 @@ export function restoreSession() {
 
     try {
         const raw = window.localStorage.getItem(AUTH_STORAGE_KEY);
-        if (!raw) return null;
+        if (raw) {
+            const parsed = JSON.parse(raw);
+            const candidateUsers = [
+                parsed?.user,
+                parsed?.currentSession?.user,
+                parsed?.session?.user,
+                parsed?.data?.session?.user,
+            ];
+            const cachedUser = candidateUsers.find((candidate) => candidate && candidate.id) || null;
 
-        const parsed = JSON.parse(raw);
-        // شكل التخزين بيختلف حسب نسخة supabase-js (وممكن يتغيّر مع أي
-        // ترقية مستقبلية للمكتبة من غير ما حد يلاحظ) - قبل كده كنا
-        // بنغطي بس شكلين معروفين (parsed.user / parsed.currentSession.user)،
-        // ولو الشكل الفعلي المحفوظ يختلف عنهم شوية (زي parsed.session.user
-        // في بعض إصدارات supabase-js v2)، كانت الدالة بترجع null غلط رغم
-        // إن فيه جلسة صحيحة فعلاً محفوظة - وده بالظبط كان بيسبب "فلاش"
-        // ظهور حالة زائر/مش مسجل دخول للحظة عند كل Refresh لحد ما الفحص
-        // الحقيقي (checkExistingSession) يلحق يأكد الجلسة من السيرفر.
-        // (إصلاح): بدل التخمين بأسماء حقول محددة بس، بندوّر جوه الكائن
-        // كله (مستوى أو اتنين) عن أول حقل اسمه "user" ومعاه id فعلي -
-        // تغطية أشمل لأي شكل تخزين حالي أو مستقبلي قريب منه.
-        const candidateUsers = [
-            parsed?.user,
-            parsed?.currentSession?.user,
-            parsed?.session?.user,
-            parsed?.data?.session?.user,
-        ];
-        const cachedUser = candidateUsers.find((candidate) => candidate && candidate.id) || null;
-
-        if (cachedUser) currentUser = cachedUser;
-        return cachedUser;
+            if (cachedUser) {
+                currentUser = cachedUser;
+                return cachedUser;
+            }
+        }
     } catch (err) {
         console.error('تعذر قراءة الجلسة المحفوظة محلياً:', err);
-        return null;
     }
+
+    // دعم إضافي لوضع الأوفلاين: إذا كان الحساب مسجلاً محلياً في كاش المستخدم الاحتياطي
+    try {
+        const backupRaw = window.localStorage.getItem('sekkawy-cached-profile-user');
+        if (backupRaw) {
+            const backupUser = JSON.parse(backupRaw);
+            if (backupUser && backupUser.id) {
+                currentUser = backupUser;
+                return backupUser;
+            }
+        }
+    } catch (_) {}
+
+    return null;
 }
 
 /**
@@ -1392,7 +1408,10 @@ export function restoreSession() {
  */
 export function hasAnyStoredSessionHint() {
     try {
-        return Boolean(window.localStorage.getItem(AUTH_STORAGE_KEY));
+        return Boolean(
+            window.localStorage.getItem(AUTH_STORAGE_KEY) ||
+            window.localStorage.getItem('sekkawy-cached-profile-user')
+        );
     } catch (err) {
         return false;
     }
@@ -1460,6 +1479,11 @@ async function checkIfUserIsBlocked(userId) {
  * @param {string|null} reason
  */
 async function rejectSignedInSessionDueToBlock(reason) {
+    isExplicitUserSignOut = true;
+    try {
+        window.localStorage.removeItem('sekkawy-cached-profile-user');
+    } catch (_) {}
+
     const message = reason
         ? `حسابك موقوف مؤقتاً: ${reason}`
         : 'حسابك موقوف مؤقتاً، تواصل مع الدعم الفني لمزيد من التفاصيل';
@@ -1834,6 +1858,11 @@ function unbindProfileSessionRealtimeSubscription() {
  * الرسالة المناسبة للسبب بتتبعت كـ toast قبل ما الدالة دي تتنادى.
  */
 async function forceSignOutDueToOtherSession() {
+    isExplicitUserSignOut = true;
+    try {
+        window.localStorage.removeItem('sekkawy-cached-profile-user');
+    } catch (_) {}
+
     unbindProfileSessionRealtimeSubscription();
     unbindIncomingLoginApprovalSubscription();
     stopSingleSessionHeartbeat();
@@ -1906,6 +1935,11 @@ async function finalizeSignedInSession(user, session, event) {
     hideAuthModal();
     hideAuthApprovalWaitingState();
     currentUser = user;
+    isExplicitUserSignOut = false;
+
+    try {
+        window.localStorage.setItem('sekkawy-cached-profile-user', JSON.stringify(user));
+    } catch (_) {}
 
     // (إصلاح - باج حقيقي): أي دخول/تسجيل حقيقي ينجح لازم يمسح فلاج
     // "استمرار وضع الزائر" (شوف تعليق GUEST_MODE_STORAGE_KEY فوق) -
@@ -2336,6 +2370,14 @@ function listenToAuthStateChanges() {
         }
 
         if (event === 'SIGNED_OUT') {
+            // لو الحدث ده اتطلق بدون تسجيل خروج صريح وكان الجهاز أوفلاين وفيه جلسة محفوظة، نتجاهل الخروج التلقائي
+            const cachedUser = restoreSession();
+            const hasHint = hasAnyStoredSessionHint();
+            if (typeof navigator !== 'undefined' && !navigator.onLine && !isExplicitUserSignOut && (cachedUser || hasHint)) {
+                console.warn('[auth] تجاهل SIGNED_OUT التلقائي أثناء انقطاع الإنترنت لحماية الجلسة المحلية.');
+                return;
+            }
+
             unbindProfileSessionRealtimeSubscription();
             unbindIncomingLoginApprovalSubscription();
             stopSingleSessionHeartbeat();
@@ -2367,10 +2409,44 @@ function listenToAuthStateChanges() {
  * اختيار الدخول/التسجيل الكاملة (showAuthGate) بدل أي مودال منبثق.
  */
 export async function checkExistingSession() {
+    const cachedUser = restoreSession();
+    const hasHint = hasAnyStoredSessionHint();
+
+    // فحص وضع عدم الاتصال (Offline): إذا كان الموبايل غير متصل، وكان هناك مستخدم مسجل محلياً
+    // لا نقوم بعمل تسجيل خروج أبداً ونبقي على الجلسة المحلية لتعمل بكفاءة بدون إنترنت
+    if (typeof navigator !== 'undefined' && !navigator.onLine && (cachedUser || hasHint)) {
+        console.log('[auth] أوفلاين: الإبقاء على جلسة المستخدم المحفوظة محلياً');
+        if (cachedUser) {
+            currentUser = cachedUser;
+            document.dispatchEvent(new CustomEvent('auth:login', {
+                detail: { user: cachedUser, session: null, hasProfile: true, isOffline: true }
+            }));
+        }
+        return;
+    }
+
     try {
         const { data, error } = await supabaseClient.auth.getSession();
 
         if (error) {
+            const isNetworkError = (typeof navigator !== 'undefined' && !navigator.onLine) ||
+                error.message?.includes('Failed to fetch') ||
+                error.message?.includes('NetworkError') ||
+                error.message?.includes('network') ||
+                error.message?.includes('timeout') ||
+                error.status === 0;
+
+            if (isNetworkError && (cachedUser || hasHint)) {
+                console.warn('[auth] تعذر فحص الجلسة بسبب انقطاع الاتصال، استمرار الجلسة المحفوظة محلياً:', error.message);
+                if (cachedUser) {
+                    currentUser = cachedUser;
+                    document.dispatchEvent(new CustomEvent('auth:login', {
+                        detail: { user: cachedUser, session: null, hasProfile: true, isOffline: true }
+                    }));
+                }
+                return;
+            }
+
             console.error('خطأ في قراءة الجلسة الحالية:', error.message);
             dispatchConfirmedSignedOut();
             showAuthGate();
@@ -2378,6 +2454,17 @@ export async function checkExistingSession() {
         }
 
         if (!data.session) {
+            if ((typeof navigator !== 'undefined' && !navigator.onLine) && (cachedUser || hasHint)) {
+                console.warn('[auth] لا توجد جلسة مؤكدة من السيرفر أثناء عدم الاتصال، الإبقاء على الجلسة المحلية.');
+                if (cachedUser) {
+                    currentUser = cachedUser;
+                    document.dispatchEvent(new CustomEvent('auth:login', {
+                        detail: { user: cachedUser, session: null, hasProfile: true, isOffline: true }
+                    }));
+                }
+                return;
+            }
+
             // (إصلاح - باج "فلاش فتحة الزائر لمستخدم مسجل دخول فعليًا"):
             // هنا هي أول لحظة "مؤكدة" فعليًا (من سيرفر/تخزين Supabase
             // نفسه، مش من قراءة متفائلة) إن مفيش جلسة خالص - فبنطلق
@@ -2413,11 +2500,35 @@ export async function checkExistingSession() {
             // الكاملة اللي بتظهر بعد الـ 7 سلايدات (شوف showAuthGate في
             // js/onboarding.js)
             showAuthGate();
+            return;
+        }
+
+        if (data.session?.user) {
+            try {
+                window.localStorage.setItem('sekkawy-cached-profile-user', JSON.stringify(data.session.user));
+            } catch (_) {}
         }
         // في حالة وجود session فعلاً، onAuthStateChange هيتكفل بيها
         // ويطلق handleSignedInSession تلقائياً (اللي بيخفي المودال).
     } catch (err) {
-        // أي خطأ غير متوقع (مشكلة شبكة، supabaseClient مش متظبط..إلخ)
+        const isNetworkError = (typeof navigator !== 'undefined' && !navigator.onLine) ||
+            err?.message?.includes('Failed to fetch') ||
+            err?.message?.includes('NetworkError') ||
+            err?.message?.includes('network') ||
+            err?.message?.includes('timeout');
+
+        if (isNetworkError && (cachedUser || hasHint)) {
+            console.warn('[auth] خطأ شبكة أثناء التحقق من الجلسة، الحفاظ على الجلسة الحالية محلياً:', err);
+            if (cachedUser) {
+                currentUser = cachedUser;
+                document.dispatchEvent(new CustomEvent('auth:login', {
+                    detail: { user: cachedUser, session: null, hasProfile: true, isOffline: true }
+                }));
+            }
+            return;
+        }
+
+        // أي خطأ غير متوقع (supabaseClient مش متظبط..إلخ)
         // مينفعش يمنع ظهور واجهة تسجيل الدخول - أهم حاجة المستخدم
         // يشوف طريقة يدخل بيها بدل ما يفضل التطبيق واقف على الفاضي.
         console.error('خطأ غير متوقع أثناء التحقق من الجلسة:', err);
@@ -2651,4 +2762,15 @@ function bindLoginApprovalModalEvents() {
 export function initAuthUI() {
     bindAuthEventListeners();
     checkExistingSession();
+}
+
+if (typeof window !== 'undefined') {
+    window.addEventListener('online', () => {
+        checkExistingSession().catch(() => {});
+    });
+}
+if (typeof document !== 'undefined') {
+    document.addEventListener('app:online', () => {
+        checkExistingSession().catch(() => {});
+    });
 }
