@@ -3888,3 +3888,132 @@ input[type="date"].admin-text-input {
     max-width: 100% !important;
     vertical-align: middle;
 }
+
+/* ==================================================================
+   18) واجهة تحكم الأدمن العصرية - أنيميشن وتأثيرات تفاعلية
+   ================================================================== */
+.admin-tab-panel:not(.hidden) {
+    animation: adminTabFadeSlideUp 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes adminTabFadeSlideUp {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.admin-subpanel:not(.hidden) {
+    animation: adminSubFade 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes adminSubFade {
+    from {
+        opacity: 0;
+        transform: translateY(4px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.admin-subtab-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    background: rgba(18, 22, 31, 0.7);
+    padding: 0.35rem;
+    border-radius: 1rem;
+    border: 1px solid rgba(212, 175, 55, 0.12);
+    overflow-x: auto;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+}
+
+.admin-subtab-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.45rem;
+    padding: 0.5rem 1rem;
+    border-radius: 0.75rem;
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--lux-400, #9ca3af);
+    background: transparent;
+    border: 1px solid transparent;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    user-select: none;
+}
+
+.admin-subtab-btn:hover {
+    color: var(--lux-100, #f3f4f6);
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.admin-subtab-btn.is-active {
+    color: #0b0e14;
+    background: linear-gradient(135deg, #F2D77E, #D4AF37);
+    border-color: transparent;
+    box-shadow: 0 4px 14px rgba(212, 175, 55, 0.25);
+}
+
+.admin-quick-action-card {
+    position: relative;
+    overflow: hidden;
+    background: rgba(18, 22, 31, 0.7);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(212, 175, 55, 0.12);
+    border-radius: 1.25rem;
+    padding: 1rem;
+    cursor: pointer;
+    transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+}
+
+.admin-quick-action-card:hover {
+    transform: translateY(-3px);
+    border-color: rgba(212, 175, 55, 0.35);
+    box-shadow: 0 12px 24px -10px rgba(212, 175, 55, 0.2), 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.admin-quick-action-card:active {
+    transform: scale(0.98);
+}
+
+@keyframes adminRadar {
+    0% {
+        transform: scale(0.95);
+        box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.7);
+    }
+    70% {
+        transform: scale(1);
+        box-shadow: 0 0 0 8px rgba(52, 211, 153, 0);
+    }
+    100% {
+        transform: scale(0.95);
+        box-shadow: 0 0 0 0 rgba(52, 211, 153, 0);
+    }
+}
+
+.admin-radar-pulse {
+    animation: adminRadar 2s infinite cubic-bezier(0.4, 0, 0.6, 1);
+}
+
+.admin-card-interactive {
+    transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.admin-card-interactive:hover {
+    transform: translateY(-2px);
+    border-color: rgba(212, 175, 55, 0.25);
+    box-shadow: 0 10px 25px -8px rgba(0, 0, 0, 0.6), 0 0 15px rgba(212, 175, 55, 0.08);
+}

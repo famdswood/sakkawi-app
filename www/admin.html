@@ -501,128 +501,61 @@
             </div>
 
             <!-- قائمة التابات المقسمة حسب القطاعات الوظيفية -->
-            <nav class="flex-1 px-3 py-4 space-y-4 overflow-y-auto notif-scroll">
-                <!-- قطاع 1: التحليلات والمؤشرات -->
-                <div class="space-y-1">
-                    <div class="px-3 pb-1 text-[10px] font-black uppercase tracking-wider text-lux-500 flex items-center gap-1.5">
-                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                        <span>التحليلات والمؤشرات</span>
-                    </div>
-                    <button type="button" class="admin-nav-tab admin-nav-tab--side is-active" data-tab-target="tabPanelVisitors">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4 text-emerald-400">
-                            <rect x="4" y="12" width="4" height="8" rx="1"></rect>
-                            <rect x="10" y="7" width="4" height="13" rx="1"></rect>
-                            <rect x="16" y="3" width="4" height="17" rx="1"></rect>
-                        </svg>
-                        <span>الزوار والنشاط</span>
-                    </button>
-                    <button type="button" class="admin-nav-tab admin-nav-tab--side" data-tab-target="tabPanelSponsors">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4 text-gold-400">
-                            <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path>
-                        </svg>
-                        <span>إحصائيات الرعاة (Media Kit)</span>
-                    </button>
+            <!-- قائمة التابات الرئيسية المصممة بهوية عصرية من 5 قطاعات -->
+            <nav class="flex-1 px-3 py-4 space-y-2 overflow-y-auto notif-scroll">
+                <div class="px-3 pb-2 text-[10px] font-black uppercase tracking-wider text-lux-500 flex items-center gap-1.5">
+                    <span class="w-1.5 h-1.5 rounded-full bg-gold-400"></span>
+                    <span>قطاعات لوحة التحكم</span>
                 </div>
 
-                <!-- قطاع 2: النظام والتحكم العام -->
-                <div class="space-y-1">
-                    <div class="px-3 pb-1 text-[10px] font-black uppercase tracking-wider text-lux-500 flex items-center gap-1.5">
-                        <span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
-                        <span>النظام والتحكم العام</span>
-                    </div>
-                    <button type="button" class="admin-nav-tab admin-nav-tab--side" data-tab-target="tabPanelMaster">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4 text-amber-400">
-                            <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>
-                            <circle cx="12" cy="12" r="3"/>
-                        </svg>
-                        <span>التحكم الشامل</span>
-                    </button>
-                    <button type="button" class="admin-nav-tab admin-nav-tab--side" data-tab-target="tabPanelGeofence">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4 text-cyan-400">
-                            <circle cx="12" cy="9" r="4"></circle>
-                            <path d="M12 21c4-4.5 7-8.5 7-12a7 7 0 1 0-14 0c0 3.5 3 7.5 7 12z"></path>
-                        </svg>
-                        <span>النطاق الجغرافي</span>
-                    </button>
-                </div>
+                <!-- 1. الرئيسية والعمليات -->
+                <button type="button" class="admin-nav-tab admin-nav-tab--side is-active" data-tab-target="tabPanelOverview">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4 text-gold-400 shrink-0">
+                        <rect x="3" y="3" width="7" height="7" rx="1.5"></rect>
+                        <rect x="14" y="3" width="7" height="7" rx="1.5"></rect>
+                        <rect x="14" y="14" width="7" height="7" rx="1.5"></rect>
+                        <rect x="3" y="14" width="7" height="7" rx="1.5"></rect>
+                    </svg>
+                    <span>الرئيسية والعمليات</span>
+                </button>
 
-                <!-- قطاع 3: المستخدمين ومكافحة الغش -->
-                <div class="space-y-1">
-                    <div class="px-3 pb-1 text-[10px] font-black uppercase tracking-wider text-lux-500 flex items-center gap-1.5">
-                        <span class="w-1.5 h-1.5 rounded-full bg-blue-400"></span>
-                        <span>المستخدمين ومكافحة الغش</span>
-                    </div>
-                    <button type="button" class="admin-nav-tab admin-nav-tab--side" data-tab-target="tabPanelUsers">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4 text-blue-400">
-                            <circle cx="9" cy="8" r="3.5"></circle>
-                            <path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"></path>
-                            <circle cx="18" cy="9" r="2.5"></circle>
-                            <path d="M15.5 14.2c2.6.4 4.5 2.7 4.5 5.3"></path>
-                        </svg>
-                        <span>سجل الحسابات</span>
-                    </button>
-                    <button type="button" class="admin-nav-tab admin-nav-tab--side" data-tab-target="tabPanelBadges">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4 text-yellow-400">
-                            <path d="M12 3l2.2 4.5 5 .7-3.6 3.5.9 5-4.5-2.4-4.5 2.4.9-5-3.6-3.5 5-.7z"></path>
-                        </svg>
-                        <span>الأوسمة والشارات</span>
-                    </button>
-                </div>
+                <!-- 2. المشتركين والتنافس -->
+                <button type="button" class="admin-nav-tab admin-nav-tab--side" data-tab-target="tabPanelUsers">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4 text-blue-400 shrink-0">
+                        <circle cx="9" cy="8" r="3.5"></circle>
+                        <path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"></path>
+                        <circle cx="18" cy="9" r="2.5"></circle>
+                        <path d="M15.5 14.2c2.6.4 4.5 2.7 4.5 5.3"></path>
+                    </svg>
+                    <span>المشتركين والتنافس</span>
+                </button>
 
-                <!-- قطاع 4: المحتوى والأنشطة -->
-                <div class="space-y-1">
-                    <div class="px-3 pb-1 text-[10px] font-black uppercase tracking-wider text-lux-500 flex items-center gap-1.5">
-                        <span class="w-1.5 h-1.5 rounded-full bg-purple-400"></span>
-                        <span>المحتوى والأنشطة</span>
-                    </div>
-                    <button type="button" class="admin-nav-tab admin-nav-tab--side" data-tab-target="tabPanelPosts">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4 text-purple-400">
-                            <rect x="3" y="4" width="18" height="16" rx="2"></rect>
-                            <line x1="7" y1="9" x2="17" y2="9"></line>
-                            <line x1="7" y1="13" x2="14" y2="13"></line>
-                            <path d="M7 17h4"></path>
-                        </svg>
-                        <span>المنشورات والقصص</span>
-                    </button>
-                    <button type="button" class="admin-nav-tab admin-nav-tab--side" data-tab-target="tabPanelQuestions">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4 text-indigo-400">
-                            <circle cx="12" cy="12" r="9"></circle>
-                            <path d="M9.5 9a2.5 2.5 0 0 1 4.7-1.2c.5.9.2 1.7-.6 2.4-.9.8-1.6 1.3-1.6 2.6"></path>
-                            <circle cx="12" cy="17" r="0.75" fill="currentColor" stroke="none"></circle>
-                        </svg>
-                        <span>الأسئلة اليومية</span>
-                    </button>
-                    <button type="button" class="admin-nav-tab admin-nav-tab--side" data-tab-target="tabPanelBanner">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4 text-amber-400">
-                            <rect x="3" y="5" width="18" height="14" rx="2"></rect>
-                            <circle cx="8.5" cy="10" r="1.5"></circle>
-                            <path d="M3 16l5-4 4 3 3-2.5 6 5"></path>
-                        </svg>
-                        <span>البانر الترويجي</span>
-                    </button>
-                </div>
+                <!-- 3. المحتوى والأنشطة -->
+                <button type="button" class="admin-nav-tab admin-nav-tab--side" data-tab-target="tabPanelContent">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4 text-purple-400 shrink-0">
+                        <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+                        <polyline points="2 17 12 22 22 17"></polyline>
+                        <polyline points="2 12 12 17 22 12"></polyline>
+                    </svg>
+                    <span>المحتوى والأنشطة</span>
+                </button>
 
-                <!-- قطاع 5: التواصل والدعم -->
-                <div class="space-y-1">
-                    <div class="px-3 pb-1 text-[10px] font-black uppercase tracking-wider text-lux-500 flex items-center gap-1.5">
-                        <span class="w-1.5 h-1.5 rounded-full bg-rose-400"></span>
-                        <span>التواصل والدعم</span>
-                    </div>
-                    <button type="button" class="admin-nav-tab admin-nav-tab--side" data-tab-target="tabPanelNotifications">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4 text-rose-400">
-                            <path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"></path>
-                            <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
-                        </svg>
-                        <span>مركز الإشعارات</span>
-                    </button>
-                    <button type="button" class="admin-nav-tab admin-nav-tab--side" data-tab-target="tabPanelSupport">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4 text-emerald-400">
-                            <rect x="3" y="5" width="18" height="14" rx="2"></rect>
-                            <path d="m3 7 9 6 9-6"></path>
-                        </svg>
-                        <span>صندوق الدعم الفني</span>
-                    </button>
-                </div>
+                <!-- 4. التواصل والدعم -->
+                <button type="button" class="admin-nav-tab admin-nav-tab--side" data-tab-target="tabPanelComms">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4 text-rose-400 shrink-0">
+                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                    </svg>
+                    <span>التواصل والدعم</span>
+                </button>
+
+                <!-- 5. إعدادات النظام والقرية -->
+                <button type="button" class="admin-nav-tab admin-nav-tab--side" data-tab-target="tabPanelSystem">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4 text-amber-400 shrink-0">
+                        <circle cx="12" cy="12" r="3"></circle>
+                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                    </svg>
+                    <span>النظام والقرية</span>
+                </button>
             </nav>
 
             <!-- تذييل القائمة الجانبية: مؤشر أونلاين الآن الحي -->
@@ -716,29 +649,93 @@
         <main class="flex-1 min-h-0 overflow-y-auto px-4 md:px-8 py-5 md:py-7">
         <div class="max-w-6xl mx-auto w-full space-y-6">
 
-            <!-- ------------------------------------------------------- -->
-            <!-- تاب 1: الزوار والمستخدمين النشطين (المرحلة 1)
-                 visitor_sessions + profiles.last_seen_at / is_online -
-                 شوف loadVisitorStats() في js/admin.js -->
-            <!-- ------------------------------------------------------- -->
-            <section id="tabPanelVisitors" class="admin-tab-panel space-y-4">
 
-                <!-- بطاقة تحويل سريعة لملف الرعاة والإعلانات -->
-                <div class="p-4 rounded-2xl bg-gradient-to-r from-amber-500/10 via-lux-900/60 to-lux-900/40 border border-gold-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-soft-card">
-                    <div class="space-y-0.5">
-                        <div class="flex items-center gap-2">
-                            <span class="w-2 h-2 rounded-full bg-gold-400"></span>
-                            <h3 class="text-xs font-black text-lux-100">ملف الرعاة والمعلنين (Sponsor Media Kit)</h3>
-                            <span class="px-2 py-0.5 rounded-full text-[9px] font-bold bg-gold-500/20 text-gold-300 border border-gold-500/30">جديد</span>
-                        </div>
-                        <p class="text-[11px] text-lux-400">بيانات القوة الشرائية، تكرار فتح التطبيق، ونسب الاحتفاظ جاهزة للتقديم للرعاة المحليين</p>
-                    </div>
-                    <button type="button" class="admin-nav-tab shrink-0 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-gold-500 to-amber-500 hover:from-gold-400 hover:to-amber-400 text-lux-950 text-xs font-black transition shadow flex items-center justify-center gap-1.5" data-tab-target="tabPanelSponsors">
-                        <span>فتح لوحة الرعاة</span>
-                        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+            <!-- ======================================================= -->
+            <!-- قطاع 1: الرئيسية وغرفة العمليات (Overview & Pulse) -->
+            <!-- ======================================================= -->
+            <section id="tabPanelOverview" class="admin-tab-panel space-y-6">
+
+                <!-- أزرار التبويب الداخلي -->
+                <div class="admin-subtab-bar">
+                    <button type="button" class="admin-subtab-btn is-active" data-subtab-target="subPanelOverviewPulse">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-4 h-4 text-gold-400"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+                        <span>نبض القرية والعمليات</span>
+                    </button>
+                    <button type="button" class="admin-subtab-btn" data-subtab-target="subPanelOverviewSponsors" id="btnSubTabOverviewSponsors">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-4 h-4 text-amber-400"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path></svg>
+                        <span>ملف الرعاة والإعلانات (Media Kit)</span>
                     </button>
                 </div>
 
+                <!-- التبويب الفرعي 1: نبض القرية والعمليات السريعة -->
+                <div id="subPanelOverviewPulse" class="admin-subpanel space-y-6">
+
+                    <!-- شريط الوصول السريع العصري (Quick Actions) -->
+                    <div class="space-y-3">
+                        <div class="flex items-center justify-between">
+                            <h2 class="text-xs font-black uppercase tracking-wider text-gold-400 flex items-center gap-2">
+                                <span class="w-2 h-2 rounded-full bg-gold-400 admin-radar-pulse"></span>
+                                <span>الوصول السريع لغرفة العمليات</span>
+                            </h2>
+                            <span class="text-[11px] text-lux-400 font-bold">إجراءات الإدارة الأكثر استخداماً</span>
+                        </div>
+                        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 md:gap-3.5">
+                            <!-- كارت 1: بث إشعار -->
+                            <button type="button" class="admin-quick-action-card text-right group" data-quick-tab="tabPanelComms" data-quick-subtab="subPanelCommsNotify">
+                                <div class="w-10 h-10 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 flex items-center justify-center mb-2.5 group-hover:scale-110 transition shadow-sm">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-5 h-5"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
+                                </div>
+                                <span class="block text-xs font-black text-lux-50 group-hover:text-gold-400 transition">بث إشعار فوري</span>
+                                <span class="block text-[10px] text-lux-400 mt-0.5 font-medium">إرسال تنبيه جماعي لأهالي القرية</span>
+                            </button>
+
+                            <!-- كارت 2: الحسابات والخطوات -->
+                            <button type="button" class="admin-quick-action-card text-right group" data-quick-tab="tabPanelUsers" data-quick-subtab="subPanelUserAccounts">
+                                <div class="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/30 text-blue-400 flex items-center justify-center mb-2.5 group-hover:scale-110 transition shadow-sm">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-5 h-5"><circle cx="9" cy="8" r="3.5"></circle><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"></path><circle cx="18" cy="9" r="2.5"></circle><path d="M15.5 14.2c2.6.4 4.5 2.7 4.5 5.3"></path></svg>
+                                </div>
+                                <span class="block text-xs font-black text-lux-50 group-hover:text-gold-400 transition">الحسابات والخطوات</span>
+                                <span class="block text-[10px] text-lux-400 mt-0.5 font-medium">تعديل خطوات، تجميد وفك الحظر</span>
+                            </button>
+
+                            <!-- كارت 3: مراقبة القصص -->
+                            <button type="button" class="admin-quick-action-card text-right group" data-quick-tab="tabPanelContent" data-quick-subtab="subPanelContentPosts">
+                                <div class="w-10 h-10 rounded-xl bg-purple-500/10 border border-purple-500/30 text-purple-400 flex items-center justify-center mb-2.5 group-hover:scale-110 transition shadow-sm">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-5 h-5"><rect x="3" y="4" width="18" height="16" rx="2"></rect><line x1="7" y1="9" x2="17" y2="9"></line><line x1="7" y1="13" x2="14" y2="13"></line><path d="M7 17h4"></path></svg>
+                                </div>
+                                <span class="block text-xs font-black text-lux-50 group-hover:text-gold-400 transition">القصص والمنشورات</span>
+                                <span class="block text-[10px] text-lux-400 mt-0.5 font-medium">فحص ومراقبة استوريز المستخدمين</span>
+                            </button>
+
+                            <!-- كارت 4: التحكم الشامل -->
+                            <button type="button" class="admin-quick-action-card text-right group" data-quick-tab="tabPanelSystem" data-quick-subtab="subPanelSystemMaster">
+                                <div class="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400 flex items-center justify-center mb-2.5 group-hover:scale-110 transition shadow-sm">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-5 h-5"><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/><circle cx="12" cy="12" r="3"/></svg>
+                                </div>
+                                <span class="block text-xs font-black text-lux-50 group-hover:text-gold-400 transition">التحكم الشامل</span>
+                                <span class="block text-[10px] text-lux-400 mt-0.5 font-medium">وضع الصيانة، المضاعف والميزات</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- بطاقة تحويل سريعة لملف الرعاة والإعلانات -->
+                    <div class="p-4 rounded-2xl bg-gradient-to-r from-amber-500/10 via-lux-900/60 to-lux-900/40 border border-gold-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-soft-card">
+                        <div class="space-y-0.5">
+                            <div class="flex items-center gap-2">
+                                <span class="w-2 h-2 rounded-full bg-gold-400"></span>
+                                <h3 class="text-xs font-black text-lux-100">ملف الرعاة والمعلنين (Sponsor Media Kit)</h3>
+                                <span class="px-2 py-0.5 rounded-full text-[9px] font-bold bg-gold-500/20 text-gold-300 border border-gold-500/30">جاهز للشراكات</span>
+                            </div>
+                            <p class="text-[11px] text-lux-400">بيانات القوة الشرائية، تكرار فتح التطبيق، ونسب الاحتفاظ جاهزة للتقديم للرعاة المحليين بالقرية</p>
+                        </div>
+                        <button type="button" class="shrink-0 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-gold-500 to-amber-500 hover:from-gold-400 hover:to-amber-400 text-lux-950 text-xs font-black transition shadow flex items-center justify-center gap-1.5" onclick="document.getElementById('btnSubTabOverviewSponsors').click()">
+                            <span>عرض ملف الرعاة</span>
+                            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                        </button>
+                    </div>
+
+                    <!-- ويدجت الزوار وحركة المشي -->
+                    <div id="tabPanelVisitors">
                 <section id="visitorsWidget"
                          class="admin-card bg-lux-900/40 rounded-2xl p-5 md:p-6 border border-lux-800/70 space-y-5">
 
@@ -825,13 +822,12 @@
                         </div>
                     </div>
                 </section>
+                    </div>
+                </div>
 
-            </section>
-
-            <!-- ------------------------------------------------------- -->
-            <!-- تاب إحصائيات الرعاة والشراكات والإعلانات (Media Kit) -->
-            <!-- ------------------------------------------------------- -->
-            <section id="tabPanelSponsors" class="admin-tab-panel hidden space-y-4">
+                <!-- التبويب الفرعي 2: ملف الرعاة المتكامل -->
+                <div id="subPanelOverviewSponsors" class="admin-subpanel hidden space-y-4">
+                    <section id="tabPanelSponsors" class="space-y-4">
 
                 <!-- الهيدر والترحيب بالرعاة وزر نسخ بطاقة العرض -->
                 <div class="admin-card bg-lux-900/40 rounded-2xl p-5 md:p-6 border border-lux-800/70 space-y-4">
@@ -1060,99 +1056,29 @@
                     <pre id="sponsorPitchCardText" class="p-4 rounded-xl bg-lux-950 border border-lux-800 text-lux-300 text-xs font-sans leading-relaxed whitespace-pre-wrap select-all"></pre>
                 </div>
 
-            </section>
-
-            <!-- ------------------------------------------------------- -->
-            <!-- تاب 2: نطاق نزلة عبيد الجغرافي (geofence_radius_meters) -->
-            <!-- ------------------------------------------------------- -->
-            <section id="tabPanelGeofence" class="admin-tab-panel hidden space-y-4">
-
-                <!-- الكارت الوحيد اللي معاه خط ذهبي رفيع علوي (border-t-2
-                     border-t-gold-500/40) - ده العنصر البصري "البطل" في
-                     الصفحة لأنه أكتر حاجة مميزة لسِكّاوي فعلياً (نطاق
-                     جغرافي)، وباقي الكروت هادية حواليه (شوف مبدأ "اصرف
-                     جرأتك في مكان واحد" في ملاحظات التصميم) -->
-                <section id="geofenceRadiusWidget"
-                         class="admin-card bg-lux-900/40 rounded-2xl p-5 md:p-6 border border-lux-800/70 border-t-2 border-t-gold-500/40 space-y-5">
-
-                    <div class="flex items-start justify-between gap-3">
-                        <div>
-                            <h2 class="text-sm font-extrabold text-lux-50">نطاق نزلة عبيد الجغرافي</h2>
-                            <p class="text-xs text-lux-400 font-medium mt-0.5">
-                                نصف قطر النطاق المسموح بيه حوالين مركز القرية (بالمتر)
-                            </p>
-                        </div>
-                        <!-- شارة صغيرة بتعرض مركز النطاق الحالي (قراءة فقط هنا -
-                             تعديل الإحداثيات نفسها خارج نطاق هذا الـ Widget) -->
-                        <span id="geofenceCenterBadge"
-                              class="shrink-0 text-[0.65rem] font-bold text-lux-500 bg-lux-800 border border-lux-700 rounded-full px-2.5 py-1 whitespace-nowrap">
-                            …
-                        </span>
-                    </div>
-
-                    <!-- الدائرة/القرص: تمثيل بصري فعلي لنصف القطر (بيكبر
-                         وبيصغر مع الـ Slider لحظياً) بدل ما يفضل نصف
-                         القطر مجرد رقم مجرد - شوف updateGeofenceRadiusDial
-                         في js/admin.js، متصلة بنفس applyGeofenceRadiusToInputs
-                         المركزية اللي أصلاً بتتنادى من كل مكان (تحميل/
-                         تحريك الـ Slider/كتابة يدوية/حفظ) -->
-                    <div class="flex flex-col md:flex-row md:items-center gap-5 md:gap-8">
-                        <div class="flex justify-center md:justify-start shrink-0">
-                            <svg id="geofenceRadiusDial" viewBox="0 0 200 200" class="w-36 h-36 md:w-40 md:h-40" aria-hidden="true">
-                                <circle cx="100" cy="100" r="90" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="1"></circle>
-                                <circle cx="100" cy="100" r="60" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="1"></circle>
-                                <circle cx="100" cy="100" r="30" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="1"></circle>
-                                <circle id="geofenceRadiusDialCircle" cx="100" cy="100" r="10"
-                                        fill="rgba(212,175,55,0.10)" stroke="#D4AF37" stroke-width="1.5"></circle>
-                                <circle cx="100" cy="100" r="2" fill="#E8C158"></circle>
-                            </svg>
-                        </div>
-
-                        <div class="flex-1 w-full space-y-4">
-                            <!-- عرض القيمة الحالية بالمتر والكيلومتر -->
-                            <div class="flex items-baseline gap-2">
-                                <span id="geofenceRadiusValueMeters" class="text-3xl font-mono font-bold tabular-nums text-gold-400">
-                                    —
-                                </span>
-                                <span class="text-xs font-bold text-lux-500">متر</span>
-                                <span id="geofenceRadiusValueKm" class="text-xs font-mono font-medium text-lux-500">(— كم)</span>
-                            </div>
-
-                            <!-- Slider + Input رقمي متزامنين -->
-                            <div class="space-y-2">
-                                <input type="range" id="geofenceRadiusSlider"
-                                       class="admin-range-slider w-full"
-                                       min="100" max="20000" step="50" value="3500"
-                                       aria-label="نصف قطر النطاق بالمتر">
-
-                                <div class="flex items-center gap-2">
-                                    <input type="number" id="geofenceRadiusInput"
-                                           class="admin-number-input flex-1"
-                                           min="100" max="20000" step="50" value="3500"
-                                           inputmode="numeric" aria-label="نصف قطر النطاق بالمتر (إدخال رقمي)">
-                                    <button type="button" id="geofenceRadiusSaveBtn"
-                                            class="admin-save-btn">
-                                        حفظ
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- رسالة حالة الحفظ (نجاح/خطأ/تحميل) -->
-                    <p id="geofenceRadiusStatus" class="admin-status-text" role="status" aria-live="polite"></p>
-
-                </section>
+                    </section>
+                </div>
 
             </section>
 
-            <!-- ------------------------------------------------------- -->
-            <!-- تاب 3: كل الحسابات (قائمة دايمة ولحظية) + تفعيل المغتربين
-                 القائمة بتتحمّل كاملة عند فتح الصفحة وبتتحدّث لحظياً بـ
-                 Realtime من غير أي Refresh - شوف initUserVerificationWidget
-                 و bindAllUsersRealtimeSubscription في js/admin.js -->
-            <!-- ------------------------------------------------------- -->
-            <section id="tabPanelUsers" class="admin-tab-panel hidden space-y-4">
+            <!-- ======================================================= -->
+            <!-- قطاع 2: مجتمع المشتركين والتنافس (Users & Community) -->
+            <!-- ======================================================= -->
+            <section id="tabPanelUsers" class="admin-tab-panel hidden space-y-5">
+                <!-- أزرار التبويب الداخلي -->
+                <div class="admin-subtab-bar">
+                    <button type="button" class="admin-subtab-btn is-active" data-subtab-target="subPanelUserAccounts">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="w-4 h-4"><circle cx="9" cy="8" r="3.5"></circle><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"></path><circle cx="18" cy="9" r="2.5"></circle><path d="M15.5 14.2c2.6.4 4.5 2.7 4.5 5.3"></path></svg>
+                        <span>سجل الحسابات والتحكم بالخطوات</span>
+                    </button>
+                    <button type="button" class="admin-subtab-btn" data-subtab-target="subPanelUserBadges">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="w-4 h-4"><path d="M12 3l2.2 4.5 5 .7-3.6 3.5.9 5-4.5-2.4-4.5 2.4.9-5-3.6-3.5 5-.7z"></path></svg>
+                        <span>الأوسمة والشارات التقديرية</span>
+                    </button>
+                </div>
+
+                <!-- سجل الحسابات والتحكم -->
+                <div id="subPanelUserAccounts" class="admin-subpanel space-y-4">
 
                 <section id="userVerificationWidget"
                          class="admin-card bg-lux-900/40 rounded-2xl p-5 md:p-6 border border-lux-800/70 space-y-5">
@@ -1198,209 +1124,94 @@
 
                 </section>
 
-            </section>
+                </div>
 
-            <!-- ------------------------------------------------------- -->
-            <!-- تاب 4: الإشعارات (المرحلة 3) - إرسال رسالة أدمن لمستخدم
-                 محدد أو بث لكل المستخدمين. بيستخدم نفس allUsersList
-                 المحمّلة أصلاً لتاب "الحسابات" لاختيار المستخدم (بحث محلي
-                 فوري) بدل ما يعمل استعلام منفصل - شوف initNotifyWidget
-                 في js/admin.js -->
-            <!-- ------------------------------------------------------- -->
-            <section id="tabPanelNotifications" class="admin-tab-panel hidden space-y-4">
+                <!-- الأوسمة والشارات -->
+                <div id="subPanelUserBadges" class="admin-subpanel hidden space-y-4">
+                    <section id="tabPanelBadges" class="space-y-4">
 
-                <section id="notifyWidget"
+                <section id="badgesWidget"
                          class="admin-card bg-lux-900/40 rounded-2xl p-5 md:p-6 border border-lux-800/70 space-y-5">
 
                     <div>
-                        <h2 class="text-sm font-extrabold text-lux-50">إرسال إشعار</h2>
+                        <h2 class="text-sm font-extrabold text-lux-50">الأوسمة والشارة المميزة</h2>
                         <p class="text-xs text-lux-400 font-medium mt-0.5">
-                            هيوصل فوراً على الجرس - لمستخدم واحد أو للكل
+                            دوّر على مستخدم عشان تفتح/تلغي أوسمته يدوياً، وتحدد شارته المميزة
                         </p>
                     </div>
 
-                    <!-- Segmented Control - نفس شكل ترتيب "كل الحسابات" بالظبط -->
-                    <div id="notifyModeControls" class="flex items-center gap-1.5">
-                        <button type="button" class="admin-sort-chip is-active" data-notify-mode="single">
-                            لمستخدم محدد
-                        </button>
-                        <button type="button" class="admin-sort-chip" data-notify-mode="broadcast">
-                            بث لكل المستخدمين
-                        </button>
-                    </div>
-
-                    <!-- اختيار المستخدم - ظاهر بس في وضع "لمستخدم محدد" -->
-                    <div id="notifyRecipientPicker" class="space-y-2">
+                    <!-- اختيار المستخدم - نفس نمط تاب الإشعارات بالظبط -->
+                    <div id="badgesUserPicker" class="space-y-2">
                         <div class="admin-search-box">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                                  stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="shrink-0">
                                 <circle cx="11" cy="11" r="7"></circle>
                                 <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
                             </svg>
-                            <input type="text" id="notifyRecipientSearchInput"
+                            <input type="text" id="badgesUserSearchInput"
                                    placeholder="دوّر بالاسم أو اسم المستخدم…"
                                    autocomplete="off" spellcheck="false">
                         </div>
-                        <ul id="notifyRecipientResultsList" class="admin-notify-picker-results space-y-1.5"></ul>
+                        <ul id="badgesUserResultsList" class="admin-notify-picker-results space-y-1.5"></ul>
 
                         <!-- المستخدم المختار - شارة واحدة قابلة للإزالة -->
-                        <div id="notifyRecipientSelectedChip" class="admin-notify-selected-chip hidden">
-                            <img id="notifyRecipientSelectedAvatar" class="admin-user-avatar" src="" alt="" loading="lazy">
-                            <span id="notifyRecipientSelectedName" class="flex-1 min-w-0"></span>
-                            <button type="button" id="notifyRecipientClearBtn" class="admin-notify-clear-btn" aria-label="إلغاء اختيار المستخدم">x</button>
+                        <div id="badgesUserSelectedChip" class="admin-notify-selected-chip hidden">
+                            <img id="badgesUserSelectedAvatar" class="admin-user-avatar" src="" alt="" loading="lazy">
+                            <span id="badgesUserSelectedName" class="flex-1 min-w-0"></span>
+                            <button type="button" id="badgesUserClearBtn" class="admin-notify-clear-btn" aria-label="إلغاء اختيار المستخدم">x</button>
                         </div>
                     </div>
 
-                    <!-- نص الإشعار -->
-                    <div class="space-y-1.5">
-                        <textarea id="notifyMessageInput" rows="4" maxlength="1000"
-                                  class="admin-notify-textarea w-full"
-                                  placeholder="اكتب رسالتك هنا…"></textarea>
+                    <!-- محتوى إدارة الأوسمة - ظاهر بس بعد ما تختار مستخدم -->
+                    <div id="badgesManageSection" class="hidden space-y-5 pt-1 border-t border-lux-800/60">
+
+                        <div class="space-y-2 pt-4">
+                            <h3 class="text-xs font-extrabold text-lux-50">الأوسمة</h3>
+                            <p class="text-[0.65rem] text-lux-500 font-medium">فعّل/ألغي أي وسام يدوياً لصاحب الحساب المختار</p>
+                            <ul id="badgesToggleList" class="space-y-1.5"></ul>
+                        </div>
+
+                        <div class="space-y-1.5">
+                            <label class="text-[0.7rem] font-bold text-lux-400" for="badgesFeaturedSelect">الشارة المميزة (بتظهر جنب الاسم)</label>
+                            <select id="badgesFeaturedSelect" class="admin-text-input w-full">
+                                <option value="">بدون شارة مميزة</option>
+                            </select>
+                            <p class="text-[0.65rem] text-lux-500 font-medium">القائمة بتقتصر على الأوسمة المفتوحة فعلاً عند المستخدم ده</p>
+                        </div>
+
+                        <p id="badgesManageStatus" class="admin-status-text" role="status" aria-live="polite"></p>
+
                     </div>
-
-                    <button type="button" id="notifySendBtn" class="admin-save-btn w-full">
-                        إرسال
-                    </button>
-
-                    <p id="notifyStatus" class="admin-status-text" role="status" aria-live="polite"></p>
 
                 </section>
 
+                    </section>
+                </div>
             </section>
 
-            <!-- ------------------------------------------------------- -->
-            <!-- تاب 5: البانر العلوي في الصفحة الرئيسية (المرحلة 4) -
-                 home_banner (صف واحد id=1) + Storage bucket "banners" -
-                 شوف sql/phase-4-banner.sql وinitHomeBannerWidget في
-                 js/admin.js -->
-            <!-- ------------------------------------------------------- -->
-            <section id="tabPanelBanner" class="admin-tab-panel hidden space-y-4">
-
-                <section id="bannerWidget"
-                         class="admin-card bg-lux-900/40 rounded-2xl p-5 md:p-6 border border-lux-800/70 space-y-5">
-
-                    <div>
-                        <h2 class="text-sm font-extrabold text-lux-50">البانر العلوي</h2>
-                        <p class="text-xs text-lux-400 font-medium mt-0.5">
-                            بيظهر فوق الصفحة الرئيسية لكل المستخدمين لحظياً
-                        </p>
-                    </div>
-
-                    <!-- معاينة حية - بتتحدث فورياً مع أي تغيير قبل الحفظ
-                         حتى (شوف updateBannerPreview في js/admin.js) -->
-                    <div id="bannerPreviewBox" class="admin-banner-preview">
-                        <img id="bannerPreviewImage" class="admin-banner-preview-img hidden" src="" alt="">
-                        <div id="bannerPreviewOverlay" class="admin-banner-preview-overlay"></div>
-                        <!-- [تعديل] طبقة سحب تحديد الجزء الظاهر من الصورة (Focal Point) -
-                             شغالة بس لما فيه صورة فعلاً (بتتخفي بكلاس hidden، شوف
-                             syncBannerPositionHandleUI في js/admin.js). اسحب/دوس/الأسهم
-                             لتحديد الجزء اللي يفضل ظاهر - بديل شبكة الـ 3×3 القديمة -->
-                        <div id="bannerPositionLayer" class="admin-banner-position-layer hidden" role="slider"
-                             tabindex="0" aria-label="اسحب لتحديد الجزء الظاهر من الصورة"
-                             aria-valuemin="0" aria-valuemax="100">
-                            <span id="bannerPositionHandle" class="admin-banner-position-handle"></span>
-                        </div>
-                        <p id="bannerPreviewText" class="admin-banner-preview-text"></p>
-                        <span id="bannerPreviewEmpty" class="admin-banner-preview-empty">مفيش بانر منشور دلوقتي</span>
-                    </div>
-
-                    <!-- رفع صورة - بترفع مباشرة على Storage bucket "banners"
-                         لما تتختار (مش وقت الحفظ)، والـ image_url بس هو اللي
-                         بيتحفظ وقت الضغط على "حفظ ونشر" -->
-                    <div class="space-y-1.5">
-                        <label class="text-[0.7rem] font-bold text-lux-400">صورة البانر (اختياري)</label>
-                        <div class="flex items-center gap-2.5 flex-wrap">
-                            <button type="button" id="bannerUploadBtn" class="admin-upload-btn">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                    <path d="M12 16V4"></path>
-                                    <path d="M6 10l6-6 6 6"></path>
-                                    <path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"></path>
-                                </svg>
-                                <span id="bannerUploadBtnLabel">ارفع صورة</span>
-                            </button>
-                            <button type="button" id="bannerRemoveImageBtn" class="admin-notify-clear-btn admin-notify-clear-btn--wide hidden">
-                                x إزالة الصورة
-                            </button>
-                            <input type="file" id="bannerImageInput" accept="image/*" class="hidden">
-                        </div>
-                    </div>
-
-                    <!-- [تعديل] تحديد الجزء الظاهر من الصورة (Focal Point) - بقى تعديل
-                         يدوي حر بالسحب فوق المعاينة نفسها (#bannerPositionLayer جوه
-                         #bannerPreviewBox فوق) بدل شبكة الـ 3×3 القديمة (admin-focal-grid).
-                         الحقل ده بقى مجرد تعليمات + قراءة حية للموضع الحالي، مفيش عناصر
-                         تحكم هنا نفسها (شوف initBannerPositionDrag في js/admin.js) -->
-                    <div class="space-y-1.5" id="bannerPositionField">
-                        <div class="flex items-center justify-between gap-2">
-                            <label class="text-[0.7rem] font-bold text-lux-400">الجزء الظاهر من الصورة</label>
-                            <span id="bannerPositionValue" class="text-[0.7rem] font-mono font-bold text-lux-300">50%، 50%</span>
-                        </div>
-                        <p class="text-[0.65rem] text-lux-500 font-medium">
-                            اسحب النقطة اللي فوق المعاينة (أو استخدم الأسهم بعد الضغط عليها) لتحديد أي جزء من الصورة يفضل ظاهر جوه مساحة البانر - متاح بس لما تكون فيه صورة مرفوعة
-                        </p>
-                    </div>
-
-                    <!-- ظلام الصورة (Overlay) - سلايدر 0-100%، بيتحكم في شفافية
-                         طبقة تعتيم فوق الصورة عشان النص يبان أوضح - شوف
-                         applyBannerOverlay في js/admin.js -->
-                    <div class="space-y-1.5" id="bannerOverlayField">
-                        <div class="flex items-center justify-between">
-                            <label class="text-[0.7rem] font-bold text-lux-400" for="bannerOverlayInput">ظلام الصورة</label>
-                            <span id="bannerOverlayValue" class="text-[0.7rem] font-mono font-bold text-lux-300">40%</span>
-                        </div>
-                        <input type="range" id="bannerOverlayInput" class="admin-range-slider" min="0" max="100" step="5" value="40">
-                    </div>
-
-                    <!-- نص البانر + لون النص -->
-                    <div class="space-y-1.5">
-                        <div class="flex items-center justify-between gap-2">
-                            <label class="text-[0.7rem] font-bold text-lux-400" for="bannerTextInput">نص البانر (اختياري)</label>
-                            <div class="flex items-center gap-1.5">
-                                <label class="text-[0.65rem] font-bold text-lux-500" for="bannerTextColorInput">لون النص</label>
-                                <input type="color" id="bannerTextColorInput" class="admin-color-input" value="#ffffff">
-                            </div>
-                        </div>
-                        <textarea id="bannerTextInput" rows="3" maxlength="300"
-                                  class="admin-notify-textarea w-full"
-                                  placeholder="اكتب نص البانر هنا…"></textarea>
-                    </div>
-
-                    <!-- تفعيل/إخفاء -->
-                    <div class="flex items-center justify-between gap-3 pt-1 border-t border-lux-800/60">
-                        <div>
-                            <p class="text-xs font-bold text-lux-200">إظهار البانر</p>
-                            <p class="text-[0.65rem] text-lux-500 font-medium mt-0.5">لو متفعّل، هيظهر فوراً لكل المستخدمين</p>
-                        </div>
-                        <label class="admin-toggle-switch" for="bannerActiveToggle" title="إظهار/إخفاء البانر">
-                            <input type="checkbox" id="bannerActiveToggle">
-                            <span class="admin-toggle-switch-track"></span>
-                            <span class="admin-toggle-switch-thumb"></span>
-                        </label>
-                    </div>
-
-                    <button type="button" id="bannerSaveBtn" class="admin-save-btn w-full">
-                        حفظ ونشر
+            <!-- ======================================================= -->
+            <!-- قطاع 3: المحتوى والأنشطة (Content Hub) -->
+            <!-- ======================================================= -->
+            <section id="tabPanelContent" class="admin-tab-panel hidden space-y-5">
+                <!-- أزرار التبويب الداخلي -->
+                <div class="admin-subtab-bar">
+                    <button type="button" class="admin-subtab-btn is-active" data-subtab-target="subPanelContentPosts" id="btnSubTabPostsMain">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="w-4 h-4"><rect x="3" y="4" width="18" height="16" rx="2"></rect><line x1="7" y1="9" x2="17" y2="9"></line><line x1="7" y1="13" x2="14" y2="13"></line><path d="M7 17h4"></path></svg>
+                        <span>القصص والمنشورات</span>
                     </button>
+                    <button type="button" class="admin-subtab-btn" data-subtab-target="subPanelContentQuestions">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="w-4 h-4"><circle cx="12" cy="12" r="9"></circle><path d="M9.5 9a2.5 2.5 0 0 1 4.7-1.2c.5.9.2 1.7-.6 2.4-.9.8-1.6 1.3-1.6 2.6"></path><circle cx="12" cy="17" r="0.75" fill="currentColor" stroke="none"></circle></svg>
+                        <span>الأسئلة اليومية وبنك الأسئلة</span>
+                    </button>
+                    <button type="button" class="admin-subtab-btn" data-subtab-target="subPanelContentBanner">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="w-4 h-4"><rect x="3" y="5" width="18" height="14" rx="2"></rect><circle cx="8.5" cy="10" r="1.5"></circle><path d="M3 16l5-4 4 3 3-2.5 6 5"></path></svg>
+                        <span>البانر الترويجي وهوية التطبيق</span>
+                    </button>
+                </div>
 
-                    <p id="bannerStatus" class="admin-status-text" role="status" aria-live="polite"></p>
-
-                </section>
-
-            </section>
-
-            <!-- ------------------------------------------------------- -->
-            <!-- تاب 6: المنشورات (المرحلة 5، خطوة 25) - نشر منشور باسم
-                 التطبيق (نص و/أو صورة) عن طريق admin_create_post RPC
-                 فقط (مفيش .insert() مباشر على posts - شوف
-                 sql/phase-5-posts-admin.sql)، بالإضافة لقائمة "آخر
-                 المنشورات" مع إمكانية الحذف عن طريق admin_delete_post.
-                 المعاينة الحية بتستخدم بالظبط نفس كلاسات كارت المنشور
-                 المستخدمة في الصفحة الرئيسية (.post-card وما تحتها من
-                 style.css، شوف buildPostCardElement في js/posts.js)
-                 عشان تبان مطابقة تماماً لشكلها عند المستخدمين -
-                 شوف initPostsWidget في js/admin.js -->
-            <!-- ------------------------------------------------------- -->
-            <section id="tabPanelPosts" class="admin-tab-panel hidden space-y-4">
+                <!-- القصص والمنشورات -->
+                <div id="subPanelContentPosts" class="admin-subpanel space-y-4">
+                    <section id="tabPanelPosts" class="space-y-4">
 
                 <!-- أزرار التبديل بين المنشورات والقصص -->
                 <div class="flex items-center gap-2 border-b border-lux-800 pb-3">
@@ -1592,21 +1403,12 @@
                     </section>
                 </div>
 
-            </section>
+                    </section>
+                </div>
 
-            <!-- ------------------------------------------------------- -->
-            <!-- تاب: إدارة الأسئلة اليومية (المرحلة 6)
-                 فورم إضافة/تعديل سؤال (نص + 4 اختيارات + تحديد الإجابة
-                 الصح) فوق، وتحته قائمة كل الأسئلة الموجودة في البنك مع
-                 زرار تعديل/حذف لكل واحد. الحفظ كله عن طريق
-                 admin_create_daily_question / admin_update_daily_question /
-                 admin_delete_daily_question RPC بس - شوف
-                 sql/phase-6-daily-questions.sql. سؤالي اليوم الحاليين
-                 بيتحددوا تلقائياً كل يوم عن طريق pg_cron (pick_daily_questions) -
-                 مفيش هنا أي زرار "اختار سؤالي اليوم يدوي" لأنها بتحصل
-                 لوحدها. -->
-            <!-- ------------------------------------------------------- -->
-            <section id="tabPanelQuestions" class="admin-tab-panel hidden space-y-4">
+                <!-- الأسئلة اليومية -->
+                <div id="subPanelContentQuestions" class="admin-subpanel hidden space-y-4">
+                    <section id="tabPanelQuestions" class="space-y-4">
 
                 <section id="questionFormWidget"
                          class="admin-card bg-lux-900/40 rounded-2xl p-5 md:p-6 border border-lux-800/70 space-y-5">
@@ -1873,91 +1675,210 @@
 
                 </section>
 
-            </section>
+                    </section>
+                </div>
 
-            <!-- ------------------------------------------------------- -->
-            <!-- تاب 8: الأوسمة والشارة المميزة (المرحلة 7 - شوف
-                 sql/phase-7-badges.sql) - جدولي badges/user_badges جاهزين
-                 بالفعل من المرحلة 4 (شوف js/profiles.js)، والويدجت هنا
-                 بتضيف واجهة تحكم فوقهم بس: بحث عن مستخدم (نفس نمط
-                 اختيار المستخدم في تاب الإشعارات)، وبعد الاختيار، قائمة
-                 كل الأوسمة الموجودة بالكتالوج مع Toggle لكل وسام
-                 (فتح/إلغاء يدوي عن طريق admin_set_user_badge RPC)،
-                 وتحديد "الشارة المميزة" (قائمة منسدلة بس من الأوسمة
-                 المفتوحة فعلاً عند المستخدم ده، عن طريق
-                 admin_set_featured_badge RPC) - شوف initBadgesWidget
-                 في js/admin.js -->
-            <!-- ------------------------------------------------------- -->
-            <section id="tabPanelBadges" class="admin-tab-panel hidden space-y-4">
+                <!-- البانر الترويجي وهوية التطبيق -->
+                <div id="subPanelContentBanner" class="admin-subpanel hidden space-y-4">
+                    <section id="tabPanelBanner" class="space-y-4">
 
-                <section id="badgesWidget"
+                <section id="bannerWidget"
                          class="admin-card bg-lux-900/40 rounded-2xl p-5 md:p-6 border border-lux-800/70 space-y-5">
 
                     <div>
-                        <h2 class="text-sm font-extrabold text-lux-50">الأوسمة والشارة المميزة</h2>
+                        <h2 class="text-sm font-extrabold text-lux-50">البانر العلوي</h2>
                         <p class="text-xs text-lux-400 font-medium mt-0.5">
-                            دوّر على مستخدم عشان تفتح/تلغي أوسمته يدوياً، وتحدد شارته المميزة
+                            بيظهر فوق الصفحة الرئيسية لكل المستخدمين لحظياً
                         </p>
                     </div>
 
-                    <!-- اختيار المستخدم - نفس نمط تاب الإشعارات بالظبط -->
-                    <div id="badgesUserPicker" class="space-y-2">
+                    <!-- معاينة حية - بتتحدث فورياً مع أي تغيير قبل الحفظ
+                         حتى (شوف updateBannerPreview في js/admin.js) -->
+                    <div id="bannerPreviewBox" class="admin-banner-preview">
+                        <img id="bannerPreviewImage" class="admin-banner-preview-img hidden" src="" alt="">
+                        <div id="bannerPreviewOverlay" class="admin-banner-preview-overlay"></div>
+                        <!-- [تعديل] طبقة سحب تحديد الجزء الظاهر من الصورة (Focal Point) -
+                             شغالة بس لما فيه صورة فعلاً (بتتخفي بكلاس hidden، شوف
+                             syncBannerPositionHandleUI في js/admin.js). اسحب/دوس/الأسهم
+                             لتحديد الجزء اللي يفضل ظاهر - بديل شبكة الـ 3×3 القديمة -->
+                        <div id="bannerPositionLayer" class="admin-banner-position-layer hidden" role="slider"
+                             tabindex="0" aria-label="اسحب لتحديد الجزء الظاهر من الصورة"
+                             aria-valuemin="0" aria-valuemax="100">
+                            <span id="bannerPositionHandle" class="admin-banner-position-handle"></span>
+                        </div>
+                        <p id="bannerPreviewText" class="admin-banner-preview-text"></p>
+                        <span id="bannerPreviewEmpty" class="admin-banner-preview-empty">مفيش بانر منشور دلوقتي</span>
+                    </div>
+
+                    <!-- رفع صورة - بترفع مباشرة على Storage bucket "banners"
+                         لما تتختار (مش وقت الحفظ)، والـ image_url بس هو اللي
+                         بيتحفظ وقت الضغط على "حفظ ونشر" -->
+                    <div class="space-y-1.5">
+                        <label class="text-[0.7rem] font-bold text-lux-400">صورة البانر (اختياري)</label>
+                        <div class="flex items-center gap-2.5 flex-wrap">
+                            <button type="button" id="bannerUploadBtn" class="admin-upload-btn">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                    <path d="M12 16V4"></path>
+                                    <path d="M6 10l6-6 6 6"></path>
+                                    <path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"></path>
+                                </svg>
+                                <span id="bannerUploadBtnLabel">ارفع صورة</span>
+                            </button>
+                            <button type="button" id="bannerRemoveImageBtn" class="admin-notify-clear-btn admin-notify-clear-btn--wide hidden">
+                                x إزالة الصورة
+                            </button>
+                            <input type="file" id="bannerImageInput" accept="image/*" class="hidden">
+                        </div>
+                    </div>
+
+                    <!-- [تعديل] تحديد الجزء الظاهر من الصورة (Focal Point) - بقى تعديل
+                         يدوي حر بالسحب فوق المعاينة نفسها (#bannerPositionLayer جوه
+                         #bannerPreviewBox فوق) بدل شبكة الـ 3×3 القديمة (admin-focal-grid).
+                         الحقل ده بقى مجرد تعليمات + قراءة حية للموضع الحالي، مفيش عناصر
+                         تحكم هنا نفسها (شوف initBannerPositionDrag في js/admin.js) -->
+                    <div class="space-y-1.5" id="bannerPositionField">
+                        <div class="flex items-center justify-between gap-2">
+                            <label class="text-[0.7rem] font-bold text-lux-400">الجزء الظاهر من الصورة</label>
+                            <span id="bannerPositionValue" class="text-[0.7rem] font-mono font-bold text-lux-300">50%، 50%</span>
+                        </div>
+                        <p class="text-[0.65rem] text-lux-500 font-medium">
+                            اسحب النقطة اللي فوق المعاينة (أو استخدم الأسهم بعد الضغط عليها) لتحديد أي جزء من الصورة يفضل ظاهر جوه مساحة البانر - متاح بس لما تكون فيه صورة مرفوعة
+                        </p>
+                    </div>
+
+                    <!-- ظلام الصورة (Overlay) - سلايدر 0-100%، بيتحكم في شفافية
+                         طبقة تعتيم فوق الصورة عشان النص يبان أوضح - شوف
+                         applyBannerOverlay في js/admin.js -->
+                    <div class="space-y-1.5" id="bannerOverlayField">
+                        <div class="flex items-center justify-between">
+                            <label class="text-[0.7rem] font-bold text-lux-400" for="bannerOverlayInput">ظلام الصورة</label>
+                            <span id="bannerOverlayValue" class="text-[0.7rem] font-mono font-bold text-lux-300">40%</span>
+                        </div>
+                        <input type="range" id="bannerOverlayInput" class="admin-range-slider" min="0" max="100" step="5" value="40">
+                    </div>
+
+                    <!-- نص البانر + لون النص -->
+                    <div class="space-y-1.5">
+                        <div class="flex items-center justify-between gap-2">
+                            <label class="text-[0.7rem] font-bold text-lux-400" for="bannerTextInput">نص البانر (اختياري)</label>
+                            <div class="flex items-center gap-1.5">
+                                <label class="text-[0.65rem] font-bold text-lux-500" for="bannerTextColorInput">لون النص</label>
+                                <input type="color" id="bannerTextColorInput" class="admin-color-input" value="#ffffff">
+                            </div>
+                        </div>
+                        <textarea id="bannerTextInput" rows="3" maxlength="300"
+                                  class="admin-notify-textarea w-full"
+                                  placeholder="اكتب نص البانر هنا…"></textarea>
+                    </div>
+
+                    <!-- تفعيل/إخفاء -->
+                    <div class="flex items-center justify-between gap-3 pt-1 border-t border-lux-800/60">
+                        <div>
+                            <p class="text-xs font-bold text-lux-200">إظهار البانر</p>
+                            <p class="text-[0.65rem] text-lux-500 font-medium mt-0.5">لو متفعّل، هيظهر فوراً لكل المستخدمين</p>
+                        </div>
+                        <label class="admin-toggle-switch" for="bannerActiveToggle" title="إظهار/إخفاء البانر">
+                            <input type="checkbox" id="bannerActiveToggle">
+                            <span class="admin-toggle-switch-track"></span>
+                            <span class="admin-toggle-switch-thumb"></span>
+                        </label>
+                    </div>
+
+                    <button type="button" id="bannerSaveBtn" class="admin-save-btn w-full">
+                        حفظ ونشر
+                    </button>
+
+                    <p id="bannerStatus" class="admin-status-text" role="status" aria-live="polite"></p>
+
+                </section>
+
+                    </section>
+                </div>
+            </section>
+
+            <!-- ======================================================= -->
+            <!-- قطاع 4: التواصل والمراسلات (Communications & Support) -->
+            <!-- ======================================================= -->
+            <section id="tabPanelComms" class="admin-tab-panel hidden space-y-5">
+                <!-- أزرار التبويب الداخلي -->
+                <div class="admin-subtab-bar">
+                    <button type="button" class="admin-subtab-btn is-active" data-subtab-target="subPanelCommsNotify">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="w-4 h-4"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
+                        <span>مركز الإشعارات الفورية (Broadcast)</span>
+                    </button>
+                    <button type="button" class="admin-subtab-btn" data-subtab-target="subPanelCommsSupport">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="w-4 h-4"><rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="m3 7 9 6 9-6"></path></svg>
+                        <span>صندوق الدعم والمقترحات</span>
+                    </button>
+                </div>
+
+                <!-- مركز الإشعارات -->
+                <div id="subPanelCommsNotify" class="admin-subpanel space-y-4">
+                    <section id="tabPanelNotifications" class="space-y-4">
+
+                <section id="notifyWidget"
+                         class="admin-card bg-lux-900/40 rounded-2xl p-5 md:p-6 border border-lux-800/70 space-y-5">
+
+                    <div>
+                        <h2 class="text-sm font-extrabold text-lux-50">إرسال إشعار</h2>
+                        <p class="text-xs text-lux-400 font-medium mt-0.5">
+                            هيوصل فوراً على الجرس - لمستخدم واحد أو للكل
+                        </p>
+                    </div>
+
+                    <!-- Segmented Control - نفس شكل ترتيب "كل الحسابات" بالظبط -->
+                    <div id="notifyModeControls" class="flex items-center gap-1.5">
+                        <button type="button" class="admin-sort-chip is-active" data-notify-mode="single">
+                            لمستخدم محدد
+                        </button>
+                        <button type="button" class="admin-sort-chip" data-notify-mode="broadcast">
+                            بث لكل المستخدمين
+                        </button>
+                    </div>
+
+                    <!-- اختيار المستخدم - ظاهر بس في وضع "لمستخدم محدد" -->
+                    <div id="notifyRecipientPicker" class="space-y-2">
                         <div class="admin-search-box">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                                  stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="shrink-0">
                                 <circle cx="11" cy="11" r="7"></circle>
                                 <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
                             </svg>
-                            <input type="text" id="badgesUserSearchInput"
+                            <input type="text" id="notifyRecipientSearchInput"
                                    placeholder="دوّر بالاسم أو اسم المستخدم…"
                                    autocomplete="off" spellcheck="false">
                         </div>
-                        <ul id="badgesUserResultsList" class="admin-notify-picker-results space-y-1.5"></ul>
+                        <ul id="notifyRecipientResultsList" class="admin-notify-picker-results space-y-1.5"></ul>
 
                         <!-- المستخدم المختار - شارة واحدة قابلة للإزالة -->
-                        <div id="badgesUserSelectedChip" class="admin-notify-selected-chip hidden">
-                            <img id="badgesUserSelectedAvatar" class="admin-user-avatar" src="" alt="" loading="lazy">
-                            <span id="badgesUserSelectedName" class="flex-1 min-w-0"></span>
-                            <button type="button" id="badgesUserClearBtn" class="admin-notify-clear-btn" aria-label="إلغاء اختيار المستخدم">x</button>
+                        <div id="notifyRecipientSelectedChip" class="admin-notify-selected-chip hidden">
+                            <img id="notifyRecipientSelectedAvatar" class="admin-user-avatar" src="" alt="" loading="lazy">
+                            <span id="notifyRecipientSelectedName" class="flex-1 min-w-0"></span>
+                            <button type="button" id="notifyRecipientClearBtn" class="admin-notify-clear-btn" aria-label="إلغاء اختيار المستخدم">x</button>
                         </div>
                     </div>
 
-                    <!-- محتوى إدارة الأوسمة - ظاهر بس بعد ما تختار مستخدم -->
-                    <div id="badgesManageSection" class="hidden space-y-5 pt-1 border-t border-lux-800/60">
-
-                        <div class="space-y-2 pt-4">
-                            <h3 class="text-xs font-extrabold text-lux-50">الأوسمة</h3>
-                            <p class="text-[0.65rem] text-lux-500 font-medium">فعّل/ألغي أي وسام يدوياً لصاحب الحساب المختار</p>
-                            <ul id="badgesToggleList" class="space-y-1.5"></ul>
-                        </div>
-
-                        <div class="space-y-1.5">
-                            <label class="text-[0.7rem] font-bold text-lux-400" for="badgesFeaturedSelect">الشارة المميزة (بتظهر جنب الاسم)</label>
-                            <select id="badgesFeaturedSelect" class="admin-text-input w-full">
-                                <option value="">بدون شارة مميزة</option>
-                            </select>
-                            <p class="text-[0.65rem] text-lux-500 font-medium">القائمة بتقتصر على الأوسمة المفتوحة فعلاً عند المستخدم ده</p>
-                        </div>
-
-                        <p id="badgesManageStatus" class="admin-status-text" role="status" aria-live="polite"></p>
-
+                    <!-- نص الإشعار -->
+                    <div class="space-y-1.5">
+                        <textarea id="notifyMessageInput" rows="4" maxlength="1000"
+                                  class="admin-notify-textarea w-full"
+                                  placeholder="اكتب رسالتك هنا…"></textarea>
                     </div>
+
+                    <button type="button" id="notifySendBtn" class="admin-save-btn w-full">
+                        إرسال
+                    </button>
+
+                    <p id="notifyStatus" class="admin-status-text" role="status" aria-live="polite"></p>
 
                 </section>
 
-            </section>
+                    </section>
+                </div>
 
-            <!-- ------------------------------------------------------- -->
-            <!-- تاب 9: صندوق رسائل الدعم (المرحلة 8 - شوف
-                 sql/phase-8-support-messages.sql). قائمة كل المحادثات
-                 (admin_list_support_conversations RPC)، وبالضغط على
-                 محادثة بيتحول العرض لثريد الرسايل بتاعتها (قراءة مباشرة
-                 من support_messages - RLS بتسمح للأدمن بيها من غير RPC)
-                 + مربع رد (INSERT مباشر بـ is_from_admin=true، وTrigger
-                 في القاعدة بيبعت إشعار admin_message للمستخدم تلقائياً).
-                 شوف initSupportInboxWidget في js/admin.js -->
-            <!-- ------------------------------------------------------- -->
-            <section id="tabPanelSupport" class="admin-tab-panel hidden space-y-4">
+                <!-- صندوق الدعم -->
+                <div id="subPanelCommsSupport" class="admin-subpanel hidden space-y-4">
+                    <section id="tabPanelSupport" class="space-y-4">
 
                 <section id="supportInboxWidget"
                          class="admin-card bg-lux-900/40 rounded-2xl p-5 md:p-6 border border-lux-800/70 space-y-4">
@@ -1992,12 +1913,29 @@
 
                 </section>
 
+                    </section>
+                </div>
             </section>
 
-            <!-- ------------------------------------------------------- -->
-            <!-- تاب 10: التحكم الشامل والصيانة (Master Controls) -->
-            <!-- ------------------------------------------------------- -->
-            <section id="tabPanelMaster" class="admin-tab-panel hidden space-y-5">
+            <!-- ======================================================= -->
+            <!-- قطاع 5: إعدادات النظام والقرية (System Ops) -->
+            <!-- ======================================================= -->
+            <section id="tabPanelSystem" class="admin-tab-panel hidden space-y-5">
+                <!-- أزرار التبويب الداخلي -->
+                <div class="admin-subtab-bar">
+                    <button type="button" class="admin-subtab-btn is-active" data-subtab-target="subPanelSystemMaster">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="w-4 h-4"><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/><circle cx="12" cy="12" r="3"/></svg>
+                        <span>التحكم الشامل ومفاتيح الميزات</span>
+                    </button>
+                    <button type="button" class="admin-subtab-btn" data-subtab-target="subPanelSystemGeofence">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="w-4 h-4"><circle cx="12" cy="9" r="4"></circle><path d="M12 21c4-4.5 7-8.5 7-12a7 7 0 1 0-14 0c0 3.5 3 7.5 7 12z"></path></svg>
+                        <span>نطاق نزلة عبيد الجغرافي</span>
+                    </button>
+                </div>
+
+                <!-- التحكم الشامل -->
+                <div id="subPanelSystemMaster" class="admin-subpanel space-y-5">
+                    <section id="tabPanelMaster" class="space-y-5">
 
                 <!-- 1. وضع الصيانة وقفل التطبيق -->
                 <div class="admin-card bg-lux-900/40 rounded-2xl p-5 md:p-6 border border-lux-800/70 space-y-4">
@@ -2305,59 +2243,145 @@
                     </div>
                 </div>
 
+                    </section>
+                </div>
+
+                <!-- النطاق الجغرافي -->
+                <div id="subPanelSystemGeofence" class="admin-subpanel hidden space-y-4">
+                    <section id="tabPanelGeofence" class="space-y-4">
+
+                <!-- الكارت الوحيد اللي معاه خط ذهبي رفيع علوي (border-t-2
+                     border-t-gold-500/40) - ده العنصر البصري "البطل" في
+                     الصفحة لأنه أكتر حاجة مميزة لسِكّاوي فعلياً (نطاق
+                     جغرافي)، وباقي الكروت هادية حواليه (شوف مبدأ "اصرف
+                     جرأتك في مكان واحد" في ملاحظات التصميم) -->
+                <section id="geofenceRadiusWidget"
+                         class="admin-card bg-lux-900/40 rounded-2xl p-5 md:p-6 border border-lux-800/70 border-t-2 border-t-gold-500/40 space-y-5">
+
+                    <div class="flex items-start justify-between gap-3">
+                        <div>
+                            <h2 class="text-sm font-extrabold text-lux-50">نطاق نزلة عبيد الجغرافي</h2>
+                            <p class="text-xs text-lux-400 font-medium mt-0.5">
+                                نصف قطر النطاق المسموح بيه حوالين مركز القرية (بالمتر)
+                            </p>
+                        </div>
+                        <!-- شارة صغيرة بتعرض مركز النطاق الحالي (قراءة فقط هنا -
+                             تعديل الإحداثيات نفسها خارج نطاق هذا الـ Widget) -->
+                        <span id="geofenceCenterBadge"
+                              class="shrink-0 text-[0.65rem] font-bold text-lux-500 bg-lux-800 border border-lux-700 rounded-full px-2.5 py-1 whitespace-nowrap">
+                            …
+                        </span>
+                    </div>
+
+                    <!-- الدائرة/القرص: تمثيل بصري فعلي لنصف القطر (بيكبر
+                         وبيصغر مع الـ Slider لحظياً) بدل ما يفضل نصف
+                         القطر مجرد رقم مجرد - شوف updateGeofenceRadiusDial
+                         في js/admin.js، متصلة بنفس applyGeofenceRadiusToInputs
+                         المركزية اللي أصلاً بتتنادى من كل مكان (تحميل/
+                         تحريك الـ Slider/كتابة يدوية/حفظ) -->
+                    <div class="flex flex-col md:flex-row md:items-center gap-5 md:gap-8">
+                        <div class="flex justify-center md:justify-start shrink-0">
+                            <svg id="geofenceRadiusDial" viewBox="0 0 200 200" class="w-36 h-36 md:w-40 md:h-40" aria-hidden="true">
+                                <circle cx="100" cy="100" r="90" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="1"></circle>
+                                <circle cx="100" cy="100" r="60" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="1"></circle>
+                                <circle cx="100" cy="100" r="30" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="1"></circle>
+                                <circle id="geofenceRadiusDialCircle" cx="100" cy="100" r="10"
+                                        fill="rgba(212,175,55,0.10)" stroke="#D4AF37" stroke-width="1.5"></circle>
+                                <circle cx="100" cy="100" r="2" fill="#E8C158"></circle>
+                            </svg>
+                        </div>
+
+                        <div class="flex-1 w-full space-y-4">
+                            <!-- عرض القيمة الحالية بالمتر والكيلومتر -->
+                            <div class="flex items-baseline gap-2">
+                                <span id="geofenceRadiusValueMeters" class="text-3xl font-mono font-bold tabular-nums text-gold-400">
+                                    —
+                                </span>
+                                <span class="text-xs font-bold text-lux-500">متر</span>
+                                <span id="geofenceRadiusValueKm" class="text-xs font-mono font-medium text-lux-500">(— كم)</span>
+                            </div>
+
+                            <!-- Slider + Input رقمي متزامنين -->
+                            <div class="space-y-2">
+                                <input type="range" id="geofenceRadiusSlider"
+                                       class="admin-range-slider w-full"
+                                       min="100" max="20000" step="50" value="3500"
+                                       aria-label="نصف قطر النطاق بالمتر">
+
+                                <div class="flex items-center gap-2">
+                                    <input type="number" id="geofenceRadiusInput"
+                                           class="admin-number-input flex-1"
+                                           min="100" max="20000" step="50" value="3500"
+                                           inputmode="numeric" aria-label="نصف قطر النطاق بالمتر (إدخال رقمي)">
+                                    <button type="button" id="geofenceRadiusSaveBtn"
+                                            class="admin-save-btn">
+                                        حفظ
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- رسالة حالة الحفظ (نجاح/خطأ/تحميل) -->
+                    <p id="geofenceRadiusStatus" class="admin-status-text" role="status" aria-live="polite"></p>
+
+                </section>
+
+                    </section>
+                </div>
             </section>
 
         </div>
         </main>
 
-        <!-- شريط التنقل السفلي الذكي للموبايل -->
-        <nav class="md:hidden shrink-0 border-t border-lux-800/80 bg-lux-900/95 backdrop-blur-2xl px-2 py-1.5 flex items-center justify-around gap-1 z-30 shadow-lg">
+        <!-- شريط التنقل السفلي الذكي للموبايل من 5 قطاعات -->
+        <nav class="md:hidden shrink-0 border-t border-lux-800/80 bg-lux-900/95 backdrop-blur-2xl px-1 py-1.5 flex items-center justify-around gap-1 z-30 shadow-lg">
 
-            <button type="button" class="admin-nav-tab is-active" data-tab-target="tabPanelVisitors">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <rect x="4" y="12" width="4" height="8" rx="1"></rect>
-                    <rect x="10" y="7" width="4" height="13" rx="1"></rect>
-                    <rect x="16" y="3" width="4" height="17" rx="1"></rect>
+            <button type="button" class="admin-nav-tab is-active" data-tab-target="tabPanelOverview">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <rect x="3" y="3" width="7" height="7" rx="1.5"></rect>
+                    <rect x="14" y="3" width="7" height="7" rx="1.5"></rect>
+                    <rect x="14" y="14" width="7" height="7" rx="1.5"></rect>
+                    <rect x="3" y="14" width="7" height="7" rx="1.5"></rect>
                 </svg>
-                <span>الزوار</span>
-            </button>
-
-            <button type="button" class="admin-nav-tab" data-tab-target="tabPanelMaster">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>
-                    <circle cx="12" cy="12" r="3"/>
-                </svg>
-                <span>التحكم</span>
+                <span>الرئيسية</span>
             </button>
 
             <button type="button" class="admin-nav-tab" data-tab-target="tabPanelUsers">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                     <circle cx="9" cy="8" r="3.5"></circle>
                     <path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"></path>
                     <circle cx="18" cy="9" r="2.5"></circle>
                     <path d="M15.5 14.2c2.6.4 4.5 2.7 4.5 5.3"></path>
                 </svg>
-                <span>الحسابات</span>
+                <span>المشتركين</span>
             </button>
 
-            <button type="button" class="admin-nav-tab" data-tab-target="tabPanelPosts">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <rect x="3" y="4" width="18" height="16" rx="2"></rect>
-                    <line x1="7" y1="9" x2="17" y2="9"></line>
-                    <line x1="7" y1="13" x2="14" y2="13"></line>
-                    <path d="M7 17h4"></path>
+            <button type="button" class="admin-nav-tab" data-tab-target="tabPanelContent">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+                    <polyline points="2 17 12 22 22 17"></polyline>
+                    <polyline points="2 12 12 17 22 12"></polyline>
                 </svg>
-                <span>المنشورات</span>
+                <span>المحتوى</span>
             </button>
 
-            <button type="button" id="btnAdminMobileMoreDrawer" class="admin-nav-tab text-lux-400">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <circle cx="12" cy="12" r="1.5"></circle>
-                    <circle cx="19" cy="12" r="1.5"></circle>
-                    <circle cx="5" cy="12" r="1.5"></circle>
+            <button type="button" class="admin-nav-tab" data-tab-target="tabPanelComms">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
                 </svg>
-                <span>المزيد</span>
+                <span>التواصل</span>
             </button>
+
+            <button type="button" class="admin-nav-tab" data-tab-target="tabPanelSystem">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <circle cx="12" cy="12" r="3"></circle>
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                </svg>
+                <span>النظام</span>
+            </button>
+
+            <button type="button" id="btnAdminMobileMoreDrawer" class="hidden" aria-hidden="true"></button>
 
         </nav>
 

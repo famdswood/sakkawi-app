@@ -4361,15 +4361,80 @@ function setStatusText(el, message, state) {
    هيفضل واقف على تاب قديم
    ================================================================== */
 
-function initAdminTabNavigation() {
+const ADMIN_TAB_ROUTING_MAP = {
+    // Overview
+    tabPanelOverview: { main: 'tabPanelOverview', sub: 'subPanelOverviewPulse' },
+    tabPanelVisitors: { main: 'tabPanelOverview', sub: 'subPanelOverviewPulse' },
+    tabPanelSponsors: { main: 'tabPanelOverview', sub: 'subPanelOverviewSponsors' },
+
+    // Users
+    tabPanelUsers: { main: 'tabPanelUsers', sub: 'subPanelUserAccounts' },
+    tabPanelBadges: { main: 'tabPanelUsers', sub: 'subPanelUserBadges' },
+
+    // Content
+    tabPanelContent: { main: 'tabPanelContent', sub: 'subPanelContentPosts' },
+    tabPanelPosts: { main: 'tabPanelContent', sub: 'subPanelContentPosts' },
+    tabPanelQuestions: { main: 'tabPanelContent', sub: 'subPanelContentQuestions' },
+    tabPanelBanner: { main: 'tabPanelContent', sub: 'subPanelContentBanner' },
+
+    // Comms
+    tabPanelComms: { main: 'tabPanelComms', sub: 'subPanelCommsNotify' },
+    tabPanelNotifications: { main: 'tabPanelComms', sub: 'subPanelCommsNotify' },
+    tabPanelSupport: { main: 'tabPanelComms', sub: 'subPanelCommsSupport' },
+
+    // System
+    tabPanelSystem: { main: 'tabPanelSystem', sub: 'subPanelSystemMaster' },
+    tabPanelMaster: { main: 'tabPanelSystem', sub: 'subPanelSystemMaster' },
+    tabPanelGeofence: { main: 'tabPanelSystem', sub: 'subPanelSystemGeofence' },
+};
+
+function switchAdminTab(targetTabId, targetSubTabId = null) {
+    const route = ADMIN_TAB_ROUTING_MAP[targetTabId] || { main: targetTabId, sub: targetSubTabId };
+    const effectiveMain = route.main;
+    const effectiveSub = targetSubTabId || route.sub;
+
     const tabButtons = document.querySelectorAll('.admin-nav-tab[data-tab-target]');
     const panels = document.querySelectorAll('.admin-tab-panel');
+
+    panels.forEach((panel) => {
+        panel.classList.toggle('hidden', panel.id !== effectiveMain);
+    });
+
+    tabButtons.forEach((b) => {
+        const bTarget = b.dataset.tabTarget;
+        const bRoute = ADMIN_TAB_ROUTING_MAP[bTarget] || { main: bTarget };
+        b.classList.toggle('is-active', bRoute.main === effectiveMain);
+    });
+
+    if (effectiveSub) {
+        const subBtn = document.querySelector(`.admin-subtab-btn[data-subtab-target="${effectiveSub}"]`);
+        if (subBtn) {
+            subBtn.click();
+        }
+    }
+
+    if (effectiveMain === 'tabPanelOverview' || effectiveSub === 'subPanelOverviewSponsors') {
+        renderSponsorAnalytics();
+    }
+
+    const drawer = document.getElementById('adminMobileDrawer');
+    if (drawer && !drawer.classList.contains('hidden')) {
+        drawer.classList.add('hidden');
+    }
+
+    const mainEl = document.querySelector('main');
+    if (mainEl) mainEl.scrollTop = 0;
+}
+window.switchAdminTab = switchAdminTab;
+
+function initAdminTabNavigation() {
+    const tabButtons = document.querySelectorAll('.admin-nav-tab[data-tab-target]');
     const mobileMoreBtn = document.getElementById('btnAdminMobileMoreDrawer');
     const drawer = document.getElementById('adminMobileDrawer');
     const mobileMenuBtn = document.getElementById('btnAdminMobileMenu');
     const closeDrawerBtn = document.getElementById('btnCloseAdminMobileDrawer');
 
-    const coreBottomTabs = ['tabPanelVisitors', 'tabPanelMaster', 'tabPanelUsers', 'tabPanelPosts'];
+    const coreBottomTabs = ['tabPanelOverview', 'tabPanelUsers', 'tabPanelContent', 'tabPanelComms', 'tabPanelSystem'];
 
     function updateMobileMoreActive(targetId) {
         if (mobileMoreBtn) {
@@ -4380,29 +4445,42 @@ function initAdminTabNavigation() {
     tabButtons.forEach((btn) => {
         btn.addEventListener('click', () => {
             const targetId = btn.dataset.tabTarget;
-
-            panels.forEach((panel) => {
-                panel.classList.toggle('hidden', panel.id !== targetId);
-            });
-            // بنزامن كل نسخ الزرار (Sidebar + شريط سفلي + دروج) اللي بتشاور على نفس التاب
-            tabButtons.forEach((b) => b.classList.toggle('is-active', b.dataset.tabTarget === targetId));
-
-            // تحديث حالة زر "المزيد" بالموبايل
+            switchAdminTab(targetId);
             updateMobileMoreActive(targetId);
+        });
+    });
 
-            // إغلاق دروج الموبايل تلقائياً إن كان مفتوحاً
-            if (drawer && !drawer.classList.contains('hidden')) {
-                drawer.classList.add('hidden');
-            }
+    // التنقل بين التبويبات الداخلية (Sub-tabs)
+    const subTabButtons = document.querySelectorAll('.admin-subtab-btn[data-subtab-target]');
+    subTabButtons.forEach((sBtn) => {
+        sBtn.addEventListener('click', () => {
+            const subTargetId = sBtn.dataset.subtabTarget;
+            const parentPanel = sBtn.closest('.admin-tab-panel');
+            if (!parentPanel) return;
 
-            // تحديث تحليلات الرعاة فوراً عند فتح التاب
-            if (targetId === 'tabPanelSponsors') {
+            const subPanels = parentPanel.querySelectorAll('.admin-subpanel');
+            subPanels.forEach((sp) => {
+                sp.classList.toggle('hidden', sp.id !== subTargetId);
+            });
+
+            const siblingButtons = parentPanel.querySelectorAll('.admin-subtab-btn');
+            siblingButtons.forEach((b) => {
+                b.classList.toggle('is-active', b === sBtn);
+            });
+
+            if (subTargetId === 'subPanelOverviewSponsors' || subTargetId === 'tabPanelSponsors') {
                 renderSponsorAnalytics();
             }
+        });
+    });
 
-            // نرجّع منطقة المحتوى لأول سطر لما تفتح تاب جديد
-            const mainEl = document.querySelector('main');
-            if (mainEl) mainEl.scrollTop = 0;
+    // ربط أزرار الوصول السريع في الصفحة الرئيسية
+    const quickActionCards = document.querySelectorAll('[data-quick-tab]');
+    quickActionCards.forEach((card) => {
+        card.addEventListener('click', () => {
+            const targetTab = card.dataset.quickTab;
+            const targetSubTab = card.dataset.quickSubtab;
+            switchAdminTab(targetTab, targetSubTab);
         });
     });
 
