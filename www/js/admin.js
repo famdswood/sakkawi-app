@@ -1246,27 +1246,8 @@ function buildUserRowElement(user) {
                 </div>
 
                 <div class="flex items-center gap-1">
-                    <button type="button" class="user-quick-step-plus px-2 py-1.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-300 text-[10px] font-black transition active:scale-95" title="إضافة 1000 خطوة فورياً">
-                        +1000
-                    </button>
-                    <button type="button" class="user-quick-step-minus px-2 py-1.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 text-rose-300 text-[10px] font-black transition active:scale-95" title="خصم 1000 خطوة فورياً">
-                        -1000
-                    </button>
-
-                    <button type="button" class="user-quick-verif-btn p-1.5 rounded-xl border ${isVerifiedOverride ? 'bg-gold-500/20 border-gold-500/40 text-gold-400' : 'bg-lux-800/60 border-lux-700/60 text-lux-400'} transition active:scale-95" title="${isVerifiedOverride ? 'إلغاء التوثيق الفوري' : 'توثيق فوري'}">
-                        <svg viewBox="0 0 24 24" fill="${isVerifiedOverride ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2" class="w-3.5 h-3.5">
-                            <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
-                        </svg>
-                    </button>
-
-                    ${isSelfRow ? '' : `
-                        <button type="button" class="admin-block-btn user-quick-block-btn p-1.5 rounded-xl border ${isBlocked ? 'bg-rose-500/20 border-rose-500/40 text-rose-300' : 'bg-lux-800/60 border-lux-700/60 text-lux-400 hover:text-rose-400'} transition active:scale-95" title="${isBlocked ? 'فك التجميد' : 'تجميد الحساب'}">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-3.5 h-3.5"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
-                        </button>
-                    `}
-
-                    <button type="button" class="user-card-expand-btn p-1.5 sm:px-2 sm:py-1.5 rounded-xl bg-lux-800/80 hover:bg-lux-700 border border-lux-700 text-lux-200 text-xs font-bold transition flex items-center gap-1 active:scale-95" title="لوحة القيادة والتفاصيل">
-                        <span class="hidden sm:inline text-[10px]">لوحة القيادة</span>
+                    <button type="button" class="user-card-expand-btn px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-gold-500/20 to-amber-500/10 hover:from-gold-500/30 hover:to-amber-500/20 border border-gold-500/40 text-gold-400 font-bold text-xs flex items-center gap-1.5 transition active:scale-95 shadow-sm" title="لوحة القيادة والتحكم">
+                        <span>لوحة القيادة</span>
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="user-card-chevron w-3.5 h-3.5 transition-transform duration-200"><polyline points="6 9 12 15 18 9"></polyline></svg>
                     </button>
                 </div>
@@ -1276,6 +1257,30 @@ function buildUserRowElement(user) {
         <div class="user-card-status hidden mt-2 text-[10px] font-bold p-2 rounded-xl transition"></div>
 
         <div class="user-card-cockpit hidden mt-3 pt-3 border-t border-lux-800/80 space-y-3">
+            <div class="p-2.5 rounded-2xl bg-lux-950/60 border border-lux-800/60 flex items-center justify-between gap-2 flex-wrap">
+                <div class="flex items-center gap-1.5 flex-wrap">
+                    <button type="button" class="user-quick-step-plus px-3 py-1.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-300 text-xs font-black transition active:scale-95 flex items-center gap-1" title="إضافة 1000 خطوة فورياً">
+                        <span>+1000 خطوة</span>
+                    </button>
+                    <button type="button" class="user-quick-step-minus px-3 py-1.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 text-rose-300 text-xs font-black transition active:scale-95 flex items-center gap-1" title="خصم 1000 خطوة فورياً">
+                        <span>-1000 خطوة</span>
+                    </button>
+                    <button type="button" class="user-quick-verif-btn px-3 py-1.5 rounded-xl border ${isVerifiedOverride ? 'bg-gold-500/20 border-gold-500/40 text-gold-400 font-bold' : 'bg-lux-800/60 border-lux-700/60 text-lux-400 font-bold'} text-xs transition active:scale-95 flex items-center gap-1.5" title="تبديل التوثيق الفوري">
+                        <svg viewBox="0 0 24 24" fill="${isVerifiedOverride ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2" class="w-3.5 h-3.5">
+                            <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                        </svg>
+                        <span class="user-quick-verif-text">${isVerifiedOverride ? 'إلغاء التوثيق' : 'توثيق الحساب'}</span>
+                    </button>
+                </div>
+
+                ${isSelfRow ? '' : `
+                    <button type="button" class="admin-block-btn user-quick-block-btn px-3 py-1.5 rounded-xl border ${isBlocked ? 'bg-rose-500/20 border-rose-500/40 text-rose-300 font-bold' : 'bg-amber-500/15 border-amber-500/30 text-amber-300 hover:text-amber-200 font-bold'} text-xs transition active:scale-95 flex items-center gap-1.5" title="تجميد أو فك تجميد الحساب">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-3.5 h-3.5"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
+                        <span>${isBlocked ? 'فك التجميد' : 'حظر / تجميد'}</span>
+                    </button>
+                `}
+            </div>
+
             <div class="p-2.5 rounded-2xl bg-lux-950/60 border border-lux-800/60 space-y-2">
                 <div class="flex items-center justify-between">
                     <span class="text-[11px] font-bold text-lux-200 flex items-center gap-1.5">
@@ -1357,6 +1362,10 @@ function buildUserRowElement(user) {
         verifBtn.addEventListener('click', async (e) => {
             e.stopPropagation();
             await handleQuickVerifToggle(user, li, verifBtn);
+            const verifTextEl = verifBtn.querySelector('.user-quick-verif-text');
+            if (verifTextEl) {
+                verifTextEl.textContent = user.is_verified_override ? 'إلغاء التوثيق' : 'توثيق الحساب';
+            }
         });
     }
 
@@ -1423,8 +1432,7 @@ function buildUserRowElement(user) {
 
 /**
  * بتتعامل مع الضغط على زرار "حظر" / "إلغاء الحظر" في صف مستخدم -
- * إذا كان محظوراً/مجمداً تطلب تأكيد فك الحظر، وإذا كان نشطاً تفتح نافذة التحكم
- * لإتاحة اختيار مدة التجميد المؤقت أو الحظر الدائم بدقة
+ * إذا كان محظوراً/مجمداً تطلب تأكيد فك الحظر، وإذا كان نشطاً تتيح التجميد الفوري المباشر مع تحديد المدة
  * @param {HTMLButtonElement} blockBtn
  * @param {object} user
  * @param {string} displayName
@@ -1454,7 +1462,30 @@ async function handleBlockButtonClick(blockBtn, user, displayName) {
         user.blocked_until = null;
         renderFilteredUserList();
     } else {
-        openUserActionModal(user);
+        const reason = window.prompt(`تجميد / حظر حساب (${displayName}) - يرجى كتابة السبب:`, 'تجميد إداري');
+        if (reason === null) return;
+        const hoursStr = window.prompt(`مدة التجميد بالساعات (مثال: 24 ليوم، 72 لـ 3 أيام، أو اتركه فارغاً للحظر الدائم):`, '24');
+        if (hoursStr === null) return;
+        const durationHours = hoursStr.trim() ? parseInt(hoursStr.trim(), 10) : null;
+
+        blockBtn.disabled = true;
+        blockBtn.classList.add('is-saving');
+
+        const res = await toggleUserBlock(user.id, true, reason.trim() || 'تجميد إداري', durationHours);
+
+        blockBtn.disabled = false;
+        blockBtn.classList.remove('is-saving');
+
+        if (!res) {
+            const statusEl = document.getElementById('userSearchStatus');
+            setStatusText(statusEl, `تعذّر تطبيق الحظر على ${displayName}. حاول تاني.`, 'error');
+            return;
+        }
+
+        user.is_blocked = true;
+        user.blocked_reason = reason.trim() || 'تجميد إداري';
+        user.blocked_until = durationHours ? new Date(Date.now() + durationHours * 3600000).toISOString() : null;
+        renderFilteredUserList();
     }
 }
 

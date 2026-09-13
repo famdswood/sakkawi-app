@@ -89,23 +89,23 @@
 
     <style>
         :root {
-            --canvas-bg: #E8EEF5;
-            --canvas-overlay: radial-gradient(circle at 12% 12%, rgba(212, 175, 55, 0.2) 0%, transparent 45%),
-                               radial-gradient(circle at 88% 88%, rgba(56, 189, 248, 0.18) 0%, transparent 45%),
-                               #E8EEF5;
-            --glass-card-bg: rgba(255, 255, 255, 0.72);
-            --glass-dock-bg: rgba(255, 255, 255, 0.82);
-            --glass-border: rgba(255, 255, 255, 0.92);
-            --glass-border-subtle: rgba(203, 213, 225, 0.7);
-            --glass-shadow: 0 16px 40px -8px rgba(15, 23, 42, 0.09), 0 4px 14px -2px rgba(15, 23, 42, 0.04);
-            --glass-inset: inset 0 1px 1px 0 rgba(255, 255, 255, 0.95);
+            --canvas-bg: #EDF2F7;
+            --canvas-overlay: radial-gradient(circle at 10% 10%, rgba(212, 175, 55, 0.22) 0%, transparent 45%),
+                               radial-gradient(circle at 90% 90%, rgba(14, 165, 233, 0.2) 0%, transparent 45%),
+                               #EDF2F7;
+            --glass-card-bg: rgba(255, 255, 255, 0.9);
+            --glass-dock-bg: rgba(255, 255, 255, 0.94);
+            --glass-border: rgba(203, 213, 225, 0.85);
+            --glass-border-subtle: rgba(226, 232, 240, 0.8);
+            --glass-shadow: 0 12px 32px -6px rgba(15, 23, 42, 0.09), 0 4px 12px -2px rgba(15, 23, 42, 0.04);
+            --glass-inset: inset 0 1px 1px 0 rgba(255, 255, 255, 1);
 
             --lux-50-rgb:  15 23 42;
-            --lux-100-rgb: 30 41 59;
-            --lux-200-rgb: 51 65 85;
-            --lux-300-rgb: 71 85 105;
-            --lux-400-rgb: 100 116 139;
-            --lux-500-rgb: 148 163 184;
+            --lux-100-rgb: 15 23 42;
+            --lux-200-rgb: 30 41 59;
+            --lux-300-rgb: 51 65 85;
+            --lux-400-rgb: 71 85 105;
+            --lux-500-rgb: 100 116 139;
             --lux-600-rgb: 203 213 225;
             --lux-700-rgb: 226 232 240;
             --lux-800-rgb: 241 245 249;
@@ -144,6 +144,99 @@
             background-attachment: fixed;
             transition: background-color 0.3s ease, color 0.3s ease;
             -webkit-tap-highlight-color: transparent;
+        }
+
+        /* تحسينات فائقة التباين والبهجة للوضع المبهج (High-Contrast Vivid Light Mode) */
+        html:not(.dark) body {
+            color: #0F172A;
+        }
+        html:not(.dark) .text-lux-50,
+        html:not(.dark) .text-lux-100 {
+            color: #0F172A !important;
+        }
+        html:not(.dark) .text-lux-200 {
+            color: #1E293B !important;
+        }
+        html:not(.dark) .text-lux-300 {
+            color: #334155 !important;
+        }
+        html:not(.dark) .text-lux-400 {
+            color: #475569 !important;
+        }
+        html:not(.dark) .text-lux-500 {
+            color: #64748B !important;
+        }
+        html:not(.dark) .text-amber-400,
+        html:not(.dark) .text-gold-400 {
+            color: #B45309 !important;
+            font-weight: 800;
+        }
+        html:not(.dark) .text-emerald-400,
+        html:not(.dark) .text-emerald-300 {
+            color: #047857 !important;
+            font-weight: 800;
+        }
+        html:not(.dark) .text-blue-400,
+        html:not(.dark) .text-cyan-400 {
+            color: #0369A1 !important;
+            font-weight: 800;
+        }
+        html:not(.dark) .text-rose-400,
+        html:not(.dark) .text-rose-300 {
+            color: #BE123C !important;
+            font-weight: 800;
+        }
+        html:not(.dark) .text-purple-400 {
+            color: #6D28D9 !important;
+            font-weight: 800;
+        }
+        html:not(.dark) input,
+        html:not(.dark) textarea,
+        html:not(.dark) select,
+        html:not(.dark) .admin-search-box,
+        html:not(.dark) .admin-text-input,
+        html:not(.dark) .admin-notify-textarea {
+            background-color: #FFFFFF !important;
+            border-color: #CBD5E1 !important;
+            color: #0F172A !important;
+        }
+        html:not(.dark) input::placeholder,
+        html:not(.dark) textarea::placeholder {
+            color: #94A3B8 !important;
+        }
+        html:not(.dark) .bg-lux-950,
+        html:not(.dark) .bg-lux-950/60,
+        html:not(.dark) .bg-lux-950/80,
+        html:not(.dark) .bg-lux-950/40 {
+            background-color: #F8FAFC !important;
+            border-color: #E2E8F0 !important;
+        }
+        html:not(.dark) .bg-lux-900 {
+            background-color: #FFFFFF !important;
+            border-color: #E2E8F0 !important;
+        }
+        html:not(.dark) .bg-lux-800,
+        html:not(.dark) .bg-lux-800/80,
+        html:not(.dark) .bg-lux-800/60,
+        html:not(.dark) .bg-lux-800/40 {
+            background-color: #F1F5F9 !important;
+            border-color: #CBD5E1 !important;
+            color: #1E293B !important;
+        }
+        html:not(.dark) .admin-location-pill.is-inside {
+            background: #DCFCE7 !important;
+            color: #15803D !important;
+            border: 1px solid #86EFAC !important;
+        }
+        html:not(.dark) .admin-location-pill.is-outside {
+            background: #FEF3C7 !important;
+            color: #B45309 !important;
+            border: 1px solid #FDE68A !important;
+        }
+        html:not(.dark) .admin-location-pill.is-unknown {
+            background: #F1F5F9 !important;
+            color: #475569 !important;
+            border: 1px solid #CBD5E1 !important;
         }
 
         /* أنيميشن الأجرام المحيطية العائمة بالخلفية */
@@ -762,7 +855,7 @@
                 <div class="flex items-center gap-1.5 sm:gap-2">
                     <div class="p-1 rounded-xl bg-lux-950/60 border border-lux-800/80 flex items-center gap-1">
                         <button type="button" class="theme-btn-light p-1.5 sm:px-2.5 sm:py-1 rounded-lg text-xs font-bold transition flex items-center gap-1 text-lux-400 hover:text-amber-500" onclick="setAdminTheme('light')">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-3.5 h-3.5"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line></svg>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-3.5 h-3.5"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
                             <span class="hidden sm:inline text-[11px]">مبهج</span>
                         </button>
                         <button type="button" class="theme-btn-dark p-1.5 sm:px-2.5 sm:py-1 rounded-lg text-xs font-bold transition flex items-center gap-1 text-lux-400 hover:text-blue-400" onclick="setAdminTheme('dark')">
@@ -1357,9 +1450,7 @@
                         <button type="button" class="admin-sort-chip is-active" data-sort-mode="active">
                              الأونلاين أولاً
                         </button>
-                        <button type="button" class="admin-sort-chip" data-sort-mode="recent">
-                            الأحدث نشاطاً
-                        </button>
+                        
                         <button type="button" class="admin-sort-chip" data-sort-mode="newest">
                             الحسابات الجديدة
                         </button>
@@ -1468,7 +1559,18 @@
                             </button>
                         </div>
 
+                        <!-- القصص والمنشورات مع شريط المراقبة الحية -->
                         <div id="subPanelContentPosts" class="admin-subpanel space-y-4">
+                            <div class="glass-card p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border border-purple-500/30">
+                                <div>
+                                    <div class="flex items-center gap-2">
+                                        <span class="w-2 h-2 rounded-full bg-purple-400"></span>
+                                        <h3 class="text-xs sm:text-sm font-black text-lux-50">رادار منشورات واستوريز القرية</h3>
+                                    </div>
+                                    <p class="text-[10px] sm:text-[11px] text-lux-400 mt-0.5">فحص وإشراف فوري على القصص ومشاركات الأهالي لحماية بيئة التطبيق</p>
+                                </div>
+                                <span class="px-2.5 py-1 rounded-full text-[10px] font-bold bg-purple-500/15 text-purple-400 border border-purple-500/30 self-start sm:self-auto">مراقبة مباشرة</span>
+                            </div>
                             <div id="tabPanelPosts" class="space-y-4">
                                 
                 <!-- أزرار التبديل بين المنشورات والقصص -->
@@ -1664,7 +1766,18 @@
                             </div>
                         </div>
 
+                        <!-- الأسئلة اليومية وبنك التحديات -->
                         <div id="subPanelContentQuestions" class="admin-subpanel hidden space-y-4">
+                            <div class="glass-card p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border border-gold-500/30">
+                                <div>
+                                    <div class="flex items-center gap-2">
+                                        <span class="w-2 h-2 rounded-full bg-gold-400"></span>
+                                        <h3 class="text-xs sm:text-sm font-black text-lux-50">أجندة الأسئلة والتحديات اليومية</h3>
+                                    </div>
+                                    <p class="text-[10px] sm:text-[11px] text-lux-400 mt-0.5">السيستم يختار سؤالين يومياً للمنافسة، مع إمكانية جدولة أسئلة لتواريخ قادمة</p>
+                                </div>
+                                <span class="px-2.5 py-1 rounded-full text-[10px] font-bold bg-gold-500/15 text-gold-400 border border-gold-500/30 self-start sm:self-auto">جدولة ذكية</span>
+                            </div>
                             <div id="tabPanelQuestions" class="space-y-4">
                                 
                 <section id="questionFormWidget"
@@ -1935,7 +2048,18 @@
                             </div>
                         </div>
 
+                        <!-- البانر الترويجي -->
                         <div id="subPanelContentBanner" class="admin-subpanel hidden space-y-4">
+                            <div class="glass-card p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border border-sky-500/30">
+                                <div>
+                                    <div class="flex items-center gap-2">
+                                        <span class="w-2 h-2 rounded-full bg-sky-400"></span>
+                                        <h3 class="text-xs sm:text-sm font-black text-lux-50">استوديو البانر الترويجي للتطبيق</h3>
+                                    </div>
+                                    <p class="text-[10px] sm:text-[11px] text-lux-400 mt-0.5">تحديث واجهة سِكّاوي وإعلانات الفعاليات والمسابقات بنزلة عبيد</p>
+                                </div>
+                                <span class="px-2.5 py-1 rounded-full text-[10px] font-bold bg-sky-500/15 text-sky-400 border border-sky-500/30 self-start sm:self-auto">الواجهة الرئيسية</span>
+                            </div>
                             <div id="tabPanelBanner" class="space-y-4">
                                 
                 <section id="bannerWidget"
@@ -2194,6 +2318,16 @@
                         </div>
 
                         <div id="subPanelCommsSupport" class="admin-subpanel hidden space-y-4">
+                            <div class="glass-card p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border border-rose-500/30">
+                                <div>
+                                    <div class="flex items-center gap-2">
+                                        <span class="w-2 h-2 rounded-full bg-rose-400"></span>
+                                        <h3 class="text-xs sm:text-sm font-black text-lux-50">صندوق شكاوى ومقترحات المشتركين</h3>
+                                    </div>
+                                    <p class="text-[10px] sm:text-[11px] text-lux-400 mt-0.5">متابعة رسائل الدعم الفني وتذاكر مساعدة أهالي القرية</p>
+                                </div>
+                                <span class="px-2.5 py-1 rounded-full text-[10px] font-bold bg-rose-500/15 text-rose-400 border border-rose-500/30 self-start sm:self-auto">خدمة الأهالي</span>
+                            </div>
                             <div id="tabPanelSupport" class="space-y-4">
                                 
                 <section id="supportInboxWidget"
@@ -2249,6 +2383,16 @@
                         </div>
 
                         <div id="subPanelSystemMaster" class="admin-subpanel space-y-5">
+                            <div class="glass-card p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border border-amber-500/30">
+                                <div>
+                                    <div class="flex items-center gap-2">
+                                        <span class="w-2 h-2 rounded-full bg-amber-400"></span>
+                                        <h3 class="text-xs sm:text-sm font-black text-lux-50">لوحة المفاتيح الرئيسية للنظام</h3>
+                                    </div>
+                                    <p class="text-[10px] sm:text-[11px] text-lux-400 mt-0.5">التحكم في وضع الصيانة، إجبار التحديث، ومضاعف النقاط وتصفير المواسم</p>
+                                </div>
+                                <span class="px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-400 border border-amber-500/30 self-start sm:self-auto">إدارة مركزية</span>
+                            </div>
                             <div id="tabPanelMaster" class="space-y-5">
                                 
                 <!-- 1. وضع الصيانة وقفل التطبيق -->
@@ -2561,6 +2705,16 @@
                         </div>
 
                         <div id="subPanelSystemGeofence" class="admin-subpanel hidden space-y-4">
+                            <div class="glass-card p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border border-cyan-500/30">
+                                <div>
+                                    <div class="flex items-center gap-2">
+                                        <span class="w-2 h-2 rounded-full bg-cyan-400"></span>
+                                        <h3 class="text-xs sm:text-sm font-black text-lux-50">رادار النطاق الجغرافي لنزلة عبيد</h3>
+                                    </div>
+                                    <p class="text-[10px] sm:text-[11px] text-lux-400 mt-0.5">ضبط نصف قطر الدائرة الجغرافية حول مركز القرية لحساب الخطوات</p>
+                                </div>
+                                <span class="px-2.5 py-1 rounded-full text-[10px] font-bold bg-cyan-500/15 text-cyan-400 border border-cyan-500/30 self-start sm:self-auto">سياج جغرافي</span>
+                            </div>
                             <div id="tabPanelGeofence" class="space-y-4">
                                 
                 <!-- الكارت الوحيد اللي معاه خط ذهبي رفيع علوي (border-t-2
@@ -3218,7 +3372,7 @@
 
             lightBtns.forEach(btn => {
                 if (theme === 'light') {
-                    btn.className = 'theme-btn-light p-1.5 sm:px-2.5 sm:py-1 rounded-xl text-xs font-black transition flex items-center justify-center gap-1 bg-white text-amber-600 shadow-sm border border-amber-200';
+                    btn.className = 'theme-btn-light p-1.5 sm:px-2.5 sm:py-1 rounded-xl text-xs font-black transition flex items-center justify-center gap-1 bg-white text-amber-700 shadow border border-amber-300';
                 } else {
                     btn.className = 'theme-btn-light p-1.5 sm:px-2.5 sm:py-1 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1 text-lux-400 hover:text-amber-500';
                 }
