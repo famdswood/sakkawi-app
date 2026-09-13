@@ -986,14 +986,179 @@ function renderUserSearchResults(users) {
 }
 
 /**
- * تبني عنصر <li> واحد يمثل مستخدم في القائمة، بما فيه حالة الأونلاين،
- * تاريخ الانضمام، والـ Toggle Switch الخاص بـ is_verified_override
+ * عرض رسالة تنبيه سريعة داخل بطاقة المستخدم HUD
+ * @param {HTMLElement} li
+ * @param {string} msg
+ * @param {'success'|'error'} type
+ */
+function showUserCardStatus(li, msg, type) {
+    const statusEl = li.querySelector('.user-card-status');
+    if (!statusEl) return;
+    statusEl.textContent = msg;
+    statusEl.className = `user-card-status mt-2 text-[10px] font-bold p-2 rounded-xl transition ${
+        type === 'success'
+            ? 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-300'
+            : 'bg-rose-500/15 border border-rose-500/30 text-rose-300'
+    }`;
+    statusEl.classList.remove('hidden');
+    clearTimeout(statusEl._timeoutId);
+    statusEl._timeoutId = setTimeout(() => {
+        statusEl.classList.add('hidden');
+    }, 4500);
+}
+
+/**
+ * تعديل خطوات المستخدم بشكل فوري ومباشر من البطاقة دون نوافذ منبثقة
+ * @param {object} user
+ * @param {number} delta
+ * @param {HTMLElement} li
+ * @param {HTMLElement} btn
+ * @param {string|null} customReason
+ */
+async function handleQuickStepAdjust(user, delta, li, btn, customReason = null) {
+    if (btn) btn.disabled = true;
+    const reason = customReason || (delta > 0 ? 'مكافأة خطوات سريعة من لوحة التحكم' : 'خصم خطوات من لوحة التحكم');
+
+    try {
+        const { data, error } = await supabaseClient.rpc('admin_adjust_user_steps', {
+            p_user_id: user.id,
+            p_mode: 'delta',
+            p_steps_value: delta,
+            p_reason: reason,
+            p_adjust_points: true,
+        });
+
+        if (error) {
+            console.error('[admin.js] فشل التعديل السريع للخطوات:', error);
+            showUserCardStatus(li, error.message || 'تعذر تعديل الخطوات.', 'error');
+            return;
+        }
+
+        const newDaily = data?.new_daily_steps ?? ((user.daily_steps || 0) + delta);
+        const newPoints = data?.new_total_points ?? user.points;
+        user.daily_steps = newDaily;
+        user.points = newPoints;
+        if (data?.new_weekly_steps !== undefined) user.weekly_steps = data.new_weekly_steps;
+        if (data?.new_monthly_steps !== undefined) user.monthly_steps = data.new_monthly_steps;
+        if (data?.new_total_steps !== undefined) user.total_steps = data.new_total_steps;
+
+        if (Array.isArray(allUsersList)) {
+            const u = allUsersList.find((x) => x.id === user.id);
+            if (u) {
+                u.daily_steps = newDaily;
+                u.points = newPoints;
+            }
+        }
+
+        const stepsEl = li.querySelector('.user-card-steps');
+        if (stepsEl) {
+            stepsEl.textContent = Number(newDaily).toLocaleString('ar-EG');
+            stepsEl.classList.add('text-emerald-300', 'scale-110');
+            setTimeout(() => stepsEl.classList.remove('text-emerald-300', 'scale-110'), 800);
+        }
+        const pointsEl = li.querySelector('.user-card-points');
+        if (pointsEl) {
+            pointsEl.textContent = Number(newPoints).toLocaleString('ar-EG');
+        }
+
+        showUserCardStatus(li, `تم ${delta > 0 ? 'إضافة' : 'خصم'} ${Math.abs(delta).toLocaleString('ar-EG')} خطوة بنجاح. رصيد اليوم: ${Number(newDaily).toLocaleString('ar-EG')}`, 'success');
+    } catch (err) {
+        console.error('[admin.js] خطأ غير متوقع:', err);
+        showUserCardStatus(li, 'حدث خطأ أثناء تنفيذ التعديل.', 'error');
+    } finally {
+        if (btn) btn.disabled = false;
+    }
+}
+
+/**
+ * تعيين قيمة ثابتة لخطوات المستخدم فورياً (مثل التصفير)
+ * @param {object} user
+ * @param {number} value
+ * @param {HTMLElement} li
+ * @param {HTMLElement} btn
+ * @param {string} reason
+ */
+async function handleQuickStepSet(user, value, li, btn, reason) {
+    if (btn) btn.disabled = true;
+    try {
+        const { data, error } = await supabaseClient.rpc('admin_adjust_user_steps', {
+            p_user_id: user.id,
+            p_mode: 'set',
+            p_steps_value: value,
+            p_reason: reason,
+            p_adjust_points: true,
+        });
+
+        if (error) {
+            console.error('[admin.js] فشل تعيين الخطوات:', error);
+            showUserCardStatus(li, error.message || 'تعذر تعيين الخطوات.', 'error');
+            return;
+        }
+
+        user.daily_steps = value;
+        if (data?.new_total_points !== undefined) user.points = data.new_total_points;
+
+        const stepsEl = li.querySelector('.user-card-steps');
+        if (stepsEl) stepsEl.textContent = Number(value).toLocaleString('ar-EG');
+        const pointsEl = li.querySelector('.user-card-points');
+        if (pointsEl && data?.new_total_points !== undefined) pointsEl.textContent = Number(data.new_total_points).toLocaleString('ar-EG');
+
+        showUserCardStatus(li, `تم تصفير خطوات اليوم ومزامنة الحساس بنجاح.`, 'success');
+    } catch (err) {
+        showUserCardStatus(li, 'تعذر تصفير الخطوات.', 'error');
+    } finally {
+        if (btn) btn.disabled = false;
+    }
+}
+
+/**
+ * تبديل توثيق المستخدم فورياً من البطاقة
+ * @param {object} user
+ * @param {HTMLElement} li
+ * @param {HTMLElement} btn
+ */
+async function handleQuickVerifToggle(user, li, btn) {
+    if (btn) btn.disabled = true;
+    const nextVal = !Boolean(user.is_verified_override);
+    const ok = await toggleUserVerifiedOverride(user.id, nextVal);
+    if (btn) btn.disabled = false;
+
+    if (!ok) {
+        showUserCardStatus(li, 'تعذر تحديث حالة التوثيق.', 'error');
+        return;
+    }
+
+    user.is_verified_override = nextVal;
+    if (Array.isArray(allUsersList)) {
+        const u = allUsersList.find((x) => x.id === user.id);
+        if (u) u.is_verified_override = nextVal;
+    }
+
+    const isNowVerified = isUserVerificationActive(user);
+    const badgeEl = li.querySelector('.user-card-verif-badge');
+    if (badgeEl) {
+        badgeEl.innerHTML = isNowVerified ? buildVerifiedBadgeHtml(true) : '';
+    }
+
+    if (nextVal) {
+        btn.className = 'user-quick-verif-btn p-1.5 rounded-xl border bg-gold-500/20 border-gold-500/40 text-gold-400 transition active:scale-95';
+        btn.querySelector('svg')?.setAttribute('fill', 'currentColor');
+    } else {
+        btn.className = 'user-quick-verif-btn p-1.5 rounded-xl border bg-lux-800/60 border-lux-700/60 text-lux-400 transition active:scale-95';
+        btn.querySelector('svg')?.setAttribute('fill', 'none');
+    }
+
+    showUserCardStatus(li, nextVal ? 'تم توثيق الحساب بنجاح وإضافة الشارة الذهبية.' : 'تم إلغاء التوثيق اليدوي للحساب.', 'success');
+}
+
+/**
+ * تبني بطاقة HUD تفاعلية هولوجرافية تمثل مستخدم في القائمة مع أزرار تحكم مباشرة
  * @param {object} user
  * @returns {HTMLLIElement}
  */
 function buildUserRowElement(user) {
     const li = document.createElement('li');
-    li.className = 'admin-user-row';
+    li.className = 'admin-user-row admin-user-hud-card glass-card p-3.5 sm:p-4 mb-3 transition-all duration-200';
     li.dataset.userId = user.id;
 
     const avatarUrl = user.avatar_url || buildFallbackAvatarUrl(user.username || user.full_name || '?');
@@ -1001,37 +1166,22 @@ function buildUserRowElement(user) {
     const usernameText = user.username ? `@${escapeHtml(user.username)}` : '';
     const isInside = Boolean(user.is_inside_bounds);
     const isVerifiedOverride = Boolean(user.is_verified_override);
-    const toggleId = `userVerifiedToggle_${user.id}`;
 
-    // (المرحلة 2) حالة الحظر - is_blocked/blocked_reason بييجوا تلقائياً
-    // من نفس select('*') الموجود في loadAllUsers، زي أي عمود تاني على
-    // profiles، فمفيش استعلام إضافي مطلوب هنا
     const isBlocked = Boolean(user.is_blocked);
     li.classList.toggle('is-blocked', isBlocked);
     const blockedReasonText = user.blocked_reason ? escapeHtml(user.blocked_reason) : '';
 
-    // نص الظهور (أونلاين الآن / آخر ظهور من كذا) - شوف formatPresenceText
-    // فوق. الأعمدة last_seen_at وis_online بترجع تلقائياً بما إنهم
-    // أعمدة عادية على profiles وبنجيب الصف بالكامل (select *)
     const presenceText = escapeHtml(formatPresenceText(user));
     const presenceIsOnline = isUserOnline(user);
 
-    // تاريخ الانضمام (من عمود created_at الجديد - شوف
-    // sql/phase-1b-full-user-list.sql) - بيفيد تحديد "الحساب ده جديد
-    // فعلاً" حتى لو القائمة اتفلترت أو الترتيب مش واضح بصرياً
     const joinedText = user.created_at
         ? `انضم ${formatRelativeArabicTime(user.created_at)}`
         : '';
 
-    // زرار الحظر بيتخفي من على صف الأدمن نفسه (خط دفاع بصري إضافي -
-    // الـ RPC نفسها برضو بترفض حظر الأدمن لنفسه، شوف admin_toggle_user_block)
     const isSelfRow = user.id === currentAdminUserId;
-
-    // التحقق من حالة التوثيق الحالية
     const isVerified = isUserVerificationActive(user);
     const verifiedBadgeHtml = isVerified ? buildVerifiedBadgeHtml(true) : '';
 
-    // بيانات الموقع الجغرافي والبعد عن مركز نزلة عبيد
     const lat = user.signup_lat ?? user.last_lat ?? null;
     const lng = user.signup_lng ?? user.last_lng ?? null;
     let distanceMeters = user.signup_distance_meters ?? null;
@@ -1055,43 +1205,208 @@ function buildUserRowElement(user) {
         locationBadgeHtml = `<span class="admin-location-pill is-unknown">الموقع: قيد الرصد</span>`;
     }
 
+    const stepsVal = Number(user.daily_steps || 0);
+    const pointsVal = Number(user.points || 0);
+
     li.innerHTML = `
-        <span class="relative inline-block shrink-0">
-            <img class="admin-user-avatar" src="${avatarUrl}" alt="" loading="lazy">
-            <!-- نقطة "أونلاين الآن" فوق صورة المستخدم - الأدمن أصلاً عنده
-                 is_online/last_seen_at لأي مستخدم من غير أي قيد (شوف
-                 isUserOnline فوق)، فمفيش حاجة لأي RPC هنا زي presence.js
-                 المستخدمة في باقي التطبيق - البيانات موجودة فعلاً في user -->
-            <span class="presence-dot${presenceIsOnline ? ' is-online' : ''}" aria-hidden="true"></span>
-        </span>
-        <div class="admin-user-info">
-            <div class="admin-user-name flex items-center">${displayName}${verifiedBadgeHtml}</div>
-            <div class="admin-user-username">${usernameText}</div>
-            <div class="text-[0.65rem] font-mono font-bold ${presenceIsOnline ? 'text-emerald-400' : 'text-lux-500'} mt-0.5">
-                ${presenceIsOnline ? '● ' : ''}${presenceText}
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div class="flex items-center gap-3 min-w-0">
+                <span class="relative inline-block shrink-0">
+                    <img class="w-12 h-12 rounded-2xl object-cover border border-lux-700/80 shadow-md" src="${avatarUrl}" alt="" loading="lazy">
+                    <span class="presence-dot${presenceIsOnline ? ' is-online' : ''}" aria-hidden="true"></span>
+                </span>
+                <div class="min-w-0 flex-1">
+                    <div class="flex items-center gap-1.5 flex-wrap">
+                        <span class="font-black text-xs sm:text-sm text-lux-50 truncate">${displayName}</span>
+                        <span class="user-card-verif-badge">${verifiedBadgeHtml}</span>
+                        ${usernameText ? `<span class="text-[11px] font-mono text-lux-400 truncate">${usernameText}</span>` : ''}
+                    </div>
+                    <div class="flex items-center gap-2 flex-wrap mt-0.5">
+                        <span class="text-[10px] font-bold ${presenceIsOnline ? 'text-emerald-400' : 'text-lux-400'} flex items-center gap-1">
+                            <span class="w-1.5 h-1.5 rounded-full ${presenceIsOnline ? 'bg-emerald-400 admin-radar-pulse' : 'bg-lux-500'}"></span>
+                            <span>${presenceText}</span>
+                        </span>
+                        ${locationBadgeHtml}
+                        ${joinedText ? `<span class="text-[9px] font-medium text-lux-500">${escapeHtml(joinedText)}</span>` : ''}
+                    </div>
+                    ${isBlocked ? (user.blocked_until && new Date(user.blocked_until).getTime() > Date.now() ? `<div class="text-[10px] font-bold text-amber-400 mt-1">مجمّد مؤقتاً حتى ${new Date(user.blocked_until).toLocaleDateString('ar-EG', { month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric' })}${blockedReasonText ? `: ${blockedReasonText}` : ''}</div>` : `<div class="text-[10px] font-bold text-rose-400 mt-1">محظور${blockedReasonText ? `: ${blockedReasonText}` : ''}</div>`) : ''}
+                </div>
             </div>
-            <div class="flex items-center gap-1.5 flex-wrap mt-1">
-                ${locationBadgeHtml}
-                ${hasLocation ? `
-                    <a href="https://www.google.com/maps?q=${lat},${lng}" target="_blank" rel="noopener noreferrer" class="text-[0.6rem] font-bold text-emerald-400 hover:text-emerald-300 underline inline-flex items-center gap-0.5" title="معاينة الموقع على خرائط Google">
-                        خرائط Google
-                    </a>
-                ` : ''}
+
+            <div class="flex items-center justify-between sm:justify-end gap-2 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-lux-800/60">
+                <div class="flex items-center gap-1.5">
+                    <div class="px-2.5 py-1 rounded-xl bg-lux-950/60 border border-lux-800/80 text-center">
+                        <span class="block text-[9px] font-bold text-lux-400">خطوات اليوم</span>
+                        <span class="user-card-steps font-mono text-xs sm:text-sm font-black text-amber-400">${stepsVal.toLocaleString('ar-EG')}</span>
+                    </div>
+                    <div class="px-2.5 py-1 rounded-xl bg-lux-950/60 border border-lux-800/80 text-center">
+                        <span class="block text-[9px] font-bold text-lux-400">النقاط</span>
+                        <span class="user-card-points font-mono text-xs sm:text-sm font-black text-gold-400">${pointsVal.toLocaleString('ar-EG')}</span>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-1">
+                    <button type="button" class="user-quick-step-plus px-2 py-1.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-300 text-[10px] font-black transition active:scale-95" title="إضافة 1000 خطوة فورياً">
+                        +1000
+                    </button>
+                    <button type="button" class="user-quick-step-minus px-2 py-1.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 text-rose-300 text-[10px] font-black transition active:scale-95" title="خصم 1000 خطوة فورياً">
+                        -1000
+                    </button>
+
+                    <button type="button" class="user-quick-verif-btn p-1.5 rounded-xl border ${isVerifiedOverride ? 'bg-gold-500/20 border-gold-500/40 text-gold-400' : 'bg-lux-800/60 border-lux-700/60 text-lux-400'} transition active:scale-95" title="${isVerifiedOverride ? 'إلغاء التوثيق الفوري' : 'توثيق فوري'}">
+                        <svg viewBox="0 0 24 24" fill="${isVerifiedOverride ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2" class="w-3.5 h-3.5">
+                            <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                        </svg>
+                    </button>
+
+                    ${isSelfRow ? '' : `
+                        <button type="button" class="admin-block-btn user-quick-block-btn p-1.5 rounded-xl border ${isBlocked ? 'bg-rose-500/20 border-rose-500/40 text-rose-300' : 'bg-lux-800/60 border-lux-700/60 text-lux-400 hover:text-rose-400'} transition active:scale-95" title="${isBlocked ? 'فك التجميد' : 'تجميد الحساب'}">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-3.5 h-3.5"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
+                        </button>
+                    `}
+
+                    <button type="button" class="user-card-expand-btn p-1.5 sm:px-2 sm:py-1.5 rounded-xl bg-lux-800/80 hover:bg-lux-700 border border-lux-700 text-lux-200 text-xs font-bold transition flex items-center gap-1 active:scale-95" title="لوحة القيادة والتفاصيل">
+                        <span class="hidden sm:inline text-[10px]">لوحة القيادة</span>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="user-card-chevron w-3.5 h-3.5 transition-transform duration-200"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                    </button>
+                </div>
             </div>
-            ${joinedText ? `<div class="text-[0.6rem] font-mono font-medium text-lux-600 mt-0.5">${escapeHtml(joinedText)}</div>` : ''}
-            ${isBlocked ? (user.blocked_until && new Date(user.blocked_until).getTime() > Date.now() ? `<div class="admin-user-blocked-reason" style="color: #fbbf24; border-color: rgba(251, 191, 36, 0.3); background: rgba(251, 191, 36, 0.08);">مجمّد مؤقتاً حتى ${new Date(user.blocked_until).toLocaleDateString('ar-EG', { month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric' })}${blockedReasonText ? `: ${blockedReasonText}` : ''}</div>` : `<div class="admin-user-blocked-reason">محظور${blockedReasonText ? `: ${blockedReasonText}` : ''}</div>`) : ''}
         </div>
-        <div class="admin-user-actions flex items-center gap-2">
-            ${isSelfRow ? '' : `
-                <button type="button" class="admin-block-btn ${isBlocked ? 'is-blocked' : ''}">
-                    ${isBlocked ? 'فك التجميد/الحظر' : 'حظر / تجميد'}
-                </button>
-            `}
-            <button type="button" class="admin-user-manage-btn admin-notify-clear-btn" title="تحكم ومكافحة غش وتعويضات">
-                تحكم
-            </button>
+
+        <div class="user-card-status hidden mt-2 text-[10px] font-bold p-2 rounded-xl transition"></div>
+
+        <div class="user-card-cockpit hidden mt-3 pt-3 border-t border-lux-800/80 space-y-3">
+            <div class="p-2.5 rounded-2xl bg-lux-950/60 border border-lux-800/60 space-y-2">
+                <div class="flex items-center justify-between">
+                    <span class="text-[11px] font-bold text-lux-200 flex items-center gap-1.5">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-3.5 h-3.5 text-amber-400"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
+                        <span>إرسال تنبيه مباشر لهذا المستخدم</span>
+                    </span>
+                    <span class="text-[9px] text-lux-500">يصل فوراً لهاتفه</span>
+                </div>
+                <div class="flex gap-1.5">
+                    <input type="text" class="user-cockpit-notif-input flex-1 bg-lux-900 border border-lux-700/80 rounded-xl px-3 py-1.5 text-xs text-lux-100 placeholder-lux-500 focus:outline-none focus:border-gold-500/60" placeholder="اكتب التنبيه هنا...">
+                    <button type="button" class="user-cockpit-notif-send px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-lux-950 text-xs font-black transition active:scale-95">إرسال</button>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <div class="p-2.5 rounded-2xl bg-lux-950/60 border border-lux-800/60 space-y-2">
+                    <span class="text-[11px] font-bold text-lux-200 block">تعديل خطوات مخصص</span>
+                    <div class="flex gap-1.5">
+                        <input type="number" class="user-cockpit-steps-input flex-1 bg-lux-900 border border-lux-700/80 rounded-xl px-2.5 py-1.5 text-xs font-mono text-lux-100 placeholder-lux-500 focus:outline-none focus:border-gold-500/60" placeholder="القيمة (+/-)">
+                        <button type="button" class="user-cockpit-steps-apply px-3 py-1.5 rounded-xl bg-lux-800 hover:bg-lux-700 border border-lux-700 text-lux-100 text-xs font-bold transition active:scale-95">تطبيق</button>
+                    </div>
+                    <input type="text" class="user-cockpit-steps-reason w-full bg-lux-900 border border-lux-700/80 rounded-xl px-2.5 py-1 text-[10px] text-lux-300 placeholder-lux-600 focus:outline-none" placeholder="السبب (اختياري)">
+                </div>
+
+                <div class="p-2.5 rounded-2xl bg-lux-950/60 border border-lux-800/60 space-y-2 flex flex-col justify-between">
+                    <div>
+                        <span class="text-[11px] font-bold text-lux-200 block">تدقيق الموقع الجغرافي</span>
+                        <div class="text-[10px] text-lux-400 mt-1 flex items-center justify-between">
+                            <span>${hasLocation ? `إحداثيات: ${lat.toFixed(4)}, ${lng.toFixed(4)}` : 'لا توجد إحداثيات مرصودة'}</span>
+                            ${hasLocation ? `<a href="https://www.google.com/maps?q=${lat},${lng}" target="_blank" rel="noopener noreferrer" class="text-emerald-400 hover:underline font-bold">خرائط Google</a>` : ''}
+                        </div>
+                    </div>
+                    <div class="flex items-center justify-between gap-2 pt-1 border-t border-lux-800/60">
+                        <button type="button" class="user-cockpit-reset-steps text-[10px] font-bold text-rose-400 hover:text-rose-300 underline">
+                            تصفير خطوات اليوم
+                        </button>
+                        <button type="button" class="admin-user-manage-btn px-2.5 py-1 rounded-xl bg-lux-800 hover:bg-lux-700 text-lux-300 text-[10px] font-bold border border-lux-700 transition" title="فتح نافذة التدقيق التفصيلي">
+                            النافذة الشاملة
+                        </button>
+                    </div>
+                </div>
+            </div>
         </div>
     `;
+
+    // ربط الأحداث التفاعلية
+    const expandBtn = li.querySelector('.user-card-expand-btn');
+    const cockpitEl = li.querySelector('.user-card-cockpit');
+    const chevronEl = li.querySelector('.user-card-chevron');
+    if (expandBtn && cockpitEl) {
+        expandBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const isClosed = cockpitEl.classList.contains('hidden');
+            cockpitEl.classList.toggle('hidden', !isClosed);
+            if (chevronEl) {
+                chevronEl.style.transform = isClosed ? 'rotate(180deg)' : 'rotate(0deg)';
+            }
+        });
+    }
+
+    const plusBtn = li.querySelector('.user-quick-step-plus');
+    if (plusBtn) {
+        plusBtn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            await handleQuickStepAdjust(user, 1000, li, plusBtn);
+        });
+    }
+
+    const minusBtn = li.querySelector('.user-quick-step-minus');
+    if (minusBtn) {
+        minusBtn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            await handleQuickStepAdjust(user, -1000, li, minusBtn);
+        });
+    }
+
+    const verifBtn = li.querySelector('.user-quick-verif-btn');
+    if (verifBtn) {
+        verifBtn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            await handleQuickVerifToggle(user, li, verifBtn);
+        });
+    }
+
+    const applyStepsBtn = li.querySelector('.user-cockpit-steps-apply');
+    if (applyStepsBtn) {
+        applyStepsBtn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            const valInput = li.querySelector('.user-cockpit-steps-input');
+            const reasonInput = li.querySelector('.user-cockpit-steps-reason');
+            const delta = parseInt(valInput?.value || '0', 10);
+            if (!delta || isNaN(delta)) {
+                showUserCardStatus(li, 'يرجى إدخال قيمة عددية صحيحة.', 'error');
+                return;
+            }
+            await handleQuickStepAdjust(user, delta, li, applyStepsBtn, reasonInput?.value?.trim());
+            if (valInput) valInput.value = '';
+            if (reasonInput) reasonInput.value = '';
+        });
+    }
+
+    const resetStepsBtn = li.querySelector('.user-cockpit-reset-steps');
+    if (resetStepsBtn) {
+        resetStepsBtn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            if (!confirm(`هل أنت متأكد من تصفير خطوات اليوم لـ (${displayName})؟`)) return;
+            await handleQuickStepSet(user, 0, li, resetStepsBtn, 'تصفير خطوات مشبوهة');
+        });
+    }
+
+    const sendNotifBtn = li.querySelector('.user-cockpit-notif-send');
+    if (sendNotifBtn) {
+        sendNotifBtn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            const notifInput = li.querySelector('.user-cockpit-notif-input');
+            const msg = (notifInput?.value || '').trim();
+            if (!msg) {
+                showUserCardStatus(li, 'يرجى كتابة نص التنبيه أولاً.', 'error');
+                return;
+            }
+            sendNotifBtn.disabled = true;
+            const ok = await sendAdminNotificationToUser(user.id, msg);
+            sendNotifBtn.disabled = false;
+            if (ok) {
+                if (notifInput) notifInput.value = '';
+                showUserCardStatus(li, 'تم إرسال التنبيه فورياً للمستخدم بنجاح.', 'success');
+            } else {
+                showUserCardStatus(li, 'تعذر إرسال التنبيه. حاول مرة أخرى.', 'error');
+            }
+        });
+    }
 
     const manageBtn = li.querySelector('.admin-user-manage-btn');
     if (manageBtn) {
@@ -1277,6 +1592,24 @@ function renderNotifyPickerResults(query) {
     resultsEl.classList.remove('hidden');
 }
 
+/** تحديث شاشة المحاكاة الحية للإشعار (Apple Lockscreen Mockup) */
+function updateNotificationLivePreview(text) {
+    const previewEl = document.getElementById('notifMockupMsg');
+    if (previewEl) {
+        previewEl.textContent = (text || '').trim() || 'اكتب نص الإشعار في الحقل لمعاينته حياً كما سيظهر على شاشات هواتف أهالي نزلة عبيد...';
+    }
+    const targetEl = document.getElementById('notifMockupTarget');
+    if (targetEl) {
+        if (notifyMode === 'broadcast') {
+            targetEl.textContent = 'بث عام لجميع أهالي القرية';
+        } else if (notifySelectedUser) {
+            targetEl.textContent = `إلى: ${notifySelectedUser.full_name || notifySelectedUser.username}`;
+        } else {
+            targetEl.textContent = 'لمستخدم محدد';
+        }
+    }
+}
+
 /** بتحدد مستخدم كمستقبل الإشعار، وتظهر شارته بدل مربع البحث */
 function selectNotifyRecipient(user) {
     notifySelectedUser = user;
@@ -1298,6 +1631,9 @@ function selectNotifyRecipient(user) {
     if (chipAvatar) chipAvatar.src = user.avatar_url || buildFallbackAvatarUrl(user.username || user.full_name || '?');
     if (chipName) chipName.textContent = user.full_name || user.username || 'مستخدم بدون اسم';
     if (chipEl) chipEl.classList.remove('hidden');
+
+    const messageInput = document.getElementById('notifyMessageInput');
+    updateNotificationLivePreview(messageInput ? messageInput.value : '');
 }
 
 /** بتلغي اختيار المستخدم الحالي وترجّع مربع البحث تاني */
@@ -1309,6 +1645,9 @@ function clearNotifyRecipient() {
 
     if (searchInput) searchInput.classList.remove('hidden');
     if (chipEl) chipEl.classList.add('hidden');
+
+    const messageInput = document.getElementById('notifyMessageInput');
+    updateNotificationLivePreview(messageInput ? messageInput.value : '');
 }
 
 /** بتبدّل وضع الويدجت (لمستخدم محدد / بث للكل) وتظهر/تخفي عنصر اختيار المستخدم بناءً عليه */
@@ -1320,6 +1659,9 @@ function setNotifyMode(mode) {
 
     const modeButtons = document.querySelectorAll('#notifyModeControls [data-notify-mode]');
     modeButtons.forEach((btn) => btn.classList.toggle('is-active', btn.dataset.notifyMode === mode));
+
+    const messageInput = document.getElementById('notifyMessageInput');
+    updateNotificationLivePreview(messageInput ? messageInput.value : '');
 }
 
 /** ربط كل أحداث ويدجت الإشعارات - تُستدعى مرة واحدة من initAdminPage */
@@ -1339,6 +1681,22 @@ function initNotifyWidget() {
 
     const sendBtn = document.getElementById('notifySendBtn');
     if (sendBtn) sendBtn.addEventListener('click', handleNotifySendClick);
+
+    const messageInput = document.getElementById('notifyMessageInput');
+    if (messageInput) {
+        messageInput.addEventListener('input', () => updateNotificationLivePreview(messageInput.value));
+    }
+
+    document.querySelectorAll('.notif-template-chip').forEach((chip) => {
+        chip.addEventListener('click', () => {
+            const tpl = chip.getAttribute('data-template');
+            if (messageInput && tpl) {
+                messageInput.value = tpl;
+                updateNotificationLivePreview(tpl);
+                messageInput.focus();
+            }
+        });
+    });
 }
 
 /** بتتعامل مع الضغط على زرار "إرسال" - بتتحقق من صحة المدخلات حسب الوضع الحالي، ثم تنفّذ الإرسال المناسب */

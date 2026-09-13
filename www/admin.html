@@ -89,15 +89,15 @@
 
     <style>
         :root {
-            --canvas-bg: #EFF3F8;
-            --canvas-overlay: radial-gradient(circle at 10% 10%, rgba(212, 175, 55, 0.14) 0%, transparent 45%),
-                               radial-gradient(circle at 90% 90%, rgba(56, 189, 248, 0.12) 0%, transparent 45%),
-                               #EFF3F8;
-            --glass-card-bg: rgba(255, 255, 255, 0.78);
-            --glass-dock-bg: rgba(255, 255, 255, 0.86);
-            --glass-border: rgba(255, 255, 255, 0.95);
+            --canvas-bg: #E8EEF5;
+            --canvas-overlay: radial-gradient(circle at 12% 12%, rgba(212, 175, 55, 0.2) 0%, transparent 45%),
+                               radial-gradient(circle at 88% 88%, rgba(56, 189, 248, 0.18) 0%, transparent 45%),
+                               #E8EEF5;
+            --glass-card-bg: rgba(255, 255, 255, 0.72);
+            --glass-dock-bg: rgba(255, 255, 255, 0.82);
+            --glass-border: rgba(255, 255, 255, 0.92);
             --glass-border-subtle: rgba(203, 213, 225, 0.7);
-            --glass-shadow: 0 14px 36px -8px rgba(15, 23, 42, 0.08), 0 4px 12px -2px rgba(15, 23, 42, 0.03);
+            --glass-shadow: 0 16px 40px -8px rgba(15, 23, 42, 0.09), 0 4px 14px -2px rgba(15, 23, 42, 0.04);
             --glass-inset: inset 0 1px 1px 0 rgba(255, 255, 255, 0.95);
 
             --lux-50-rgb:  15 23 42;
@@ -114,16 +114,16 @@
         }
 
         html.dark {
-            --canvas-bg: #07090E;
-            --canvas-overlay: radial-gradient(circle at 15% 15%, rgba(212, 175, 55, 0.09) 0%, transparent 45%),
-                               radial-gradient(circle at 85% 85%, rgba(30, 58, 138, 0.1) 0%, transparent 45%),
-                               #07090E;
-            --glass-card-bg: rgba(15, 20, 32, 0.74);
-            --glass-dock-bg: rgba(13, 17, 28, 0.86);
-            --glass-border: rgba(255, 255, 255, 0.1);
-            --glass-border-subtle: rgba(255, 255, 255, 0.05);
+            --canvas-bg: #06080D;
+            --canvas-overlay: radial-gradient(circle at 15% 15%, rgba(212, 175, 55, 0.14) 0%, transparent 45%),
+                               radial-gradient(circle at 85% 85%, rgba(14, 165, 233, 0.12) 0%, transparent 45%),
+                               #06080D;
+            --glass-card-bg: rgba(15, 20, 32, 0.65);
+            --glass-dock-bg: rgba(11, 15, 25, 0.82);
+            --glass-border: rgba(255, 255, 255, 0.12);
+            --glass-border-subtle: rgba(255, 255, 255, 0.06);
             --glass-shadow: 0 20px 50px -10px rgba(0, 0, 0, 0.75), 0 6px 20px -2px rgba(0, 0, 0, 0.5);
-            --glass-inset: inset 0 1px 1px 0 rgba(255, 255, 255, 0.09);
+            --glass-inset: inset 0 1px 1px 0 rgba(255, 255, 255, 0.14);
 
             --lux-50-rgb:  248 250 252;
             --lux-100-rgb: 241 245 249;
@@ -146,6 +146,23 @@
             -webkit-tap-highlight-color: transparent;
         }
 
+        /* أنيميشن الأجرام المحيطية العائمة بالخلفية */
+        @keyframes orb-float-1 {
+            0%, 100% { transform: translate(0, 0) scale(1); }
+            50% { transform: translate(-30px, 35px) scale(1.1); }
+        }
+        @keyframes orb-float-2 {
+            0%, 100% { transform: translate(0, 0) scale(1); }
+            50% { transform: translate(35px, -25px) scale(0.94); }
+        }
+        @keyframes orb-float-3 {
+            0%, 100% { transform: translate(0, 0) scale(1); }
+            50% { transform: translate(-25px, -30px) scale(1.06); }
+        }
+        .admin-orb-float-1 { animation: orb-float-1 18s ease-in-out infinite; }
+        .admin-orb-float-2 { animation: orb-float-2 22s ease-in-out infinite; }
+        .admin-orb-float-3 { animation: orb-float-3 26s ease-in-out infinite; }
+
         /* Apple Liquid Glass Card */
         .glass-card, .bento-card, .admin-card {
             background: var(--glass-card-bg);
@@ -162,12 +179,12 @@
             position: absolute;
             inset: 0;
             border-radius: inherit;
-            background: linear-gradient(135deg, rgba(255, 255, 255, 0.12) 0%, transparent 40%);
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.16) 0%, transparent 40%);
             pointer-events: none;
             z-index: 1;
         }
         html.dark .glass-card::before, html.dark .bento-card::before, html.dark .admin-card::before {
-            background: linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0%, transparent 40%);
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.06) 0%, transparent 40%);
         }
         .glass-card:hover, .bento-card:hover, .admin-card:hover {
             border-color: rgba(212, 175, 55, 0.35);
@@ -351,53 +368,155 @@
             transition: all 0.2s ease;
             cursor: pointer;
         }
+        .admin-sort-chip:hover {
+            border-color: rgba(212, 175, 55, 0.5);
+            color: rgb(var(--lux-200-rgb));
+        }
         .admin-sort-chip.is-active {
-            color: #0b0e14;
             background: linear-gradient(135deg, #F2D77E, #D4AF37);
-            border-color: transparent;
+            color: #07090E;
+            border-color: #D4AF37;
+            font-weight: 800;
+            box-shadow: 0 2px 8px rgba(212, 175, 55, 0.3);
         }
 
-        /* Search Box */
+        /* Search Boxes */
         .admin-search-box {
             display: flex;
             align-items: center;
             gap: 0.5rem;
-            padding: 0.65rem 1rem;
-            border-radius: 1rem;
             background: rgb(var(--lux-950-rgb));
             border: 1px solid rgb(var(--lux-800-rgb));
-            transition: border-color 0.2s ease;
+            border-radius: 1rem;
+            padding: 0.6rem 0.85rem;
+            transition: all 0.2s ease;
+        }
+        .admin-search-box:focus-within {
+            border-color: #D4AF37;
+            box-shadow: 0 0 16px rgba(212, 175, 55, 0.15);
+        }
+        .admin-search-box svg {
+            width: 1rem;
+            height: 1rem;
+            color: rgb(var(--lux-500-rgb));
+            flex-shrink: 0;
         }
         .admin-search-box input {
             background: transparent;
             border: none;
             outline: none;
-            width: 100%;
             font-size: 0.75rem;
             color: rgb(var(--lux-100-rgb));
+            width: 100%;
         }
 
-        /* Focus styles for inputs */
-        input:focus, select:focus, textarea:focus {
-            outline: none !important;
-            border-color: #D4AF37 !important;
-            box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.2) !important;
+        /* Inputs & Textareas */
+        .admin-text-input, .admin-notify-textarea {
+            background: rgb(var(--lux-950-rgb));
+            border: 1px solid rgb(var(--lux-800-rgb));
+            border-radius: 1rem;
+            padding: 0.65rem 0.85rem;
+            font-size: 0.75rem;
+            color: rgb(var(--lux-100-rgb));
+            outline: none;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+        }
+        .admin-text-input:focus, .admin-notify-textarea:focus {
+            border-color: #D4AF37;
+            box-shadow: 0 0 16px rgba(212, 175, 55, 0.15);
         }
 
-        /* Minimalist Scrollbar */
-        ::-webkit-scrollbar {
-            width: 5px;
-            height: 5px;
+        /* Buttons */
+        .admin-save-btn {
+            background: linear-gradient(135deg, #F2D77E, #D4AF37);
+            color: #07090E;
+            font-weight: 800;
+            font-size: 0.75rem;
+            padding: 0.65rem 1.25rem;
+            border-radius: 1rem;
+            border: none;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            box-shadow: 0 4px 14px rgba(212, 175, 55, 0.25);
         }
-        ::-webkit-scrollbar-track {
-            background: transparent;
+        .admin-save-btn:hover {
+            opacity: 0.95;
+            transform: translateY(-1px);
+            box-shadow: 0 6px 18px rgba(212, 175, 55, 0.35);
         }
-        ::-webkit-scrollbar-thumb {
-            background: rgba(148, 163, 184, 0.35);
+        .admin-save-btn:active {
+            transform: translateY(0);
+        }
+
+        .admin-notify-clear-btn {
+            background: rgb(var(--lux-800-rgb));
+            color: rgb(var(--lux-300-rgb));
+            border: 1px solid rgb(var(--lux-700-rgb));
+            border-radius: 0.75rem;
+            padding: 0.35rem 0.65rem;
+            font-size: 0.7rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+        .admin-notify-clear-btn:hover {
+            color: #fff;
+            background: rgb(var(--lux-700-rgb));
+        }
+
+        /* Toggle Switches (iOS Style) */
+        .admin-toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 2.75rem;
+            height: 1.5rem;
+            flex-shrink: 0;
+            cursor: pointer;
+        }
+        .admin-toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        .admin-toggle-switch-track {
+            position: absolute;
+            inset: 0;
             border-radius: 9999px;
+            background: rgb(var(--lux-700-rgb));
+            transition: background 0.25s cubic-bezier(0.16, 1, 0.3, 1);
         }
-        ::-webkit-scrollbar-thumb:hover {
+        .admin-toggle-switch-thumb {
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            width: calc(1.5rem - 4px);
+            height: calc(1.5rem - 4px);
+            border-radius: 9999px;
+            background: #ffffff;
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+            transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .admin-toggle-switch input:checked + .admin-toggle-switch-track {
+            background: linear-gradient(135deg, #10B981, #059669);
+        }
+        .admin-toggle-switch input:checked ~ .admin-toggle-switch-thumb {
+            transform: translateX(1.25rem);
+        }
+
+        /* Presence dot indicator */
+        .presence-dot {
+            position: absolute;
+            bottom: 0;
+            right: 0;
+            width: 0.7rem;
+            height: 0.7rem;
+            border-radius: 9999px;
+            border: 2px solid rgb(var(--lux-900-rgb));
             background: rgba(148, 163, 184, 0.6);
+        }
+        .presence-dot.is-online {
+            background: #10B981;
+            box-shadow: 0 0 8px #10B981;
         }
 
         /* Radar pulse animation */
@@ -410,62 +529,7 @@
             animation: radar-pulse 2.2s infinite;
         }
 
-        /* Banner preview overlay */
-        .admin-banner-preview-overlay {
-            position: absolute;
-            inset: 0;
-            z-index: 1;
-            pointer-events: none;
-            border-radius: inherit;
-            background-image: linear-gradient(180deg, rgba(0, 0, 0, 0.05), rgba(0, 0, 0, 0.55));
-            background-color: rgba(0, 0, 0, 0.4);
-            transition: background-color 0.2s ease;
-        }
-        .admin-banner-preview-text {
-            position: relative;
-            z-index: 2;
-        }
-        .admin-banner-position-layer {
-            position: absolute;
-            inset: 0;
-            z-index: 3;
-            cursor: grab;
-            touch-action: none;
-        }
-        .admin-banner-position-layer.is-dragging {
-            cursor: grabbing;
-        }
-        .admin-banner-position-handle {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            width: 1.15rem;
-            height: 1.15rem;
-            border-radius: 9999px;
-            background: linear-gradient(135deg, #F2D77E, #D4AF37);
-            border: 2px solid #fff;
-            box-shadow: 0 1px 6px rgba(0, 0, 0, 0.5);
-            transform: translate(-50%, -50%);
-            pointer-events: none;
-        }
-        .admin-range-slider {
-            width: 100%;
-            height: 0.35rem;
-            border-radius: 9999px;
-            background: rgb(var(--lux-800-rgb));
-            appearance: none;
-            -webkit-appearance: none;
-            outline: none;
-            cursor: pointer;
-        }
-        .admin-range-slider::-webkit-slider-thumb {
-            -webkit-appearance: none;
-            width: 1rem;
-            height: 1rem;
-            border-radius: 9999px;
-            background: #D4AF37;
-            cursor: pointer;
-        }
+        /* Location pills */
         .admin-location-pill {
             display: inline-flex;
             align-items: center;
@@ -494,6 +558,13 @@
     </style>
 </head>
 <body class="h-full font-cairo text-lux-100 antialiased overflow-x-hidden selection:bg-gold-500/20 selection:text-gold-400">
+
+    <!-- طبقة الأجرام الضوئية المحيطية العائمة (Floating Ambient Mesh Orbs) لتعزيز الزجاج السائل -->
+    <div class="fixed inset-0 pointer-events-none overflow-hidden z-0" aria-hidden="true">
+        <div class="absolute -top-24 -right-24 w-80 sm:w-96 h-80 sm:h-96 rounded-full bg-gradient-to-br from-amber-500/20 via-yellow-500/10 to-transparent blur-3xl admin-orb-float-1"></div>
+        <div class="absolute top-1/3 -left-28 w-80 sm:w-96 h-80 sm:h-96 rounded-full bg-gradient-to-tr from-sky-500/15 via-blue-600/10 to-transparent blur-3xl admin-orb-float-2"></div>
+        <div class="absolute -bottom-24 right-1/4 w-80 sm:w-96 h-80 sm:h-96 rounded-full bg-gradient-to-tl from-emerald-500/15 via-teal-500/10 to-transparent blur-3xl admin-orb-float-3"></div>
+    </div>
 
     <!-- بوابة قفل لوحة التحكم (Admin Login Gate) -->
     <div id="adminLoginGate" class="hidden fixed inset-0 z-[9999] bg-lux-950/90 backdrop-blur-2xl flex items-center justify-center p-4 overflow-y-auto">
@@ -544,14 +615,13 @@
     </div>
 
     <!-- المحتوى الرئيسي للوحة التحكم (Liquid Glass Spatial Layout) -->
-    <div id="adminPageContent" style="visibility:hidden" class="min-h-screen flex flex-col relative">
+    <div id="adminPageContent" style="visibility:hidden" class="min-h-screen flex flex-col relative z-10">
 
         <!-- ========================================================================= -->
         <!-- Floating Glass Dock (النافذة الزجاجية العائمة على اليمين - Desktop & Large Screens) -->
         <!-- ========================================================================= -->
         <aside class="hidden lg:flex fixed right-6 top-6 bottom-6 w-72 z-40 flex-col rounded-[2.5rem] glass-dock p-5 shadow-2xl transition-all duration-300 justify-between">
             
-            <!-- أعلى الـ Dock: الهوية والشعار ووضع الاتصال -->
             <div class="space-y-4">
                 <div class="p-3 rounded-2xl bg-lux-950/40 border border-lux-800/80 flex items-center justify-between">
                     <div class="flex items-center gap-3">
@@ -573,7 +643,6 @@
                     </a>
                 </div>
 
-                <!-- عنوان الأقسام -->
                 <div class="px-2 flex items-center justify-between text-[10px] font-black uppercase tracking-wider text-lux-400">
                     <div class="flex items-center gap-1.5">
                         <span class="w-1.5 h-1.5 rounded-full bg-gold-400"></span>
@@ -582,9 +651,7 @@
                     <span class="px-2 py-0.5 rounded-full bg-lux-800 text-lux-400 font-mono text-[9px]">5 محاور</span>
                 </div>
 
-                <!-- قائمة الأزرار العائمة الـ 5 بالديسكتوب -->
                 <nav class="space-y-1.5">
-                    <!-- 1. الرئيسية والإحصاءات العامة -->
                     <button type="button" class="admin-nav-tab admin-dock-tab is-active" data-tab-target="tabPanelOverview">
                         <div class="w-8 h-8 rounded-xl bg-gold-500/10 border border-gold-500/20 text-gold-400 flex items-center justify-center shrink-0">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-4 h-4">
@@ -597,7 +664,6 @@
                         <span class="text-xs">الرئيسية والإحصاءات</span>
                     </button>
 
-                    <!-- 2. المشتركين والتنافس -->
                     <button type="button" class="admin-nav-tab admin-dock-tab" data-tab-target="tabPanelUsers">
                         <div class="w-8 h-8 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-400 flex items-center justify-center shrink-0">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-4 h-4">
@@ -610,7 +676,6 @@
                         <span class="text-xs">المشتركين والتنافس</span>
                     </button>
 
-                    <!-- 3. المحتوى والتفاعل -->
                     <button type="button" class="admin-nav-tab admin-dock-tab" data-tab-target="tabPanelContent">
                         <div class="w-8 h-8 rounded-xl bg-purple-500/10 border border-purple-500/20 text-purple-400 flex items-center justify-center shrink-0">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-4 h-4">
@@ -622,7 +687,6 @@
                         <span class="text-xs">المحتوى والأنشطة</span>
                     </button>
 
-                    <!-- 4. التواصل والدعم -->
                     <button type="button" class="admin-nav-tab admin-dock-tab" data-tab-target="tabPanelComms">
                         <div class="w-8 h-8 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 flex items-center justify-center shrink-0">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-4 h-4">
@@ -632,7 +696,6 @@
                         <span class="text-xs">التواصل والدعم</span>
                     </button>
 
-                    <!-- 5. إعدادات النظام والقرية -->
                     <button type="button" class="admin-nav-tab admin-dock-tab" data-tab-target="tabPanelSystem">
                         <div class="w-8 h-8 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center shrink-0">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-4 h-4">
@@ -645,109 +708,78 @@
                 </nav>
             </div>
 
-            <!-- أسفل الـ Dock: المود المزدوج + أونلاين الآن + تسجيل الخروج -->
             <div class="pt-3 border-t border-lux-800/80 space-y-3">
-                
-                <!-- محول الثيم الزجاجي المزدوج -->
-                <div class="p-1 rounded-2xl bg-lux-950/60 border border-lux-800/80 flex items-center justify-between gap-1">
-                    <button type="button" onclick="setAdminTheme('light')" class="theme-btn-light flex-1 py-1.5 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 text-lux-400 hover:text-amber-500">
-                        <svg class="w-3.5 h-3.5 text-amber-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <circle cx="12" cy="12" r="5"></circle>
-                            <line x1="12" y1="1" x2="12" y2="3"></line>
-                            <line x1="12" y1="21" x2="12" y2="23"></line>
-                        </svg>
+                <div class="p-1 rounded-2xl bg-lux-950/60 border border-lux-800/80 grid grid-cols-2 gap-1">
+                    <button type="button" class="theme-btn-light p-1.5 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 text-lux-400 hover:text-amber-500" onclick="setAdminTheme('light')">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-3.5 h-3.5"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
                         <span>مبهج</span>
                     </button>
-
-                    <button type="button" onclick="setAdminTheme('dark')" class="theme-btn-dark flex-1 py-1.5 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 text-lux-400 hover:text-blue-400">
-                        <svg class="w-3.5 h-3.5 text-blue-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
-                        </svg>
-                        <span>دارك</span>
+                    <button type="button" class="theme-btn-dark p-1.5 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 text-lux-400 hover:text-blue-400" onclick="setAdminTheme('dark')">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-3.5 h-3.5"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+                        <span>ليلي</span>
                     </button>
                 </div>
 
-                <!-- نبض أونلاين الآن الحي وزر تسجيل الخروج -->
-                <div class="flex items-center justify-between px-1">
-                    <div class="flex items-center gap-2">
-                        <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 admin-radar-pulse"></span>
-                        <span class="text-xs font-bold text-lux-300">أونلاين:</span>
-                        <span id="sidebarOnlineReadout" class="font-mono text-xs font-extrabold text-emerald-400">—</span>
-                    </div>
-
-                    <button type="button" id="btnAdminLogout" class="px-3 py-1.5 rounded-xl border border-rose-500/30 text-rose-300 hover:text-rose-100 bg-rose-500/10 hover:bg-rose-500/20 text-xs font-bold transition flex items-center gap-1">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-3 h-3"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>
-                        <span>خروج</span>
-                    </button>
+                <div class="px-2 flex items-center justify-between text-[11px] text-lux-400">
+                    <span class="flex items-center gap-1.5">
+                        <span class="w-2 h-2 rounded-full bg-emerald-400 admin-radar-pulse"></span>
+                        <span class="font-bold">أونلاين</span>
+                    </span>
+                    <span id="sidebarOnlineReadout" class="font-mono text-emerald-400 font-bold">—</span>
                 </div>
 
+                <button type="button" id="btnAdminLogout" class="w-full py-2.5 rounded-xl border border-rose-500/30 hover:border-rose-500/60 text-xs font-bold text-rose-300 hover:text-rose-200 bg-rose-500/10 hover:bg-rose-500/20 transition flex items-center justify-center gap-2 shadow-sm active:scale-98">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-4 h-4"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>
+                    <span>تسجيل الخروج</span>
+                </button>
             </div>
-
         </aside>
 
         <!-- ========================================================================= -->
-        <!-- منطقة المحتوى الرئيسية (Main Fluid Responsive Canvas) -->
+        <!-- المحتوى التشغيلي للوحة (Main Content Stage) -->
         <!-- ========================================================================= -->
-        <div class="flex-1 min-h-screen lg:mr-[20.5rem] px-3 py-3 sm:px-6 sm:py-6 lg:px-8 flex flex-col transition-all duration-300 max-w-full overflow-hidden">
-
-            <!-- الهيدر العلوي العائم المستجيب للموبايل والديسكتوب -->
-            <header class="glass-island px-3.5 sm:px-6 py-2.5 sm:py-3.5 rounded-2xl mb-4 sm:mb-6 flex items-center justify-between gap-2 sticky top-2 sm:top-4 z-30 shadow-md">
-                <!-- اليمين: الشعار والعنوان المدمج -->
-                <div class="flex items-center gap-2 sm:gap-3 min-w-0">
-                    <div class="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-br from-amber-500/20 to-yellow-500/10 border border-gold-500/40 flex items-center justify-center text-gold-400 shadow-glow-amber shrink-0">
-                        <svg class="w-4 h-4 sm:w-4.5 sm:h-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <div class="lg:mr-80 flex-1 flex flex-col min-w-0 px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
+            
+            <!-- الهيدر العلوي العائم (Glass Island Header) -->
+            <header class="glass-island rounded-2xl sm:rounded-3xl p-3 sm:px-6 sm:py-3.5 mb-5 flex items-center justify-between shadow-xl">
+                <div class="flex items-center gap-3">
+                    <div class="lg:hidden w-9 h-9 rounded-xl bg-gradient-to-br from-amber-500/20 to-yellow-500/10 border border-gold-500/40 flex items-center justify-center text-gold-400 shrink-0">
+                        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
                             <polyline points="2 17 12 22 22 17"></polyline>
                             <polyline points="2 12 12 17 22 12"></polyline>
                         </svg>
                     </div>
-                    <div class="min-w-0">
-                        <div class="flex items-center gap-1.5">
-                            <span class="text-xs sm:text-sm font-black text-lux-50 truncate">لوحة سِكّاوي</span>
-                            <span class="hidden sm:inline-block px-2 py-0.5 rounded-full text-[9px] font-bold bg-gold-500/15 text-gold-400 border border-gold-500/30 shrink-0">الإدارة المركزية</span>
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <h2 class="text-xs sm:text-sm md:text-base font-black text-lux-50">غرفة العمليات</h2>
+                            <span class="px-2 py-0.5 rounded-full text-[9px] sm:text-[10px] font-bold bg-gold-500/15 text-gold-400 border border-gold-500/30">نزلة عبيد</span>
                         </div>
-                        <p class="text-[10px] text-lux-400 font-medium truncate hidden xs:block">نزلة عبيد — شرق النيل</p>
+                        <p class="text-[10px] sm:text-[11px] text-lux-400 font-medium hidden xs:block">إدارة المشتركين والنطاق الجغرافي والأنشطة</p>
                     </div>
                 </div>
 
-                <!-- اليسار: أدوات التحكم ومحول الثيم وأزرار الموبايل -->
-                <div class="flex items-center gap-1.5 sm:gap-2 shrink-0">
-                    <!-- نبض الاتصال -->
-                    <div class="flex items-center gap-1 px-2 py-1 rounded-xl bg-lux-900/60 border border-lux-800 text-[10px] font-bold text-lux-400">
-                        <span class="w-2 h-2 rounded-full bg-emerald-400 admin-radar-pulse"></span>
-                        <span class="hidden sm:inline">متصل</span>
-                    </div>
-
-                    <!-- محول الثيم الكبسولي الأنيق -->
-                    <div class="p-0.5 sm:p-1 rounded-xl bg-lux-950/60 border border-lux-800/80 flex items-center gap-0.5">
-                        <button type="button" onclick="setAdminTheme('light')" class="theme-btn-light p-1.5 sm:px-2.5 sm:py-1 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1 text-lux-400 hover:text-amber-500" title="المود المبهج">
-                            <svg class="w-3.5 h-3.5 text-amber-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <circle cx="12" cy="12" r="5"></circle>
-                                <line x1="12" y1="1" x2="12" y2="3"></line>
-                                <line x1="12" y1="21" x2="12" y2="23"></line>
-                            </svg>
-                            <span class="hidden md:inline text-[11px]">مبهج</span>
+                <div class="flex items-center gap-1.5 sm:gap-2">
+                    <div class="p-1 rounded-xl bg-lux-950/60 border border-lux-800/80 flex items-center gap-1">
+                        <button type="button" class="theme-btn-light p-1.5 sm:px-2.5 sm:py-1 rounded-lg text-xs font-bold transition flex items-center gap-1 text-lux-400 hover:text-amber-500" onclick="setAdminTheme('light')">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-3.5 h-3.5"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line></svg>
+                            <span class="hidden sm:inline text-[11px]">مبهج</span>
                         </button>
-                        <button type="button" onclick="setAdminTheme('dark')" class="theme-btn-dark p-1.5 sm:px-2.5 sm:py-1 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1 text-lux-400 hover:text-blue-400" title="الدارك مود">
-                            <svg class="w-3.5 h-3.5 text-blue-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
-                            </svg>
-                            <span class="hidden md:inline text-[11px]">دارك</span>
+                        <button type="button" class="theme-btn-dark p-1.5 sm:px-2.5 sm:py-1 rounded-lg text-xs font-bold transition flex items-center gap-1 text-lux-400 hover:text-blue-400" onclick="setAdminTheme('dark')">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-3.5 h-3.5"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+                            <span class="hidden sm:inline text-[11px]">ليلي</span>
                         </button>
                     </div>
 
-                    <!-- رابط التطبيق -->
-                    <a href="index.html" class="p-1.5 sm:px-2.5 sm:py-1 rounded-xl border border-lux-700/80 text-xs font-bold text-lux-300 bg-lux-800/60 hover:text-gold-400 transition flex items-center gap-1" title="العودة للتطبيق">
+                    <a href="index.html" class="p-1.5 sm:px-3 sm:py-1.5 rounded-xl border border-lux-700/80 hover:border-gold-500/50 text-lux-200 hover:text-gold-400 bg-lux-800/40 hover:bg-lux-800 transition flex items-center gap-1.5 text-xs font-bold" title="العودة للتطبيق">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-3.5 h-3.5"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
                         <span class="hidden sm:inline text-[11px]">التطبيق</span>
                     </a>
 
-                    <!-- زر القائمة الشاملة للموبايل -->
                     <button type="button" id="btnAdminMobileMenu" aria-label="القائمة الشاملة" class="lg:hidden p-1.5 sm:px-2 rounded-xl bg-lux-800/80 border border-lux-700/80 flex items-center justify-center text-lux-300 hover:text-gold-400 transition" title="القائمة الشاملة">
-                        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-4 h-4"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
                     </button>
 
-                    <!-- زر الخروج السريع للموبايل -->
                     <button type="button" id="btnAdminMobileLogout" class="lg:hidden p-1.5 sm:px-2.5 rounded-xl border border-rose-500/30 text-xs font-bold text-rose-300 bg-rose-500/10 hover:bg-rose-500/20 transition flex items-center gap-1" title="تسجيل الخروج">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-3.5 h-3.5"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>
                         <span class="hidden xs:inline text-[11px]">خروج</span>
@@ -764,7 +796,6 @@
                     <!-- ======================================================= -->
                     <section id="tabPanelOverview" class="admin-tab-panel space-y-4 sm:space-y-5">
 
-                        <!-- بطاقة الترحيب الزجاجية العلوية -->
                         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 sm:gap-4 p-4 sm:p-6 glass-card relative overflow-hidden">
                             <div class="space-y-1">
                                 <div class="flex items-center gap-2">
@@ -786,9 +817,8 @@
                             </div>
                         </div>
 
-                        <!-- شبكة Bento الإحصائية الرئيسية (4 كروت أرقام بنسب متناسقة للموبايل) -->
+                        <!-- شبكة Bento الإحصائية الرئيسية -->
                         <div class="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">
-                            <!-- كارت 1: إجمالي المشتركين -->
                             <div class="glass-card p-3.5 sm:p-5 flex flex-col justify-between space-y-2 sm:space-y-3">
                                 <div class="flex items-center justify-between">
                                     <span class="text-[11px] sm:text-xs font-bold text-lux-400 truncate">المشتركين</span>
@@ -806,7 +836,6 @@
                                 </div>
                             </div>
 
-                            <!-- كارت 2: أونلاين الآن -->
                             <div class="glass-card p-3.5 sm:p-5 flex flex-col justify-between space-y-2 sm:space-y-3">
                                 <div class="flex items-center justify-between">
                                     <span class="text-[11px] sm:text-xs font-bold text-lux-400 flex items-center gap-1 truncate">
@@ -823,7 +852,6 @@
                                 </div>
                             </div>
 
-                            <!-- كارت 3: زوار اليوم والإجمالي -->
                             <div class="glass-card p-3.5 sm:p-5 flex flex-col justify-between space-y-2 sm:space-y-3">
                                 <div class="flex items-center justify-between">
                                     <span class="text-[11px] sm:text-xs font-bold text-lux-400 truncate">الزيارات</span>
@@ -840,7 +868,6 @@
                                 </div>
                             </div>
 
-                            <!-- كارت 4: النطاق الجغرافي للقرية -->
                             <div class="glass-card p-3.5 sm:p-5 flex flex-col justify-between space-y-2 sm:space-y-3">
                                 <div class="flex items-center justify-between">
                                     <span class="text-[11px] sm:text-xs font-bold text-lux-400 truncate">نطاق القرية</span>
@@ -858,9 +885,8 @@
                             </div>
                         </div>
 
-                        <!-- شبكة Bento الوسطى: ساعات الذروة وحركة المشي + حيوية المشتركين -->
+                        <!-- ساعات الذروة وحركة المشي + حيوية المشتركين -->
                         <div class="grid grid-cols-1 lg:grid-cols-3 gap-3.5 sm:gap-4">
-                            <!-- Col 1 (2-cols): ساعات الذروة وحركة المشي مع شريط سحب سلس للموبايل -->
                             <div class="lg:col-span-2 glass-card p-4 sm:p-6 space-y-4 overflow-hidden">
                                 <div class="flex items-center justify-between">
                                     <div>
@@ -869,10 +895,8 @@
                                     </div>
                                     <span class="px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-lg text-[9px] sm:text-[10px] font-bold bg-lux-800 text-gold-400 border border-gold-500/20 shrink-0">لحظي</span>
                                 </div>
-                                <!-- مخطط الأعمدة البيانية التفاعلي مع دعم السحب الأفقي للموبايل -->
                                 <div class="overflow-x-auto notif-scroll pb-2">
                                     <div id="visitorsPeakHoursContainer" class="flex items-end gap-1 sm:gap-1.5 h-32 sm:h-36 pt-4 pb-2 border-b border-lux-800/80 min-w-[340px] sm:min-w-0">
-                                        <!-- يُملأ ديناميكياً من admin.js -->
                                     </div>
                                     <div class="flex items-center justify-between text-[9px] sm:text-[11px] text-lux-400 font-bold px-1 min-w-[340px] sm:min-w-0 pt-1">
                                         <span>12 ص</span>
@@ -884,7 +908,6 @@
                                 </div>
                             </div>
 
-                            <!-- Col 2 (1-col): حيوية واحتفاظ المشتركين -->
                             <div class="glass-card p-4 sm:p-6 space-y-3.5 flex flex-col justify-between">
                                 <div class="flex items-center justify-between">
                                     <div>
@@ -918,9 +941,8 @@
                             </div>
                         </div>
 
-                        <!-- شبكة Bento السفلية: ملف الرعاة + الوصول السريع -->
+                        <!-- ملف الرعاة + الوصول السريع -->
                         <div class="grid grid-cols-1 lg:grid-cols-3 gap-3.5 sm:gap-4">
-                            <!-- ملف الرعاة والإعلانات (2 cols) -->
                             <div class="lg:col-span-2 glass-card p-4 sm:p-6 space-y-3.5">
                                 <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
                                     <div>
@@ -935,11 +957,9 @@
                                         <span>نسخ نص العرض لواتساب</span>
                                     </button>
                                 </div>
-                                <!-- بطاقة نص المعاينة المباشرة -->
                                 <pre id="sponsorPitchCardText" class="p-3 sm:p-3.5 rounded-xl bg-lux-950/80 border border-lux-800/80 text-lux-300 text-xs font-sans leading-relaxed whitespace-pre-wrap select-all max-h-36 overflow-y-auto notif-scroll"></pre>
                             </div>
 
-                            <!-- كروت الوصول السريع (1 col) -->
                             <div class="glass-card p-4 sm:p-6 space-y-3">
                                 <h3 class="text-xs sm:text-sm font-extrabold text-lux-100">الوصول السريع</h3>
                                 <div class="grid grid-cols-2 gap-2">
@@ -963,7 +983,6 @@
                             </div>
                         </div>
 
-                        <!-- حاوية التوافق مع دوال الزوار والرعاة القديمة -->
                         <div id="tabPanelVisitors" class="hidden">
                             
                 <!-- بطاقة تحويل سريعة لملف الرعاة والإعلانات -->
@@ -1307,11 +1326,10 @@
                     <!-- قطاع 2: المشتركين والتنافس (Users & Community) -->
                     <!-- ======================================================= -->
                     <section id="tabPanelUsers" class="admin-tab-panel hidden space-y-4 sm:space-y-5">
-                        <!-- أزرار التبويب الداخلي مع دعم التمرير الأفقي السلس -->
                         <div class="admin-subtab-bar">
                             <button type="button" class="admin-subtab-btn is-active" data-subtab-target="subPanelUserAccounts">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="w-4 h-4"><circle cx="9" cy="8" r="3.5"></circle><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"></path><circle cx="18" cy="9" r="2.5"></circle><path d="M15.5 14.2c2.6.4 4.5 2.7 4.5 5.3"></path></svg>
-                                <span>سجل الحسابات والتحكم</span>
+                                <span>سجل الحسابات والتحكم التفاعلي</span>
                             </button>
                             <button type="button" class="admin-subtab-btn" data-subtab-target="subPanelUserBadges">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="w-4 h-4"><path d="M12 3l2.2 4.5 5 .7-3.6 3.5.9 5-4.5-2.4-4.5 2.4.9-5-3.6-3.5 5-.7z"></path></svg>
@@ -1319,11 +1337,11 @@
                             </button>
                         </div>
 
-                        <!-- سجل الحسابات والتحكم -->
+                        <!-- سجل الحسابات والتحكم التفاعلي المباشر -->
                         <div id="subPanelUserAccounts" class="admin-subpanel space-y-4">
                             
                 <section id="userVerificationWidget"
-                         class="admin-card bg-lux-900/40 rounded-2xl p-5 md:p-6 border border-lux-800/70 space-y-5">
+                         class="glass-card p-4 sm:p-6 space-y-4 sm:space-y-5">
 
                     <div>
                         <h2 class="text-sm font-extrabold text-lux-50">كل الحسابات</h2>
@@ -1373,7 +1391,7 @@
                             <div id="tabPanelBadges" class="space-y-4">
                                 
                 <section id="badgesWidget"
-                         class="admin-card bg-lux-900/40 rounded-2xl p-5 md:p-6 border border-lux-800/70 space-y-5">
+                         class="glass-card p-4 sm:p-6 space-y-4 sm:space-y-5">
 
                     <div>
                         <h2 class="text-sm font-extrabold text-lux-50">الأوسمة والشارة المميزة</h2>
@@ -1435,7 +1453,6 @@
                     <!-- قطاع 3: المحتوى والتفاعل (Content Hub) -->
                     <!-- ======================================================= -->
                     <section id="tabPanelContent" class="admin-tab-panel hidden space-y-4 sm:space-y-5">
-                        <!-- أزرار التبويب الداخلي مع دعم التمرير الأفقي السلس -->
                         <div class="admin-subtab-bar">
                             <button type="button" class="admin-subtab-btn is-active" data-subtab-target="subPanelContentPosts" id="btnSubTabPostsMain">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="w-4 h-4"><rect x="3" y="4" width="18" height="16" rx="2"></rect><line x1="7" y1="9" x2="17" y2="9"></line><line x1="7" y1="13" x2="14" y2="13"></line><path d="M7 17h4"></path></svg>
@@ -1451,7 +1468,6 @@
                             </button>
                         </div>
 
-                        <!-- القصص والمنشورات -->
                         <div id="subPanelContentPosts" class="admin-subpanel space-y-4">
                             <div id="tabPanelPosts" class="space-y-4">
                                 
@@ -1477,7 +1493,7 @@
                      - شوف initAppIdentityWidget في js/admin.js -->
                 <!-- ----------------------------------------------------- -->
                 <section id="identityWidget"
-                         class="admin-card bg-lux-900/40 rounded-2xl p-5 md:p-6 border border-lux-800/70 space-y-5">
+                         class="glass-card p-4 sm:p-6 space-y-4 sm:space-y-5">
 
                     <div>
                         <h2 class="text-sm font-extrabold text-lux-50">هوية التطبيق في المنشورات</h2>
@@ -1541,7 +1557,7 @@
                 </section>
 
                 <section id="postCreateWidget"
-                         class="admin-card bg-lux-900/40 rounded-2xl p-5 md:p-6 border border-lux-800/70 space-y-5">
+                         class="glass-card p-4 sm:p-6 space-y-4 sm:space-y-5">
 
                     <div>
                         <h2 class="text-sm font-extrabold text-lux-50">نشر منشور جديد</h2>
@@ -1648,12 +1664,11 @@
                             </div>
                         </div>
 
-                        <!-- الأسئلة اليومية -->
                         <div id="subPanelContentQuestions" class="admin-subpanel hidden space-y-4">
                             <div id="tabPanelQuestions" class="space-y-4">
                                 
                 <section id="questionFormWidget"
-                         class="admin-card bg-lux-900/40 rounded-2xl p-5 md:p-6 border border-lux-800/70 space-y-5">
+                         class="glass-card p-4 sm:p-6 space-y-4 sm:space-y-5">
 
                     <div>
                         <h2 id="questionFormTitle" class="text-sm font-extrabold text-lux-50">سؤال جديد</h2>
@@ -1920,12 +1935,11 @@
                             </div>
                         </div>
 
-                        <!-- البانر الترويجي وهوية التطبيق -->
                         <div id="subPanelContentBanner" class="admin-subpanel hidden space-y-4">
                             <div id="tabPanelBanner" class="space-y-4">
                                 
                 <section id="bannerWidget"
-                         class="admin-card bg-lux-900/40 rounded-2xl p-5 md:p-6 border border-lux-800/70 space-y-5">
+                         class="glass-card p-4 sm:p-6 space-y-4 sm:space-y-5">
 
                     <div>
                         <h2 class="text-sm font-extrabold text-lux-50">البانر العلوي</h2>
@@ -2042,7 +2056,6 @@
                     <!-- قطاع 4: التواصل والمراسلات (Communications & Support) -->
                     <!-- ======================================================= -->
                     <section id="tabPanelComms" class="admin-tab-panel hidden space-y-4 sm:space-y-5">
-                        <!-- أزرار التبويب الداخلي مع دعم التمرير الأفقي السلس -->
                         <div class="admin-subtab-bar">
                             <button type="button" class="admin-subtab-btn is-active" data-subtab-target="subPanelCommsNotify">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="w-4 h-4"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
@@ -2054,12 +2067,36 @@
                             </button>
                         </div>
 
-                        <!-- مركز الإشعارات -->
                         <div id="subPanelCommsNotify" class="admin-subpanel space-y-4">
-                            <div id="tabPanelNotifications" class="space-y-4">
-                                
+                            <!-- محاكي الإشعارات الحية لشاشة قفل الهاتف + نموذج الإرسال والقوالب السريعة -->
+                            <div class="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
+                                <!-- عمود نموذج الإرسال والقوالب السريعة -->
+                                <div class="lg:col-span-7 space-y-4">
+                                    <div class="glass-card p-4 space-y-2.5">
+                                        <div class="flex items-center justify-between">
+                                            <span class="text-xs font-bold text-lux-200">قوالب إشعار سريعة بنقرة واحدة</span>
+                                            <span class="text-[10px] font-mono text-gold-400">جاهزة للإرسال</span>
+                                        </div>
+                                        <div class="flex flex-wrap gap-1.5">
+                                            <button type="button" class="notif-template-chip px-2.5 py-1.5 rounded-xl bg-lux-950/60 hover:bg-lux-800 text-lux-300 hover:text-gold-400 text-[10px] font-bold border border-lux-800 hover:border-gold-500/40 transition active:scale-95" data-template="تذكير: لا تنسوا إكمال تحدي اليوم وتسجيل خطواتكم قبل منتصف الليل للمنافسة على صدارة نزلة عبيد!">
+                                                تذكير بالتحدي اليومي
+                                            </button>
+                                            <button type="button" class="notif-template-chip px-2.5 py-1.5 rounded-xl bg-lux-950/60 hover:bg-lux-800 text-lux-300 hover:text-gold-400 text-[10px] font-bold border border-lux-800 hover:border-gold-500/40 transition active:scale-95" data-template="مبروك لأبطال الأسبوع! تم تحديث قائمة المتصدرين وتوزيع أوسمة الشرف للأكثر نشاطاً في القرية.">
+                                                تهنئة المتصدرين
+                                            </button>
+                                            <button type="button" class="notif-template-chip px-2.5 py-1.5 rounded-xl bg-lux-950/60 hover:bg-lux-800 text-lux-300 hover:text-gold-400 text-[10px] font-bold border border-lux-800 hover:border-gold-500/40 transition active:scale-95" data-template="تنبيه: تم رصد خطوات خارج النطاق الجغرافي لنزلة عبيد، يرجى تفعيل الموقع للتأكد من احتساب الخطوات.">
+                                                تنبيه النطاق والموقع
+                                            </button>
+                                            <button type="button" class="notif-template-chip px-2.5 py-1.5 rounded-xl bg-lux-950/60 hover:bg-lux-800 text-lux-300 hover:text-gold-400 text-[10px] font-bold border border-lux-800 hover:border-gold-500/40 transition active:scale-95" data-template="تنبيه صيانة: تجري الآن ترقية خوادم التطبيق لتعزيز السرعة والاستقرار. سنعود بكامل طاقتنا خلال دقائق.">
+                                                تنبيه صيانة وترقية
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <div id="tabPanelNotifications" class="space-y-4">
+                                        
                 <section id="notifyWidget"
-                         class="admin-card bg-lux-900/40 rounded-2xl p-5 md:p-6 border border-lux-800/70 space-y-5">
+                         class="glass-card p-4 sm:p-6 space-y-4 sm:space-y-5">
 
                     <div>
                         <h2 class="text-sm font-extrabold text-lux-50">إرسال إشعار</h2>
@@ -2115,10 +2152,47 @@
 
                 </section>
 
+                                    </div>
+                                </div>
+
+                                <!-- عمود محاكي شاشة قفل الهاتف الذكي (Apple Smartphone Mockup) -->
+                                <div class="lg:col-span-5 flex flex-col items-center justify-start sticky top-24">
+                                    <div class="w-full max-w-sm rounded-[2.5rem] p-5 bg-lux-950/80 border-2 border-lux-800/90 shadow-2xl relative overflow-hidden backdrop-blur-2xl space-y-4">
+                                        <div class="w-24 h-4 mx-auto rounded-full bg-black/90 border border-white/10 flex items-center justify-center">
+                                            <span class="w-2 h-2 rounded-full bg-emerald-400/80"></span>
+                                        </div>
+
+                                        <div class="text-center space-y-0.5 pt-2">
+                                            <div class="text-3xl sm:text-4xl font-mono font-light text-lux-100 tracking-wider">09:41</div>
+                                            <div class="text-[10px] text-lux-400 font-bold">شاشة القفل — هواتف أهالي نزلة عبيد</div>
+                                        </div>
+
+                                        <div class="glass-card p-3.5 space-y-2 border border-gold-500/30 shadow-glow-amber transition-all">
+                                            <div class="flex items-center justify-between">
+                                                <div class="flex items-center gap-2">
+                                                    <div class="w-6 h-6 rounded-lg bg-gradient-to-br from-amber-500 to-yellow-600 flex items-center justify-center text-lux-950 font-black text-[10px] shadow-sm">
+                                                        س
+                                                    </div>
+                                                    <div>
+                                                        <span class="text-xs font-black text-lux-50 block leading-tight">سِكّاوي</span>
+                                                        <span id="notifMockupTarget" class="text-[9px] text-gold-400 font-bold block">بث عام لكل المستخدمين</span>
+                                                    </div>
+                                                </div>
+                                                <span class="text-[9px] font-mono text-lux-400">الآن</span>
+                                            </div>
+                                            <p id="notifMockupMsg" class="text-xs text-lux-200 leading-relaxed font-medium">
+                                                اكتب نص الإشعار في الحقل لمعاينته حياً كما سيظهر على شاشات هواتف أهالي نزلة عبيد...
+                                            </p>
+                                        </div>
+
+                                        <div class="pt-6 flex items-center justify-center">
+                                            <div class="w-32 h-1 rounded-full bg-lux-600/50"></div>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
-                        <!-- صندوق الدعم -->
                         <div id="subPanelCommsSupport" class="admin-subpanel hidden space-y-4">
                             <div id="tabPanelSupport" class="space-y-4">
                                 
@@ -2163,7 +2237,6 @@
                     <!-- قطاع 5: إعدادات النظام والقرية (System Ops) -->
                     <!-- ======================================================= -->
                     <section id="tabPanelSystem" class="admin-tab-panel hidden space-y-4 sm:space-y-5">
-                        <!-- أزرار التبويب الداخلي مع دعم التمرير الأفقي السلس -->
                         <div class="admin-subtab-bar">
                             <button type="button" class="admin-subtab-btn is-active" data-subtab-target="subPanelSystemMaster">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="w-4 h-4"><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/><circle cx="12" cy="12" r="3"/></svg>
@@ -2175,12 +2248,11 @@
                             </button>
                         </div>
 
-                        <!-- التحكم الشامل -->
                         <div id="subPanelSystemMaster" class="admin-subpanel space-y-5">
                             <div id="tabPanelMaster" class="space-y-5">
                                 
                 <!-- 1. وضع الصيانة وقفل التطبيق -->
-                <div class="admin-card bg-lux-900/40 rounded-2xl p-5 md:p-6 border border-lux-800/70 space-y-4">
+                <div class="glass-card p-4 sm:p-6 space-y-4">
                     <div class="flex items-center justify-between">
                         <div>
                             <h2 class="text-sm font-extrabold text-lux-50">وضع الصيانة وقفل التطبيق (Kill Switch)</h2>
@@ -2213,7 +2285,7 @@
                 </div>
 
                 <!-- 2. إدارة التحديثات والإجبار على التحديث -->
-                <div class="admin-card bg-lux-900/40 rounded-2xl p-5 md:p-6 border border-lux-800/70 space-y-4">
+                <div class="glass-card p-4 sm:p-6 space-y-4">
                     <div class="flex items-center justify-between">
                         <div>
                             <h2 class="text-sm font-extrabold text-lux-50">الإجبار على التحديث (Force App Update)</h2>
@@ -2254,7 +2326,7 @@
                 </div>
 
                 <!-- 3. مضاعفة النقاط والفعاليات (Double XP) -->
-                <div class="admin-card bg-lux-900/40 rounded-2xl p-5 md:p-6 border border-lux-800/70 space-y-4">
+                <div class="glass-card p-4 sm:p-6 space-y-4">
                     <div>
                         <h2 class="text-sm font-extrabold text-lux-50">مضاعف النقاط والفعاليات (Points Multiplier)</h2>
                         <p class="text-xs text-lux-400 font-medium mt-0.5">
@@ -2289,7 +2361,7 @@
                 </div>
 
                 <!-- 4. مفاتيح الميزات (Feature Flags) -->
-                <div class="admin-card bg-lux-900/40 rounded-2xl p-5 md:p-6 border border-lux-800/70 space-y-4">
+                <div class="glass-card p-4 sm:p-6 space-y-4">
                     <div>
                         <h2 class="text-sm font-extrabold text-lux-50">مفاتيح تشغيل وإيقاف الميزات (Feature Flags)</h2>
                         <p class="text-xs text-lux-400 font-medium mt-0.5">
@@ -2355,7 +2427,7 @@
                 </div>
 
                 <!-- 5. الإعلان المنبثق العام -->
-                <div class="admin-card bg-lux-900/40 rounded-2xl p-5 md:p-6 border border-lux-800/70 space-y-4">
+                <div class="glass-card p-4 sm:p-6 space-y-4">
                     <div class="flex items-center justify-between">
                         <div>
                             <h2 class="text-sm font-extrabold text-lux-50">الإعلان المنبثق العام (In-App Announcement)</h2>
@@ -2434,7 +2506,7 @@
                 </div>
 
                 <!-- 6. فلتر الكلمات المحظورة -->
-                <div class="admin-card bg-lux-900/40 rounded-2xl p-5 md:p-6 border border-lux-800/70 space-y-4">
+                <div class="glass-card p-4 sm:p-6 space-y-4">
                     <div>
                         <h2 class="text-sm font-extrabold text-lux-50">فلتر الكلمات المحظورة (Profanity Filter)</h2>
                         <p class="text-xs text-lux-400 font-medium mt-0.5">
@@ -2459,7 +2531,7 @@
                 </div>
 
                 <!-- 7. إدارة البطولات والتتويج اليدوي -->
-                <div class="admin-card bg-lux-900/40 rounded-2xl p-5 md:p-6 border border-lux-800/70 space-y-4">
+                <div class="glass-card p-4 sm:p-6 space-y-4">
                     <div>
                         <h2 class="text-sm font-extrabold text-lux-50">إدارة البطولات والتتويج اليدوي (Championships)</h2>
                         <p class="text-xs text-lux-400 font-medium mt-0.5">
@@ -2488,7 +2560,6 @@
                             </div>
                         </div>
 
-                        <!-- النطاق الجغرافي -->
                         <div id="subPanelSystemGeofence" class="admin-subpanel hidden space-y-4">
                             <div id="tabPanelGeofence" class="space-y-4">
                                 
@@ -2498,7 +2569,7 @@
                      جغرافي)، وباقي الكروت هادية حواليه (شوف مبدأ "اصرف
                      جرأتك في مكان واحد" في ملاحظات التصميم) -->
                 <section id="geofenceRadiusWidget"
-                         class="admin-card bg-lux-900/40 rounded-2xl p-5 md:p-6 border border-lux-800/70 border-t-2 border-t-gold-500/40 space-y-5">
+                         class="glass-card p-4 sm:p-6 border-t-2 border-t-gold-500/40 space-y-4 sm:space-y-5">
 
                     <div class="flex items-start justify-between gap-3">
                         <div>
@@ -3162,7 +3233,6 @@
             });
         }
 
-        // تهيئة الثيم عند تحميل الصفحة فورياً
         (function() {
             let saved = 'dark';
             try {
