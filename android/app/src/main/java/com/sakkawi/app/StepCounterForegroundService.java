@@ -13,6 +13,7 @@ import android.content.pm.PackageManager;
 import android.content.pm.ServiceInfo;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
+import android.hardware.SensorEventListener;
 import android.hardware.SensorEventListener2;
 import android.hardware.SensorManager;
 import android.os.Build;
