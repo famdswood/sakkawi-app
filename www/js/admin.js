@@ -737,20 +737,21 @@ async function toggleUserVerifiedOverride(userId, newValue) {
  * @param {string|null} reason
  * @returns {Promise<boolean>} true لو نجح التحديث
  */
-async function toggleUserBlock(userId, shouldBlock, reason) {
-    const { error } = await supabaseClient
+async function toggleUserBlock(userId, shouldBlock, reason, durationHours = null) {
+    const { data, error } = await supabaseClient
         .rpc('admin_toggle_user_block', {
             p_user_id: userId,
             p_should_block: shouldBlock,
             p_reason: reason || null,
+            p_duration_hours: durationHours > 0 ? durationHours : null,
         });
 
     if (error) {
         console.error('[admin.js] فشل تحديث حالة حظر المستخدم:', error);
-        return false;
+        return null;
     }
 
-    return true;
+    return data || { success: true };
 }
 
 /**
@@ -1078,12 +1079,12 @@ function buildUserRowElement(user) {
                 ` : ''}
             </div>
             ${joinedText ? `<div class="text-[0.6rem] font-mono font-medium text-lux-600 mt-0.5">${escapeHtml(joinedText)}</div>` : ''}
-            ${isBlocked ? `<div class="admin-user-blocked-reason">محظور${blockedReasonText ? `: ${blockedReasonText}` : ''}</div>` : ''}
+            ${isBlocked ? (user.blocked_until && new Date(user.blocked_until).getTime() > Date.now() ? `<div class="admin-user-blocked-reason" style="color: #fbbf24; border-color: rgba(251, 191, 36, 0.3); background: rgba(251, 191, 36, 0.08);">مجمّد مؤقتاً حتى ${new Date(user.blocked_until).toLocaleDateString('ar-EG', { month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric' })}${blockedReasonText ? `: ${blockedReasonText}` : ''}</div>` : `<div class="admin-user-blocked-reason">محظور${blockedReasonText ? `: ${blockedReasonText}` : ''}</div>`) : ''}
         </div>
         <div class="admin-user-actions flex items-center gap-2">
             ${isSelfRow ? '' : `
                 <button type="button" class="admin-block-btn ${isBlocked ? 'is-blocked' : ''}">
-                    ${isBlocked ? 'إلغاء الحظر' : 'حظر'}
+                    ${isBlocked ? 'فك التجميد/الحظر' : 'حظر / تجميد'}
                 </button>
             `}
             <button type="button" class="admin-user-manage-btn admin-notify-clear-btn" title="تحكم ومكافحة غش وتعويضات">
@@ -1107,49 +1108,39 @@ function buildUserRowElement(user) {
 
 /**
  * بتتعامل مع الضغط على زرار "حظر" / "إلغاء الحظر" في صف مستخدم -
- * بتاخد سبب الحظر (اختياري) عن طريق prompt() وتأكيد عن طريق confirm()
- * (لوحة التحكم أداة داخلية للأدمن بس، فمفيش داعي لمودال تأكيد مخصص
- * زي اللي في profiles.js لتجربة المستخدم النهائي)، وبعد النجاح
- * السطر بيتحدّث تلقائياً عن طريق Realtime (handleUserUpdated) - مش
- * محتاجين نعدّل الـ DOM يدوياً هنا خالص
+ * إذا كان محظوراً/مجمداً تطلب تأكيد فك الحظر، وإذا كان نشطاً تفتح نافذة التحكم
+ * لإتاحة اختيار مدة التجميد المؤقت أو الحظر الدائم بدقة
  * @param {HTMLButtonElement} blockBtn
  * @param {object} user
  * @param {string} displayName
  */
 async function handleBlockButtonClick(blockBtn, user, displayName) {
     const isCurrentlyBlocked = Boolean(user.is_blocked);
-    let reason = null;
 
     if (isCurrentlyBlocked) {
-        if (!window.confirm(`تأكيد إلغاء حظر ${displayName}؟`)) return;
+        if (!window.confirm(`تأكيد إلغاء حظر / فك تجميد ${displayName}؟`)) return;
+
+        blockBtn.disabled = true;
+        blockBtn.classList.add('is-saving');
+
+        const res = await toggleUserBlock(user.id, false, 'إلغاء الحظر من قائمة المستخدمين');
+
+        blockBtn.disabled = false;
+        blockBtn.classList.remove('is-saving');
+
+        if (!res) {
+            const statusEl = document.getElementById('userSearchStatus');
+            setStatusText(statusEl, `تعذّر تحديث حالة حظر ${displayName}. حاول تاني.`, 'error');
+            return;
+        }
+
+        user.is_blocked = false;
+        user.blocked_reason = null;
+        user.blocked_until = null;
+        renderFilteredUserList();
     } else {
-        // prompt() بترجع null لو المستخدم ضغط "إلغاء" - وده بيلغي
-        // العملية كلها (بيدمج التأكيد + إدخال السبب في خطوة واحدة)
-        reason = window.prompt(`سبب حظر ${displayName} (اختياري):`, '');
-        if (reason === null) return;
-        reason = reason.trim() || null;
+        openUserActionModal(user);
     }
-
-    blockBtn.disabled = true;
-    blockBtn.classList.add('is-saving');
-
-    const succeeded = await toggleUserBlock(user.id, !isCurrentlyBlocked, reason);
-
-    blockBtn.disabled = false;
-    blockBtn.classList.remove('is-saving');
-
-    if (!succeeded) {
-        const statusEl = document.getElementById('userSearchStatus');
-        setStatusText(statusEl, `تعذّر تحديث حالة حظر ${displayName}. حاول تاني.`, 'error');
-        return;
-    }
-
-    // تحديث محلي فوري (بدل ما نستنى Realtime) - بيحصّل تحديث مضاعف
-    // لو حدث الـ Realtime وصل بعده بلحظات، وده آمن (renderFilteredUserList
-    // بيعيد الرسم بالكامل من allUsersList في الحالتين)
-    user.is_blocked = !isCurrentlyBlocked;
-    user.blocked_reason = isCurrentlyBlocked ? null : reason;
-    renderFilteredUserList();
 }
 
 /**
@@ -4574,26 +4565,153 @@ function initUserActionModal() {
         if (e.target === modal) hideModal();
     });
 
-    // 1. Reset steps
+    // 1. التحكم في خطوات اليوم (إضافة / خصم / تعيين رقم محدد / تصفير سريع)
+    let currentStepControlMode = 'delta';
+    const btnStepModeDelta = document.getElementById('btnStepModeDelta');
+    const btnStepModeSet = document.getElementById('btnStepModeSet');
+    const labelAdjustStepsValue = document.getElementById('labelAdjustStepsValue');
+    const inputAdjustStepsValue = document.getElementById('inputAdjustStepsValue');
+    const inputAdjustStepsReason = document.getElementById('inputAdjustStepsReason');
+    const chkAdjustStepsPoints = document.getElementById('chkAdjustStepsPoints');
+    const btnExecuteAdjustSteps = document.getElementById('btnExecuteAdjustSteps');
     const btnResetSteps = document.getElementById('btnExecuteResetSteps');
-    if (btnResetSteps) {
-        btnResetSteps.addEventListener('click', async () => {
+
+    const updateStepModeUI = () => {
+        if (currentStepControlMode === 'delta') {
+            if (btnStepModeDelta) {
+                btnStepModeDelta.className = 'px-2 py-1 text-[10px] font-bold rounded-md bg-gold-500 text-lux-950 transition';
+            }
+            if (btnStepModeSet) {
+                btnStepModeSet.className = 'px-2 py-1 text-[10px] font-bold rounded-md text-lux-400 hover:text-lux-200 transition';
+            }
+            if (labelAdjustStepsValue) labelAdjustStepsValue.textContent = 'فارق الخطوات (+ للإضافة / - للخصم):';
+            if (inputAdjustStepsValue) inputAdjustStepsValue.placeholder = '+5000 أو -2000';
+        } else {
+            if (btnStepModeSet) {
+                btnStepModeSet.className = 'px-2 py-1 text-[10px] font-bold rounded-md bg-gold-500 text-lux-950 transition';
+            }
+            if (btnStepModeDelta) {
+                btnStepModeDelta.className = 'px-2 py-1 text-[10px] font-bold rounded-md text-lux-400 hover:text-lux-200 transition';
+            }
+            if (labelAdjustStepsValue) labelAdjustStepsValue.textContent = 'تعيين رصيد خطوات اليوم:';
+            if (inputAdjustStepsValue) inputAdjustStepsValue.placeholder = 'مثال: 8000';
+        }
+    };
+
+    if (btnStepModeDelta) {
+        btnStepModeDelta.addEventListener('click', () => {
+            currentStepControlMode = 'delta';
+            updateStepModeUI();
+        });
+    }
+    if (btnStepModeSet) {
+        btnStepModeSet.addEventListener('click', () => {
+            currentStepControlMode = 'set';
+            updateStepModeUI();
+        });
+    }
+
+    if (btnExecuteAdjustSteps) {
+        btnExecuteAdjustSteps.addEventListener('click', async () => {
             if (!selectedUserForAction) return;
-            const reasonInput = document.getElementById('inputResetStepsReason');
-            const reason = reasonInput ? reasonInput.value.trim() : '';
+
+            const valStr = inputAdjustStepsValue ? inputAdjustStepsValue.value.trim() : '';
+            const stepsVal = parseInt(valStr, 10);
+            const reason = inputAdjustStepsReason ? inputAdjustStepsReason.value.trim() : '';
+            const adjustPoints = chkAdjustStepsPoints ? chkAdjustStepsPoints.checked : true;
+
+            if (isNaN(stepsVal)) {
+                setStatusText(statusEl, 'يرجى إدخال رقم خطوات صحيح.', 'error');
+                return;
+            }
+            if (currentStepControlMode === 'delta' && stepsVal === 0) {
+                setStatusText(statusEl, 'يرجى إدخال قيمة فارق غير صفرية (موجبة للإضافة أو سالبة للخصم).', 'error');
+                return;
+            }
+            if (currentStepControlMode === 'set' && stepsVal < 0) {
+                setStatusText(statusEl, 'قيمة الخطوات المحددة لا يمكن أن تكون سالبة.', 'error');
+                return;
+            }
             if (!reason) {
-                setStatusText(statusEl, 'يرجى كتابة سبب تصفير الخطوات.', 'error');
+                setStatusText(statusEl, 'يرجى كتابة سبب تعديل الخطوات للتوثيق والشفافية.', 'error');
                 return;
             }
 
-            if (!confirm(`هل أنت متأكد من تصفير خطوات اليوم للمستخدم (${selectedUserForAction.full_name || selectedUserForAction.username})؟`)) return;
+            const actionDesc = currentStepControlMode === 'delta'
+                ? (stepsVal > 0 ? `إضافة ${stepsVal.toLocaleString('ar-EG')} خطوة` : `خصم ${Math.abs(stepsVal).toLocaleString('ar-EG')} خطوة`)
+                : `تعيين خطوات اليوم إلى ${stepsVal.toLocaleString('ar-EG')} خطوة`;
+
+            const confirmMsg = `تأكيد ${actionDesc} للمستخدم (${selectedUserForAction.full_name || selectedUserForAction.username})؟${adjustPoints ? ' (سيتم احتساب النقاط تلقائياً)' : ' (دون تغيير النقاط)'}`;
+            if (!confirm(confirmMsg)) return;
+
+            btnExecuteAdjustSteps.disabled = true;
+            setStatusText(statusEl, 'جاري تطبيق تعديل الخطوات والمزامنة…', 'loading');
+
+            const { data, error } = await supabaseClient.rpc('admin_adjust_user_steps', {
+                p_user_id: selectedUserForAction.id,
+                p_mode: currentStepControlMode,
+                p_steps_value: stepsVal,
+                p_reason: reason,
+                p_adjust_points: adjustPoints,
+            });
+
+            btnExecuteAdjustSteps.disabled = false;
+
+            if (error) {
+                console.error('[admin.js] فشل تعديل الخطوات:', error);
+                setStatusText(statusEl, error.message || 'تعذر تعديل الخطوات.', 'error');
+                return;
+            }
+
+            const newDaily = data?.new_daily_steps ?? (currentStepControlMode === 'set' ? stepsVal : (selectedUserForAction.daily_steps || 0) + stepsVal);
+            const newPoints = data?.new_total_points ?? selectedUserForAction.points;
+            selectedUserForAction.daily_steps = newDaily;
+            selectedUserForAction.points = newPoints;
+            if (data?.new_weekly_steps !== undefined) selectedUserForAction.weekly_steps = data.new_weekly_steps;
+            if (data?.new_monthly_steps !== undefined) selectedUserForAction.monthly_steps = data.new_monthly_steps;
+            if (data?.new_total_steps !== undefined) selectedUserForAction.total_steps = data.new_total_steps;
+
+            const stepsEl = document.getElementById('userModalTodaySteps');
+            if (stepsEl) stepsEl.textContent = Number(newDaily).toLocaleString('ar-EG');
+            const pointsEl = document.getElementById('userModalPoints');
+            if (pointsEl) pointsEl.textContent = Number(newPoints).toLocaleString('ar-EG');
+
+            if (Array.isArray(allUsersList)) {
+                const targetInList = allUsersList.find((u) => u.id === selectedUserForAction.id);
+                if (targetInList) {
+                    targetInList.daily_steps = newDaily;
+                    targetInList.points = newPoints;
+                    if (data?.new_weekly_steps !== undefined) targetInList.weekly_steps = data.new_weekly_steps;
+                    if (data?.new_monthly_steps !== undefined) targetInList.monthly_steps = data.new_monthly_steps;
+                    if (data?.new_total_steps !== undefined) targetInList.total_steps = data.new_total_steps;
+                }
+            }
+            if (typeof renderFilteredUserList === 'function') {
+                renderFilteredUserList();
+            }
+
+            if (inputAdjustStepsValue) inputAdjustStepsValue.value = '';
+            if (inputAdjustStepsReason) inputAdjustStepsReason.value = '';
+            setStatusText(statusEl, `تم تطبيق تعديل الخطوات بنجاح ومزامنة الحساس. رصيد خطوات اليوم: ${Number(newDaily).toLocaleString('ar-EG')}`, 'success');
+        });
+    }
+
+    if (btnResetSteps) {
+        btnResetSteps.addEventListener('click', async () => {
+            if (!selectedUserForAction) return;
+            const reason = window.prompt(`تصفير خطوات اليوم لـ (${selectedUserForAction.full_name || selectedUserForAction.username}) - يرجى كتابة السبب:`, 'تصفير خطوات مشبوهة');
+            if (reason === null) return;
+            const cleanReason = reason.trim() || 'تصفير خطوات مشبوهة';
 
             btnResetSteps.disabled = true;
-            setStatusText(statusEl, 'جاري تصفير خطوات اليوم…', 'loading');
+            setStatusText(statusEl, 'جاري تصفير خطوات اليوم ومزامنة الحساس…', 'loading');
 
-            const { error } = await supabaseClient.rpc('admin_reset_user_today_steps', {
+            const { data, error } = await supabaseClient.rpc('admin_adjust_user_steps', {
                 p_user_id: selectedUserForAction.id,
-                p_reason: reason,
+                p_mode: 'set',
+                p_steps_value: 0,
+                p_reason: cleanReason,
+                p_adjust_points: true,
             });
 
             btnResetSteps.disabled = false;
@@ -4604,23 +4722,26 @@ function initUserActionModal() {
                 return;
             }
 
-            setStatusText(statusEl, 'تم تصفير خطوات اليوم وحذف نقاطها وسجل نشاطها بنجاح.', 'success');
-            if (reasonInput) reasonInput.value = '';
+            selectedUserForAction.daily_steps = 0;
+            if (data?.new_total_points !== undefined) selectedUserForAction.points = data.new_total_points;
+
             const stepsEl = document.getElementById('userModalTodaySteps');
             if (stepsEl) stepsEl.textContent = '0';
-            selectedUserForAction.daily_steps = 0;
-            selectedUserForAction.daily_points = 0;
+            const pointsEl = document.getElementById('userModalPoints');
+            if (pointsEl && data?.new_total_points !== undefined) pointsEl.textContent = Number(data.new_total_points).toLocaleString('ar-EG');
 
             if (Array.isArray(allUsersList)) {
                 const targetInList = allUsersList.find((u) => u.id === selectedUserForAction.id);
                 if (targetInList) {
                     targetInList.daily_steps = 0;
-                    targetInList.daily_points = 0;
+                    if (data?.new_total_points !== undefined) targetInList.points = data.new_total_points;
                 }
             }
             if (typeof renderFilteredUserList === 'function') {
                 renderFilteredUserList();
             }
+
+            setStatusText(statusEl, 'تم تصفير خطوات اليوم لـ 0 بنجاح وتحديث نقاطها ومزامنة الحساس.', 'success');
         });
     }
 
@@ -4832,6 +4953,112 @@ function initUserActionModal() {
             updateUserRowVerificationInList(selectedUserForAction);
         });
     }
+
+    // 6. Freeze & Block controls
+    const btnFreeze = document.getElementById('btnExecuteFreezeUser');
+    const btnUnfreeze = document.getElementById('btnExecuteUnfreezeUser');
+    const selectDuration = document.getElementById('selectFreezeDuration');
+    const inputFreezeReason = document.getElementById('inputFreezeReason');
+
+    if (btnFreeze) {
+        btnFreeze.addEventListener('click', async () => {
+            if (!selectedUserForAction) return;
+            const reason = inputFreezeReason ? inputFreezeReason.value.trim() : '';
+            if (!reason) {
+                setStatusText(statusEl, 'يرجى كتابة سبب التجميد أو الحظر.', 'error');
+                return;
+            }
+
+            const durationHours = parseInt(selectDuration ? selectDuration.value : '24', 10);
+            const isPermanent = durationHours <= 0;
+            const durationText = isPermanent
+                ? 'حظر دائم'
+                : (durationHours === 12 ? '12 ساعة' : durationHours === 24 ? '24 ساعة (يوم)' : durationHours === 48 ? '48 ساعة (يومان)' : durationHours === 72 ? '72 ساعة (3 أيام)' : durationHours === 168 ? 'أسبوع (7 أيام)' : `${durationHours} ساعة`);
+
+            if (!confirm(`تأكيد تطبيق (${durationText}) على المستخدم (${selectedUserForAction.full_name || selectedUserForAction.username})؟`)) return;
+
+            btnFreeze.disabled = true;
+            setStatusText(statusEl, 'جاري تطبيق التجميد/الحظر…', 'loading');
+
+            const { data, error } = await supabaseClient.rpc('admin_toggle_user_block', {
+                p_user_id: selectedUserForAction.id,
+                p_should_block: true,
+                p_reason: reason,
+                p_duration_hours: isPermanent ? null : durationHours,
+            });
+
+            btnFreeze.disabled = false;
+
+            if (error) {
+                console.error('[admin.js] فشل تطبيق التجميد/الحظر:', error);
+                setStatusText(statusEl, error.message || 'تعذر تطبيق التجميد/الحظر.', 'error');
+                return;
+            }
+
+            selectedUserForAction.is_blocked = true;
+            selectedUserForAction.blocked_reason = reason;
+            selectedUserForAction.blocked_until = data?.blocked_until ?? null;
+
+            if (Array.isArray(allUsersList)) {
+                const targetInList = allUsersList.find((u) => u.id === selectedUserForAction.id);
+                if (targetInList) {
+                    targetInList.is_blocked = true;
+                    targetInList.blocked_reason = reason;
+                    targetInList.blocked_until = data?.blocked_until ?? null;
+                }
+            }
+            if (typeof renderFilteredUserList === 'function') {
+                renderFilteredUserList();
+            }
+
+            updateUserModalFreezeDisplay(selectedUserForAction);
+            if (inputFreezeReason) inputFreezeReason.value = '';
+            setStatusText(statusEl, `تم تطبيق ${durationText} بنجاح وإشعار المستخدم.`, 'success');
+        });
+    }
+
+    if (btnUnfreeze) {
+        btnUnfreeze.addEventListener('click', async () => {
+            if (!selectedUserForAction) return;
+            if (!confirm(`تأكيد فك التجميد/الحظر فوراً عن المستخدم (${selectedUserForAction.full_name || selectedUserForAction.username})؟`)) return;
+
+            btnUnfreeze.disabled = true;
+            setStatusText(statusEl, 'جاري فك التجميد/الحظر…', 'loading');
+
+            const { error } = await supabaseClient.rpc('admin_toggle_user_block', {
+                p_user_id: selectedUserForAction.id,
+                p_should_block: false,
+                p_reason: 'فك الحظر والتجميد من قبل الإدارة',
+            });
+
+            btnUnfreeze.disabled = false;
+
+            if (error) {
+                console.error('[admin.js] فشل فك التجميد/الحظر:', error);
+                setStatusText(statusEl, error.message || 'تعذر فك التجميد/الحظر.', 'error');
+                return;
+            }
+
+            selectedUserForAction.is_blocked = false;
+            selectedUserForAction.blocked_reason = null;
+            selectedUserForAction.blocked_until = null;
+
+            if (Array.isArray(allUsersList)) {
+                const targetInList = allUsersList.find((u) => u.id === selectedUserForAction.id);
+                if (targetInList) {
+                    targetInList.is_blocked = false;
+                    targetInList.blocked_reason = null;
+                    targetInList.blocked_until = null;
+                }
+            }
+            if (typeof renderFilteredUserList === 'function') {
+                renderFilteredUserList();
+            }
+
+            updateUserModalFreezeDisplay(selectedUserForAction);
+            setStatusText(statusEl, 'تم رفع التجميد/الحظر عن الحساب بنجاح واستعادته.', 'success');
+        });
+    }
 }
 
 function updateUserRowVerificationInList(user) {
@@ -4902,6 +5129,84 @@ function updateUserModalVerificationDisplay(user) {
     }
 }
 
+function updateUserModalFreezeDisplay(user) {
+    const accountStatusEl = document.getElementById('userModalAccountStatus');
+    const badgeTagEl = document.getElementById('userModalFreezeBadgeTag');
+    const detailsEl = document.getElementById('userModalFreezeDetails');
+
+    const isBlocked = Boolean(user.is_blocked);
+    const blockedUntil = user.blocked_until;
+    let isFrozen = false;
+    let remainingHoursText = '';
+    let untilFormatted = '';
+
+    if (isBlocked && blockedUntil) {
+        const d = new Date(blockedUntil);
+        if (!isNaN(d.getTime())) {
+            const diffMs = d.getTime() - Date.now();
+            if (diffMs > 0) {
+                isFrozen = true;
+                const hoursLeft = Math.ceil(diffMs / (1000 * 60 * 60));
+                if (hoursLeft > 24) {
+                    const daysLeft = Math.ceil(hoursLeft / 24);
+                    remainingHoursText = `متبقي حوالي ${daysLeft} يوم`;
+                } else {
+                    remainingHoursText = `متبقي حوالي ${hoursLeft} ساعة`;
+                }
+                untilFormatted = d.toLocaleString('ar-EG', { dateStyle: 'short', timeStyle: 'short' });
+            }
+        }
+    }
+
+    if (isFrozen) {
+        if (accountStatusEl) {
+            accountStatusEl.textContent = 'مجمّد مؤقتاً';
+            accountStatusEl.className = 'text-xs font-bold text-amber-400 truncate';
+        }
+        if (badgeTagEl) {
+            badgeTagEl.textContent = 'مجمّد مؤقتاً';
+            badgeTagEl.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20';
+        }
+        if (detailsEl) {
+            detailsEl.innerHTML = `
+                <div><strong>حالة الحساب:</strong> مجمّد مؤقتاً (${remainingHoursText})</div>
+                <div><strong>تاريخ الانتهاء:</strong> ${untilFormatted}</div>
+                <div><strong>السبب:</strong> ${escapeHtml(user.blocked_reason || 'قرار إداري')}</div>
+            `;
+            detailsEl.classList.remove('hidden');
+        }
+    } else if (isBlocked) {
+        if (accountStatusEl) {
+            accountStatusEl.textContent = 'محظور دائم';
+            accountStatusEl.className = 'text-xs font-bold text-rose-400 truncate';
+        }
+        if (badgeTagEl) {
+            badgeTagEl.textContent = 'محظور دائم';
+            badgeTagEl.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/10 text-rose-400 border border-rose-500/20';
+        }
+        if (detailsEl) {
+            detailsEl.innerHTML = `
+                <div><strong>حالة الحساب:</strong> محظور بشكل دائم</div>
+                <div><strong>السبب:</strong> ${escapeHtml(user.blocked_reason || 'قرار إداري')}</div>
+            `;
+            detailsEl.classList.remove('hidden');
+        }
+    } else {
+        if (accountStatusEl) {
+            accountStatusEl.textContent = 'نشط';
+            accountStatusEl.className = 'text-xs font-bold text-emerald-400 truncate';
+        }
+        if (badgeTagEl) {
+            badgeTagEl.textContent = 'حساب نشط';
+            badgeTagEl.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20';
+        }
+        if (detailsEl) {
+            detailsEl.innerHTML = '';
+            detailsEl.classList.add('hidden');
+        }
+    }
+}
+
 async function openUserActionModal(user) {
     selectedUserForAction = user;
     const modal = document.getElementById('userAdminActionModal');
@@ -4926,7 +5231,15 @@ async function openUserActionModal(user) {
     }
     if (statusEl) setStatusText(statusEl, '', null);
 
+    const inputAdjustStepsValue = document.getElementById('inputAdjustStepsValue');
+    const inputAdjustStepsReason = document.getElementById('inputAdjustStepsReason');
+    const inputFreezeReason = document.getElementById('inputFreezeReason');
+    if (inputAdjustStepsValue) inputAdjustStepsValue.value = '';
+    if (inputAdjustStepsReason) inputAdjustStepsReason.value = '';
+    if (inputFreezeReason) inputFreezeReason.value = '';
+
     updateUserModalVerificationDisplay(user);
+    updateUserModalFreezeDisplay(user);
     updateUserModalLocationDisplay(user);
 
     modal.classList.remove('hidden');

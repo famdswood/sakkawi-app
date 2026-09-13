@@ -197,6 +197,8 @@ const createStoryState = {
     textPosition: { ...DEFAULT_TEXT_POSITION },
     // ترتيب الطبقات: 'text' (النص في الطبقة العليا) أو 'sticker' (ملصق الإنجاز في الطبقة العليا)
     layerOrder: 'text',
+    // وضع تحرير النص: true عندما تكون لوحة المفاتيح وحقل الكتابة مفعلين
+    isEditingText: false,
 };
 
 /** هدف عدد الخطوات اليومي المستخدم لحساب نسبة الوصول في ملصق الإنجاز الحي */
@@ -1620,8 +1622,8 @@ function renderCurrentStory() {
         content.innerHTML = `
             <div class="story-viewer-text-wrapper"
                  style="position: absolute; left: ${tx}%; top: ${ty}%; transform: translate(-50%, -50%) scale(${ts}); z-index: ${textZ}; width: 90%; max-width: 420px; display: flex; flex-direction: column; align-items: center; justify-content: center; pointer-events: none;">
-                <p class="w-full text-center text-white ${story.fontClass || 'font-cairo font-black'} leading-relaxed drop-shadow-md m-0 p-0"
-                   style="font-size: ${fontSizeRem};">${escapeHtml(story.content)}</p>
+                <p class="w-full text-center text-white ${story.fontClass || 'font-cairo font-black'} leading-relaxed drop-shadow-md m-0 p-0 whitespace-pre-wrap"
+                   style="font-size: ${fontSizeRem}; white-space: pre-wrap; word-break: break-word; overflow-wrap: break-word;">${escapeHtml(story.content)}</p>
             </div>
             ${statStickerHtml}
         `;
@@ -2479,34 +2481,112 @@ function renderCreateStoryOptionButtons() {
     }
 }
 
+/** دالة مساعدة لتصفير مؤشرات اللمس النشطة للنص لتجنب أي تسريب أو تكبير عرضي */
+let clearActiveTextPointers = null;
+
+/**
+ * الدخول في وضع تحرير النص (Text Editing Mode)
+ * إخفاء أدوات التصميم وشريط النشر وإظهار حقل الكتابة وزر "تم"
+ */
+function enterTextEditingMode() {
+    createStoryState.isEditingText = true;
+    if (typeof clearActiveTextPointers === 'function') {
+        clearActiveTextPointers();
+    }
+    const modal = document.getElementById('createStoryModal');
+    const textarea = document.getElementById('createStoryTextarea');
+    const displayEl = document.getElementById('storyTextDisplay');
+    const doneContainer = document.getElementById('storyTextDoneBtnContainer');
+
+    modal?.classList.add('story-creator-editing-mode');
+    if (doneContainer) doneContainer.classList.remove('hidden');
+    if (displayEl) displayEl.classList.add('hidden');
+    if (textarea) {
+        textarea.classList.remove('hidden');
+        textarea.style.height = 'auto';
+        textarea.style.height = Math.max(50, textarea.scrollHeight) + 'px';
+        textarea.focus();
+        const len = textarea.value.length;
+        textarea.setSelectionRange(len, len);
+    }
+}
+
+/**
+ * الخروج من وضع تحرير النص والعودة لوضع التصميم (Design Mode)
+ * إخفاء حقل الكتابة وزر "تم" وإظهار النص داخل العنصر المقنن وأدوات التصميم
+ */
+function exitTextEditingMode() {
+    if (!createStoryState.isEditingText) return;
+    createStoryState.isEditingText = false;
+    if (typeof clearActiveTextPointers === 'function') {
+        clearActiveTextPointers();
+    }
+
+    const modal = document.getElementById('createStoryModal');
+    const textarea = document.getElementById('createStoryTextarea');
+    const displayEl = document.getElementById('storyTextDisplay');
+    const doneContainer = document.getElementById('storyTextDoneBtnContainer');
+
+    if (textarea) {
+        textarea.blur();
+        textarea.classList.add('hidden');
+    }
+    if (displayEl) {
+        displayEl.classList.remove('hidden');
+    }
+    if (doneContainer) {
+        doneContainer.classList.add('hidden');
+    }
+    modal?.classList.remove('story-creator-editing-mode');
+    modal?.classList.remove('story-creator-focus-mode');
+    updateLivePreview();
+}
+
 /**
  * تحديث منطقة المعاينة الحية (الخلفية + النص على الكانفاس) لحظياً مع أي تغيير
  */
 function updateLivePreview() {
     const previewArea = document.getElementById('storyPreviewArea');
     const previewText = document.getElementById('storyPreviewText');
+    const displayEl = document.getElementById('storyTextDisplay');
     const textarea = document.getElementById('createStoryTextarea');
     if (!previewArea || !textarea) return;
 
     previewArea.style.background = createStoryState.selectedBg.value;
 
-    const typedText = textarea.value.trim();
+    const rawText = textarea.value;
+    const typedText = rawText.trim();
     if (previewText) {
-        previewText.textContent = typedText.length > 0 ? typedText : 'اكتب نص هنا..';
+        previewText.textContent = typedText.length > 0 ? rawText : 'اكتب نص هنا..';
     }
 
-    // تعديل مقاس الخط ديناميكياً حسب طول النص لتجربة كانفاس كاملة شاشة احترافية
-    if (typedText.length > 70) {
-        textarea.style.fontSize = '1.2rem';
-    } else if (typedText.length > 35) {
-        textarea.style.fontSize = '1.5rem';
+    // تعديل مقاس الخط ديناميكياً حسب طول النص وعدد الأسطر لتجربة كانفاس متناسقة
+    const lineCount = rawText.split('\n').length;
+    let dynamicFontSize = '1.9rem';
+    if (typedText.length > 70 || lineCount >= 5) {
+        dynamicFontSize = '1.2rem';
+    } else if (typedText.length > 35 || lineCount >= 3) {
+        dynamicFontSize = '1.5rem';
     } else {
-        textarea.style.fontSize = '1.9rem';
+        dynamicFontSize = '1.9rem';
     }
 
-    // تمدد تلقائي دقيق لارتفاع الخانة ليتطابق مع النص الفعلي تماماً مع حد أدنى 54px لظهور placeholder
+    textarea.style.fontSize = dynamicFontSize;
+    if (displayEl) {
+        displayEl.textContent = typedText.length > 0 ? rawText : 'اكتب نص هنا..';
+        displayEl.style.fontSize = dynamicFontSize;
+        if (typedText.length === 0) {
+            displayEl.classList.add('text-white/40');
+            displayEl.classList.remove('text-white');
+        } else {
+            displayEl.classList.remove('text-white/40');
+            displayEl.classList.add('text-white');
+        }
+    }
+
+    // تمدد تلقائي دقيق لارتفاع الخانة ليتطابق مع النص الفعلي تماماً مع حد أدنى 50px لظهور placeholder
     textarea.style.height = 'auto';
-    const computedHeight = Math.max(54, textarea.scrollHeight);
+    const computedHeight = Math.max(50, textarea.scrollHeight);
     textarea.style.height = Math.min(320, computedHeight) + 'px';
 
     // مزامنة حالة التحديد في شريط ألوان الخلفية
@@ -2554,7 +2634,6 @@ function renderQuickInspirationChips() {
                 textarea.value = chip.text;
                 updateLivePreview();
                 updateCharCount();
-                textarea.focus();
                 // إغلاق درج الإلهام بعد الاختيار
                 container.classList.add('hidden');
                 document.getElementById('btnStoryToolInspiration')?.classList.remove('is-active');
@@ -2705,8 +2784,25 @@ function updateCharCount() {
  * إعادة تصفير فورم الإنشاء لحالته الافتراضية (بعد النشر أو الإلغاء)
  */
 function resetCreateStoryForm() {
+    createStoryState.isEditingText = false;
+    if (typeof clearActiveTextPointers === 'function') {
+        clearActiveTextPointers();
+    }
+    const modal = document.getElementById('createStoryModal');
+    modal?.classList.remove('story-creator-editing-mode');
+    modal?.classList.remove('story-creator-focus-mode');
+    document.getElementById('storyTextDoneBtnContainer')?.classList.add('hidden');
+
     const textarea = document.getElementById('createStoryTextarea');
-    if (textarea) textarea.value = '';
+    if (textarea) {
+        textarea.value = '';
+        textarea.classList.add('hidden');
+    }
+    const displayEl = document.getElementById('storyTextDisplay');
+    if (displayEl) {
+        displayEl.classList.remove('hidden');
+        displayEl.textContent = 'اكتب نص هنا..';
+    }
 
     createStoryState.selectedBg = STORY_BG_OPTIONS[0];
     createStoryState.selectedFont = STORY_FONT_OPTIONS[0];
@@ -2729,7 +2825,6 @@ function resetCreateStoryForm() {
     document.getElementById('quickInspirationChips')?.classList.add('hidden');
     document.getElementById('btnStoryToolBg')?.classList.remove('is-active');
     document.getElementById('btnStoryToolInspiration')?.classList.remove('is-active');
-    document.getElementById('createStoryModal')?.classList.remove('story-creator-focus-mode');
 
     const durationBadge = document.getElementById('storyDurationBadge');
     if (durationBadge) durationBadge.textContent = createStoryState.selectedDuration.label;
@@ -2770,13 +2865,7 @@ function openCreateStoryModal() {
     modal.classList.add('flex');
 
     pushModalState(hideCreateStoryModal);
-    setTimeout(() => {
-        const textarea = document.getElementById('createStoryTextarea');
-        if (textarea) {
-            updateLivePreview();
-            textarea.focus();
-        }
-    }, 120);
+    updateLivePreview();
 }
 
 /** الإخفاء الخام لمودال إنشاء الاستوري فقط - استخدم closeCreateStoryModal تحت */
@@ -3032,11 +3121,16 @@ function bindStickerDragAndResize() {
     const distanceBetween = (p1, p2) => Math.hypot(p1.x - p2.x, p1.y - p2.y);
 
     sticker.addEventListener('pointerdown', (event) => {
+        // لو كنا في وضع تحرير النص وضغط على الملصق، نخرج من وضع التحرير الأول
+        if (createStoryState.isEditingText) {
+            exitTextEditingMode();
+        }
+
         sticker.setPointerCapture(event.pointerId);
         activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
 
-        // إخفاء التركيز ولوحة المفاتيح فوراً عند بدء سحب الملصق لضمان سلاسة الحركة ورؤية الشاشة كاملة
-        document.getElementById('createStoryTextarea')?.blur();
+        // رفع مؤقت لطبقة الملصق إلى 40 أثناء السحب ليتحرك بسلاسة وحرية فوق أي عنصر
+        sticker.style.setProperty('--sticker-z', '40');
 
         const rect = area.getBoundingClientRect();
         if (rect.width > 0 && rect.height > 0) {
@@ -3096,10 +3190,21 @@ function bindStickerDragAndResize() {
         if (activePointers.size === 0) {
             dragOffsetX = 0;
             dragOffsetY = 0;
+            // استعادة ترتيب الطبقات المختار من المستخدم
+            updateLayerZIndexes();
         }
     }
     sticker.addEventListener('pointerup', releasePointer);
     sticker.addEventListener('pointercancel', releasePointer);
+    sticker.addEventListener('lostpointercapture', (event) => {
+        activePointers.delete(event.pointerId);
+        if (activePointers.size < 2) pinchStartDistance = null;
+        if (activePointers.size === 0) {
+            dragOffsetX = 0;
+            dragOffsetY = 0;
+            updateLayerZIndexes();
+        }
+    });
 
     // تكبير/تصغير ملصق الإنجاز بعجلة الماوس على الكمبيوتر
     sticker.addEventListener('wheel', (event) => {
@@ -3116,7 +3221,7 @@ function bindStickerDragAndResize() {
 
 /**
  * ربط سحب وتكبير وتصغير نص الستوري (#storyPreviewTextWrapper) في كانفاس المعاينة
- * مع فصل ذكي بين النقر السريع (للكتابة) والسحب (للتحريك)
+ * مع فصل ذكي تماماً بين النقر السريع (للكتابة) والسحب بإصبع واحد (للتحريك)
  */
 function bindTextDragAndResize() {
     const textWrapper = document.getElementById('storyPreviewTextWrapper');
@@ -3134,10 +3239,24 @@ function bindTextDragAndResize() {
     let pointerDownTime = 0;
     let isDragging = false;
 
+    // ربط الدالة العامة لتصفير المؤشرات
+    clearActiveTextPointers = () => {
+        activePointers.clear();
+        pinchStartDistance = null;
+        isDragging = false;
+        dragOffsetX = 0;
+        dragOffsetY = 0;
+    };
+
     const clampPercent = (value) => Math.min(94, Math.max(6, value));
     const distanceBetween = (p1, p2) => Math.hypot(p1.x - p2.x, p1.y - p2.y);
 
     textWrapper.addEventListener('pointerdown', (event) => {
+        // إذا كنا في وضع تحرير النص لا نقوم بأي سحب أو تكبير
+        if (createStoryState.isEditingText) {
+            return;
+        }
+
         textWrapper.setPointerCapture(event.pointerId);
         activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
 
@@ -3155,25 +3274,27 @@ function bindTextDragAndResize() {
         }
 
         if (activePointers.size === 2) {
-            textarea.blur();
             const [p1, p2] = [...activePointers.values()];
             pinchStartDistance = distanceBetween(p1, p2);
             pinchStartScale = createStoryState.textPosition.scale;
+        } else {
+            pinchStartDistance = null;
         }
+
+        event.preventDefault();
     });
 
     textWrapper.addEventListener('pointermove', (event) => {
+        if (createStoryState.isEditingText) return;
         if (!activePointers.has(event.pointerId)) return;
         activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
 
         const moveDist = Math.hypot(event.clientX - pointerDownStartX, event.clientY - pointerDownStartY);
         if (moveDist > 6) {
-            if (!isDragging) {
-                isDragging = true;
-                textarea.blur();
-            }
+            isDragging = true;
         }
 
+        // سحب بإصبع واحد فقط: تحريك موضع النص أفقياً ورأسياً
         if (activePointers.size === 1 && isDragging) {
             const rect = area.getBoundingClientRect();
             if (!rect.width || !rect.height) return;
@@ -3184,41 +3305,65 @@ function bindTextDragAndResize() {
             createStoryState.textPosition.x = Math.round(newX * 10) / 10;
             createStoryState.textPosition.y = Math.round(newY * 10) / 10;
             applyTextTransform();
-        } else if (activePointers.size === 2 && pinchStartDistance) {
+            event.preventDefault();
+        } else if (activePointers.size === 2 && pinchStartDistance && pinchStartDistance > 15) {
+            // تكبير/تصغير بإصبعين حقيقيين فقط مع عتبة أمان لا تقل عن 12 بكسل
             const [p1, p2] = [...activePointers.values()];
             const newDistance = distanceBetween(p1, p2);
-            const ratio = newDistance / pinchStartDistance;
-            const newScale = Math.min(
-                TEXT_MAX_SCALE,
-                Math.max(TEXT_MIN_SCALE, pinchStartScale * ratio)
-            );
-            createStoryState.textPosition.scale = Math.round(newScale * 100) / 100;
-            applyTextTransform();
+            if (Math.abs(newDistance - pinchStartDistance) > 12) {
+                const ratio = newDistance / pinchStartDistance;
+                const newScale = Math.min(
+                    TEXT_MAX_SCALE,
+                    Math.max(TEXT_MIN_SCALE, pinchStartScale * ratio)
+                );
+                createStoryState.textPosition.scale = Math.round(newScale * 100) / 100;
+                applyTextTransform();
+            }
+            event.preventDefault();
         }
     });
 
     function releasePointer(event) {
+        // حذف الإصبع دائماً بدون أي شروط لمنع تسريب المؤشرات نهائياً
         activePointers.delete(event.pointerId);
+
+        if (activePointers.size < 2) pinchStartDistance = null;
+        if (activePointers.size === 0) {
+            dragOffsetX = 0;
+            dragOffsetY = 0;
+        }
+
+        // إذا كنا بالفعل في وضع التحرير ننهي
+        if (createStoryState.isEditingText) {
+            isDragging = false;
+            return;
+        }
 
         const moveDist = Math.hypot(event.clientX - pointerDownStartX, event.clientY - pointerDownStartY);
         const duration = Date.now() - pointerDownTime;
 
-        if (moveDist < 6 && duration < 350) {
-            textarea.focus();
+        // نقرة سريعة على النص بدون سحب: الدخول في وضع تحرير النص
+        if (!isDragging && moveDist < 8 && duration < 350) {
+            enterTextEditingMode();
         }
 
+        isDragging = false;
+    }
+
+    textWrapper.addEventListener('pointerup', releasePointer);
+    textWrapper.addEventListener('pointercancel', releasePointer);
+    textWrapper.addEventListener('lostpointercapture', (event) => {
+        activePointers.delete(event.pointerId);
         if (activePointers.size < 2) pinchStartDistance = null;
         if (activePointers.size === 0) {
             dragOffsetX = 0;
             dragOffsetY = 0;
             isDragging = false;
         }
-    }
-
-    textWrapper.addEventListener('pointerup', releasePointer);
-    textWrapper.addEventListener('pointercancel', releasePointer);
+    });
 
     textWrapper.addEventListener('wheel', (event) => {
+        if (createStoryState.isEditingText) return;
         event.preventDefault();
         const factor = event.deltaY < 0 ? 1.05 : 0.95;
         const newScale = Math.min(
@@ -3246,29 +3391,74 @@ function bindCreateStoryModalEvents() {
     bindStickerDragAndResize();
     bindTextDragAndResize();
 
+    const doneBtn = document.getElementById('btnStoryTextDone');
+    if (doneBtn) {
+        doneBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            exitTextEditingMode();
+        });
+    }
+
     const previewArea = document.getElementById('storyPreviewArea');
     if (previewArea) {
+        let swipeStartX = 0;
+        let swipeStartY = 0;
+        let swipeStartTime = 0;
+        let isPotentialSwipe = false;
+
         previewArea.addEventListener('pointerdown', (e) => {
-            // لو الضغط على أدراج أو أزرار جانبية أو ملصق أو حاوية النص أو وحدة الحجم أو زر الإغلاق
+            // لو الضغط تم على النص أو الملصق أو الأدوات الجانبية أو الأزرار
             if (e.target.closest('#storyPreviewSticker') ||
                 e.target.closest('#storyPreviewTextWrapper') ||
                 e.target.closest('#storyTextSizeSliderContainer') ||
                 e.target.closest('#storySidebarTools') ||
                 e.target.closest('#storyBottomBar') ||
-                e.target.closest('#btnCloseCreateStory')) {
+                e.target.closest('#storyTextDoneBtnContainer') ||
+                e.target.closest('#btnCloseCreateStory') ||
+                e.target.closest('button')) {
+                isPotentialSwipe = false;
                 return;
             }
-            // إغلاق الأدراج المنبثقة
-            if (!e.target.closest('#storyBgPaletteBar') && !e.target.closest('#quickInspirationChips')) {
-                document.getElementById('storyBgPaletteBar')?.classList.add('hidden');
-                document.getElementById('quickInspirationChips')?.classList.add('hidden');
-                document.getElementById('btnStoryToolBg')?.classList.remove('is-active');
-                document.getElementById('btnStoryToolInspiration')?.classList.remove('is-active');
+
+            // لو احنا في وضع تحرير النص وضغطنا في أي مساحة فارغة، ننهي التحرير بهدوء ونعود لوضع التصميم
+            if (createStoryState.isEditingText) {
+                exitTextEditingMode();
+                isPotentialSwipe = false;
+                return;
             }
-            // النقر في أي مساحة بالكانفاس يركز على حقل الكتابة فوراً للبدء في الكتابة
-            if (e.target !== textarea) {
-                setTimeout(() => textarea?.focus(), 50);
+
+            // إغلاق الأدراج المنبثقة إذا كانت مفتوحة
+            document.getElementById('storyBgPaletteBar')?.classList.add('hidden');
+            document.getElementById('quickInspirationChips')?.classList.add('hidden');
+            document.getElementById('btnStoryToolBg')?.classList.remove('is-active');
+            document.getElementById('btnStoryToolInspiration')?.classList.remove('is-active');
+
+            swipeStartX = e.clientX;
+            swipeStartY = e.clientY;
+            swipeStartTime = Date.now();
+            isPotentialSwipe = true;
+        });
+
+        previewArea.addEventListener('pointerup', (e) => {
+            if (!isPotentialSwipe) return;
+            isPotentialSwipe = false;
+
+            const diffX = e.clientX - swipeStartX;
+            const diffY = e.clientY - swipeStartY;
+            const elapsed = Date.now() - swipeStartTime;
+
+            // إيماءة السحب الأفقي عبر الكانفاس لتبديل التدرج اللوني
+            if (Math.abs(diffX) > 40 && Math.abs(diffY) < 45 && elapsed < 450) {
+                if (diffX < 0) {
+                    cycleStoryBackground(1);
+                } else {
+                    cycleStoryBackground(-1);
+                }
             }
+        });
+
+        previewArea.addEventListener('pointercancel', () => {
+            isPotentialSwipe = false;
         });
     }
 
@@ -3278,16 +3468,11 @@ function bindCreateStoryModalEvents() {
             updateLivePreview();
         });
 
-        // تفعيل وضع التركيز التلقائي عند الكتابة لإخفاء الأدوات بسلاسة
-        textarea.addEventListener('focus', () => {
-            modal?.classList.add('story-creator-focus-mode');
-            document.getElementById('storyBgPaletteBar')?.classList.add('hidden');
-            document.getElementById('quickInspirationChips')?.classList.add('hidden');
-            document.getElementById('btnStoryToolBg')?.classList.remove('is-active');
-            document.getElementById('btnStoryToolInspiration')?.classList.remove('is-active');
-        });
+        // عند فقدان التركيز من حقل الكتابة (إخفاء الكيبورد بزر التراجع أو باللمس) نرجع لوضع التصميم
         textarea.addEventListener('blur', () => {
-            modal?.classList.remove('story-creator-focus-mode');
+            if (createStoryState.isEditingText) {
+                exitTextEditingMode();
+            }
         });
     }
 
@@ -3441,60 +3626,34 @@ function bindCreateStoryModalEvents() {
         scaleTrack.addEventListener('pointercancel', stopTrackDrag);
     }
 
-    // إيماءة السحب الأفقي عبر الكانفاس لتبديل التدرج اللوني (Swipe to change background)
-    if (previewArea) {
-        let swipeStartX = 0;
-        let swipeStartY = 0;
-        let swipeStartTime = 0;
-        let isPotentialSwipe = false;
-
-        previewArea.addEventListener('pointerdown', (e) => {
-            if (e.target.closest('#createStoryTextarea') ||
-                e.target.closest('#storyPreviewTextWrapper') ||
-                e.target.closest('#storyPreviewSticker') ||
-                e.target.closest('#storyTextSizeSliderContainer') ||
-                e.target.closest('button')) {
-                isPotentialSwipe = false;
-                return;
+    if (closeBtn) {
+        closeBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (createStoryState.isEditingText) {
+                exitTextEditingMode();
+            } else {
+                closeCreateStoryModal();
             }
-            if (document.activeElement === textarea) {
-                textarea.blur();
-            }
-            // إغلاق أي أدراج عائمة مفتوحة بمجرد لمس الكانفاس
-            document.getElementById('storyBgPaletteBar')?.classList.add('hidden');
-            document.getElementById('quickInspirationChips')?.classList.add('hidden');
-            document.getElementById('btnStoryToolBg')?.classList.remove('is-active');
-            document.getElementById('btnStoryToolInspiration')?.classList.remove('is-active');
-
-            swipeStartX = e.clientX;
-            swipeStartY = e.clientY;
-            swipeStartTime = Date.now();
-            isPotentialSwipe = true;
-        });
-
-        previewArea.addEventListener('pointerup', (e) => {
-            if (!isPotentialSwipe) return;
-            isPotentialSwipe = false;
-
-            const diffX = e.clientX - swipeStartX;
-            const diffY = e.clientY - swipeStartY;
-            const elapsed = Date.now() - swipeStartTime;
-
-            if (Math.abs(diffX) > 40 && Math.abs(diffY) < 45 && elapsed < 450) {
-                if (diffX < 0) {
-                    cycleStoryBackground(1);
-                } else {
-                    cycleStoryBackground(-1);
-                }
-            }
-        });
-
-        previewArea.addEventListener('pointercancel', () => {
-            isPotentialSwipe = false;
         });
     }
 
-    if (closeBtn) closeBtn.addEventListener('click', closeCreateStoryModal);
-    if (cancelBtn) cancelBtn.addEventListener('click', closeCreateStoryModal);
-    if (publishBtn) publishBtn.addEventListener('click', publishStory);
+    if (cancelBtn) {
+        cancelBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (createStoryState.isEditingText) {
+                exitTextEditingMode();
+            } else {
+                closeCreateStoryModal();
+            }
+        });
+    }
+
+    if (publishBtn) {
+        publishBtn.addEventListener('click', () => {
+            if (createStoryState.isEditingText) {
+                exitTextEditingMode();
+            }
+            publishStory();
+        });
+    }
 }

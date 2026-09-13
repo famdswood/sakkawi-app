@@ -235,30 +235,32 @@ export function getStepsCount() {
  * نفسه، مش حركة جديدة لسه متسجلتش).
  * @param {number} serverDailySteps - قيمة daily_steps من صف البروفايل
  */
-export function forceResetDailySteps() {
-    stepCount = 0;
-    lastNativeStepsSeen = 0;
+export function forceResetDailySteps(targetValue = 0) {
+    const safeTarget = Math.max(0, Number(targetValue) || 0);
+    stepCount = safeTarget;
+    lastNativeStepsSeen = safeTarget;
     resetNativeBaselineOnNextSync = true;
     if (window.Capacitor?.isNativePlatform?.()) {
         try {
-            window.Capacitor.Plugins.StepCounter?.resetDailySteps?.({ steps: 0 });
+            window.Capacitor.Plugins.StepCounter?.resetDailySteps?.({ steps: safeTarget });
         } catch (_) {}
     }
     persistDailyState();
 
     document.dispatchEvent(new CustomEvent('sensors:steps-resynced', {
-        detail: { steps: 0, date: currentDayKey, forced: true }
+        detail: { steps: safeTarget, date: currentDayKey, forced: true }
     }));
 }
 
-document.addEventListener('sensors:force-reset', () => {
-    forceResetDailySteps();
+document.addEventListener('sensors:force-reset', (e) => {
+    const target = e?.detail?.steps ?? 0;
+    forceResetDailySteps(target);
 });
 
 export function reconcileWithServerSteps(serverDailySteps, isForcedReset = false) {
     if (typeof serverDailySteps !== 'number' || !Number.isFinite(serverDailySteps)) return;
     if (isForcedReset) {
-        forceResetDailySteps();
+        forceResetDailySteps(serverDailySteps);
         return;
     }
     if (serverDailySteps <= stepCount) return; // العداد المحلي أصلاً مساوي أو أكبر - مفيش داعي نعمل حاجة

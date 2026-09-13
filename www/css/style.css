@@ -660,16 +660,23 @@ input,
     box-shadow: 0 0 16px rgba(245, 158, 11, 0.35) !important;
 }
 
-/* وضع التركيز أثناء الكتابة (Focus Mode) - إخفاء الأدوات بسلاسة */
+/* وضع تحرير النص (Editing Mode) ووضع التركيز - إخفاء الأدوات وزر النشر تماماً لمنع اللمس بالخطأ */
+.story-creator-editing-mode #storySidebarTools,
+.story-creator-editing-mode #storyBottomBar,
+.story-creator-editing-mode #storyBgPaletteBar,
+.story-creator-editing-mode #quickInspirationChips,
+.story-creator-editing-mode #storyTextSizeSliderContainer,
 .story-creator-focus-mode #storySidebarTools,
 .story-creator-focus-mode #storyBottomBar,
 .story-creator-focus-mode #storyBgPaletteBar,
 .story-creator-focus-mode #quickInspirationChips,
 .story-creator-focus-mode #storyTextSizeSliderContainer {
-    opacity: 0 !important;
+    display: none !important;
     pointer-events: none !important;
-    transform: translateY(14px) !important;
-    transition: opacity 0.22s cubic-bezier(0.16, 1, 0.3, 1), transform 0.22s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+.story-creator-editing-mode #storyTextDoneBtnContainer {
+    display: block !important;
 }
 
 /* (المرحلة 4-ب) #storyContent بيبقى الـ containing block الصريح لكبسولة
@@ -863,21 +870,36 @@ input,
     cursor: grabbing;
 }
 
-/* حاوية النص الحرة القابلة للسحب والتحجيم في صانع الستوري */
+/* حاوية النص الحرة القابلة للسحب والتحجيم في صانع الستوري (حجم مطابق للنص الفعلي) */
 .story-text-container {
     position: absolute;
     left: var(--text-x, 50%);
     top: var(--text-y, 50%);
     transform: translate(-50%, -50%) scale(var(--text-scale, 1));
     z-index: var(--text-z, 25);
-    width: 90%;
-    max-width: 420px;
+    width: max-content;
+    max-width: 86vw;
+    min-width: 140px;
     touch-action: none;
     cursor: grab;
+    border: 1.5px dashed transparent;
+    border-radius: 1.25rem;
+    padding: 4px 10px;
+    box-sizing: border-box;
+    transition: border-color 0.2s ease, background-color 0.2s ease;
 }
 
 .story-text-container:active {
     cursor: grabbing;
+}
+
+/* إبراز حدود النص فقط أثناء وضع التحرير لتوضيح موضع الكتابة */
+.story-creator-editing-mode .story-text-container {
+    border-color: rgba(245, 158, 11, 0.5);
+    background: rgba(0, 0, 0, 0.35);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    cursor: text;
 }
 
 /* حاوية النص في مشغل مشاهدة الستوري */
@@ -894,6 +916,15 @@ input,
     align-items: center;
     justify-content: center;
     pointer-events: none;
+}
+
+/* الحفاظ على فواصل الأسطر اليدوية وتنسيق النص كما رتبه المستخدم بالضبط */
+#storyTextDisplay,
+#createStoryTextarea,
+.story-viewer-text-wrapper p {
+    white-space: pre-wrap !important;
+    word-break: break-word !important;
+    overflow-wrap: break-word !important;
 }
 
 .story-stat-sticker-icon {

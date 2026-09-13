@@ -2488,7 +2488,7 @@
             </div>
 
             <!-- ملخص الحساب -->
-            <div class="grid grid-cols-4 gap-2 bg-lux-950 p-3 rounded-xl border border-lux-800/60 text-center">
+            <div class="grid grid-cols-2 sm:grid-cols-5 gap-2 bg-lux-950 p-3 rounded-xl border border-lux-800/60 text-center">
                 <div>
                     <div class="text-[10px] text-lux-400 font-bold">رصيد النقاط</div>
                     <div id="userModalPoints" class="text-sm font-mono font-bold text-gold-400">—</div>
@@ -2504,6 +2504,10 @@
                 <div>
                     <div class="text-[10px] text-lux-400 font-bold">حالة التوثيق</div>
                     <div id="userModalVerificationStatus" class="text-xs font-bold text-lux-300 truncate">—</div>
+                </div>
+                <div class="col-span-2 sm:col-span-1">
+                    <div class="text-[10px] text-lux-400 font-bold">حالة الحساب</div>
+                    <div id="userModalAccountStatus" class="text-xs font-bold text-emerald-400 truncate">نشط</div>
                 </div>
             </div>
 
@@ -2550,16 +2554,49 @@
             <p id="userModalStatus" class="admin-status-text" role="status" aria-live="polite"></p>
 
             <div class="space-y-4">
-                <!-- 1. تصفير خطوات اليوم (مكافحة الغش) -->
-                <div class="p-3.5 rounded-xl bg-lux-950/60 border border-lux-800/80 space-y-2">
-                    <div>
-                        <div class="text-xs font-bold text-lux-100">تصفير خطوات اليوم</div>
-                        <div class="text-[10px] text-lux-400">إلغاء خطوات اليوم وحذف نقاطها وسجل نشاطها المشبوه فوراً</div>
+                <!-- 1. التحكم في خطوات اليوم (تعويض أو خصم / تعيين رقم محدد) -->
+                <div class="p-3.5 rounded-xl bg-lux-950/60 border border-lux-800/80 space-y-3">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <div class="text-xs font-bold text-lux-100">التحكم في خطوات اليوم</div>
+                            <div class="text-[10px] text-lux-400">إضافة أو خصم أو تعيين الخطوات مع المزامنة التلقائية مع حساس الهاتف</div>
+                        </div>
+                        <div class="flex items-center gap-1 bg-lux-900 p-0.5 rounded-lg border border-lux-800">
+                            <button type="button" id="btnStepModeDelta" class="px-2 py-1 text-[10px] font-bold rounded-md bg-gold-500 text-lux-950 transition">
+                                فارق (+ / -)
+                            </button>
+                            <button type="button" id="btnStepModeSet" class="px-2 py-1 text-[10px] font-bold rounded-md text-lux-400 hover:text-lux-200 transition">
+                                تعيين رقم محدد
+                            </button>
+                        </div>
                     </div>
-                    <input type="text" id="inputResetStepsReason" class="w-full bg-lux-900 border border-lux-800 rounded-lg px-3 py-1.5 text-xs text-lux-100" placeholder="سبب التصفير (مثال: تلاعب أو هزاز)...">
-                    <button type="button" id="btnExecuteResetSteps" class="w-full py-1.5 rounded-lg bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-600/40 text-xs font-bold transition">
-                        تنفيذ تصفير خطوات اليوم
-                    </button>
+
+                    <div class="grid grid-cols-3 gap-2">
+                        <div>
+                            <label for="inputAdjustStepsValue" id="labelAdjustStepsValue" class="text-[9px] font-bold text-lux-400 block mb-1">فارق الخطوات:</label>
+                            <input type="number" id="inputAdjustStepsValue" class="w-full bg-lux-900 border border-lux-800 rounded-lg px-3 py-1.5 text-xs font-mono text-lux-100" placeholder="+5000 أو -2000">
+                        </div>
+                        <div class="col-span-2">
+                            <label for="inputAdjustStepsReason" class="text-[9px] font-bold text-lux-400 block mb-1">سبب التعديل (إلزامي):</label>
+                            <input type="text" id="inputAdjustStepsReason" class="w-full bg-lux-900 border border-lux-800 rounded-lg px-3 py-1.5 text-xs text-lux-100" placeholder="مثال: تعويض عطل فني في مستشعر الهاتف...">
+                        </div>
+                    </div>
+
+                    <div class="flex items-center justify-between pt-1">
+                        <label class="flex items-center gap-2 cursor-pointer select-none">
+                            <input type="checkbox" id="chkAdjustStepsPoints" checked class="rounded bg-lux-900 border-lux-700 text-gold-500 focus:ring-0">
+                            <span class="text-[11px] text-lux-300 font-medium">تحديث النقاط تلقائياً (نقطة لكل 200 خطوة)</span>
+                        </label>
+                    </div>
+
+                    <div class="grid grid-cols-3 gap-2 pt-1">
+                        <button type="button" id="btnExecuteAdjustSteps" class="col-span-2 py-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-600/40 text-xs font-bold transition flex items-center justify-center gap-1">
+                            تطبيق تعديل الخطوات
+                        </button>
+                        <button type="button" id="btnExecuteResetSteps" class="py-1.5 rounded-lg bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-600/40 text-[11px] font-bold transition flex items-center justify-center gap-1" title="تصفير خطوات اليوم فوراً لـ 0">
+                            تصفير سريع (0)
+                        </button>
+                    </div>
                 </div>
 
                 <!-- 2. استبعاد من دوري الأسبوع -->
@@ -2649,6 +2686,47 @@
                         </button>
                         <button type="button" id="btnExecuteRevokeVerification" class="py-1.5 rounded-lg bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-600/40 text-xs font-bold transition flex items-center justify-center gap-1">
                             سحب التوثيق
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 6. تجميد مؤقت أو حظر الحساب (Temporary Freeze / Ban) -->
+                <div class="p-3.5 rounded-xl bg-lux-950/60 border border-lux-800/80 space-y-2.5">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <div class="text-xs font-bold text-lux-100 flex items-center gap-1.5">
+                                <span>حظر وتجميد الحساب (مؤقت أو دائم)</span>
+                            </div>
+                            <div class="text-[10px] text-lux-400">إيقاف مؤقت للحساب لفترة تهدئة محددة أو حظر دائم مع فك الحظر التلقائي</div>
+                        </div>
+                        <span id="userModalFreezeBadgeTag" class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                            حساب نشط
+                        </span>
+                    </div>
+
+                    <div id="userModalFreezeDetails" class="hidden text-[11px] p-2.5 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-300 font-mono space-y-1">
+                    </div>
+
+                    <div class="space-y-1.5">
+                        <label for="selectFreezeDuration" class="text-[10px] font-bold text-lux-400 block">مدة التجميد:</label>
+                        <select id="selectFreezeDuration" class="w-full bg-lux-900 border border-lux-800 rounded-lg px-3 py-1.5 text-xs text-lux-100 focus:border-rose-500/50 outline-none">
+                            <option value="12">12 ساعة (نصف يوم)</option>
+                            <option value="24" selected>24 ساعة (يوم كامل)</option>
+                            <option value="48">48 ساعة (يومان)</option>
+                            <option value="72">72 ساعة (3 أيام)</option>
+                            <option value="168">أسبوع (7 أيام)</option>
+                            <option value="0">حظر دائم (بدون مدة انتهاء)</option>
+                        </select>
+                    </div>
+
+                    <input type="text" id="inputFreezeReason" class="w-full bg-lux-900 border border-lux-800 rounded-lg px-3 py-1.5 text-xs text-lux-100" placeholder="سبب التجميد أو الحظر (إلزامي)...">
+
+                    <div class="grid grid-cols-2 gap-2 pt-1">
+                        <button type="button" id="btnExecuteFreezeUser" class="py-1.5 rounded-lg bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-600/40 text-xs font-bold transition flex items-center justify-center gap-1">
+                            تطبيق التجميد / الحظر
+                        </button>
+                        <button type="button" id="btnExecuteUnfreezeUser" class="py-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-600/40 text-xs font-bold transition flex items-center justify-center gap-1">
+                            فك التجميد / الحظر
                         </button>
                     </div>
                 </div>

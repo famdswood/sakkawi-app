@@ -1457,7 +1457,7 @@ async function checkIfProfileExists(userId) {
 async function checkIfUserIsBlocked(userId) {
     const { data, error } = await supabaseClient
         .from('profiles')
-        .select('is_blocked, blocked_reason')
+        .select('is_blocked, blocked_reason, blocked_until')
         .eq('id', userId)
         .maybeSingle();
 
@@ -1468,7 +1468,22 @@ async function checkIfUserIsBlocked(userId) {
 
     if (!data) return null;
 
-    return { isBlocked: Boolean(data.is_blocked), reason: data.blocked_reason || null };
+    if (data.is_blocked) {
+        if (data.blocked_until) {
+            const blockedUntilDate = new Date(data.blocked_until);
+            if (!isNaN(blockedUntilDate.getTime()) && blockedUntilDate.getTime() <= Date.now()) {
+                return { isBlocked: false, reason: null, blockedUntil: null };
+            }
+            return {
+                isBlocked: true,
+                reason: data.blocked_reason || null,
+                blockedUntil: data.blocked_until,
+            };
+        }
+        return { isBlocked: true, reason: data.blocked_reason || null, blockedUntil: null };
+    }
+
+    return { isBlocked: false, reason: null, blockedUntil: null };
 }
 
 /**
@@ -1477,16 +1492,27 @@ async function checkIfUserIsBlocked(userId) {
  * scope: 'local' بنفس منطق forceSignOutDueToOtherSession تحت - عشان
  * منلغيش الـ refresh token على مستوى السيرفر لأي سبب غير مقصود هنا
  * @param {string|null} reason
+ * @param {string|null} blockedUntil
  */
-async function rejectSignedInSessionDueToBlock(reason) {
+async function rejectSignedInSessionDueToBlock(reason, blockedUntil = null) {
     isExplicitUserSignOut = true;
     try {
         window.localStorage.removeItem('sekkawy-cached-profile-user');
     } catch (_) {}
 
-    const message = reason
-        ? `حسابك موقوف مؤقتاً: ${reason}`
-        : 'حسابك موقوف مؤقتاً، تواصل مع الدعم الفني لمزيد من التفاصيل';
+    let message = '';
+    if (blockedUntil) {
+        let timeStr = '';
+        try {
+            const d = new Date(blockedUntil);
+            timeStr = ` حتى ${d.toLocaleString('ar-EG', { dateStyle: 'short', timeStyle: 'short' })}`;
+        } catch (_) {}
+        message = `حسابك مجمّد مؤقتاً${timeStr}${reason ? ': ' + reason : ''}`;
+    } else {
+        message = reason
+            ? `حسابك موقوف: ${reason}`
+            : 'حسابك موقوف، تواصل مع الدعم الفني لمزيد من التفاصيل';
+    }
 
     dispatchToast(message, 'error');
     await supabaseClient.auth.signOut({ scope: 'local' });
@@ -1815,11 +1841,26 @@ function bindProfileSessionRealtimeSubscription(userId) {
                     // بالفعل على الجهاز ده، بنطرده فوراً - قبل حتى فحص
                     // active_session_id تحت، عشان الحظر ياخد أولوية
                     if (payload.new && payload.new.is_blocked) {
+                        const blockedUntil = payload.new.blocked_until;
+                        if (blockedUntil) {
+                            const d = new Date(blockedUntil);
+                            if (!isNaN(d.getTime()) && d.getTime() <= Date.now()) {
+                                return;
+                            }
+                        }
                         const reason = payload.new.blocked_reason;
-                        dispatchToast(
-                            reason ? `حسابك موقوف مؤقتاً: ${reason}` : 'حسابك موقوف مؤقتاً، تواصل مع الدعم الفني',
-                            'error',
-                        );
+                        let msg = '';
+                        if (blockedUntil) {
+                            try {
+                                const d = new Date(blockedUntil);
+                                msg = `تم تجميد حسابك مؤقتاً حتى ${d.toLocaleString('ar-EG', { dateStyle: 'short', timeStyle: 'short' })}${reason ? ': ' + reason : ''}`;
+                            } catch (_) {
+                                msg = `تم تجميد حسابك مؤقتاً: ${reason || ''}`;
+                            }
+                        } else {
+                            msg = reason ? `حسابك موقوف: ${reason}` : 'حسابك موقوف، تواصل مع الدعم الفني';
+                        }
+                        dispatchToast(msg, 'error');
                         forceSignOutDueToOtherSession();
                         return;
                     }
@@ -1928,7 +1969,7 @@ async function finalizeSignedInSession(user, session, event) {
     // الدالة دي هي نقطة الالتقاء الوحيدة للحالتين
     const blockStatus = await checkIfUserIsBlocked(user.id);
     if (blockStatus && blockStatus.isBlocked) {
-        await rejectSignedInSessionDueToBlock(blockStatus.reason);
+        await rejectSignedInSessionDueToBlock(blockStatus.reason, blockStatus.blockedUntil);
         return;
     }
 

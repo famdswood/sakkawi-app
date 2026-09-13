@@ -784,13 +784,14 @@ export function checkAndApplyStepsReset(profileRow) {
     const lastAppliedReset = window.localStorage.getItem(`sakkawi_steps_reset_${currentAuthUser.id}`);
     if (resetAt === lastAppliedReset) return false;
 
-    console.log(`[profiles.js] تم رصد أمر تصفير خطوات جديد من الإدارة (${resetAt})، جاري تصفير العداد المحلي ومستشعر الجهاز فوراً.`);
+    const targetSteps = Math.max(0, Number(profileRow.daily_steps) || 0);
+    console.log(`[profiles.js] تم رصد أمر ضبط/تعديل خطوات من الإدارة (${resetAt})، جاري ضبط العداد ومستشعر الجهاز على: ${targetSteps}`);
     window.localStorage.setItem(`sakkawi_steps_reset_${currentAuthUser.id}`, String(resetAt));
     clearPendingSteps();
-    reconcileWithServerSteps(0, true);
+    reconcileWithServerSteps(targetSteps, true);
     if (window.Capacitor?.isNativePlatform?.()) {
         try {
-            window.Capacitor.Plugins.StepCounter?.resetDailySteps?.({ steps: 0 });
+            window.Capacitor.Plugins.StepCounter?.resetDailySteps?.({ steps: targetSteps });
         } catch (_) {}
     }
     return true;
