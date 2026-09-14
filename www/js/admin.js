@@ -3659,73 +3659,9 @@ const QUESTION_ACTION_LABELS = {
     question_manual_clear: 'ألغى تحديد يدوي وأرجع يوم للعشوائي',
 };
 
-/** @param {string} action أحد مفاتيح QUESTION_ACTION_LABELS
- *  @param {{id:string, question_text:string}} question */
-async function logQuestionAction(action, question) {
-    const excerpt = (question.question_text || '').length > 60
-        ? `${question.question_text.slice(0, 60)}…`
-        : (question.question_text || '');
-    const label = QUESTION_ACTION_LABELS[action] || action;
-    const summary = `${label}: "${excerpt}"`;
-
-    try {
-        const { error } = await supabaseClient.rpc('admin_log_question_action', {
-            p_action: action,
-            p_entity_id: question.id,
-            p_summary: summary,
-        });
-        if (error) {
-            // متوقع لو سكريبت phase-7 لسه ما اتشغّلش - العملية الأساسية
-            // (تعديل/حذف/تفعيل) خلصت بنجاح بالفعل قبل ما ندخل هنا أصلاً
-            console.error('[admin.js] فشل تسجيل العملية في سجل التعديلات (تأكد من تشغيل sql/phase-7-questions-stats-and-log.sql):', error);
-            return;
-        }
-        loadQuestionAuditLog(); // تحديث الودجت فورًا عشان العملية اللي حصلت دلوقتي تبان
-    } catch (err) {
-        console.error('[admin.js] استثناء غير متوقع أثناء تسجيل العملية:', err);
-    }
-}
-
-/** تحميل آخر 20 عملية من السجل وعرضهم في #questionAuditLogList -
- *  بتتنادى مرة عند تحميل التاب + بعد كل عملية تعديل/حذف/تفعيل ناجحة */
-async function loadQuestionAuditLog() {
-    const listEl = document.getElementById('questionAuditLogList');
-    const statusEl = document.getElementById('questionAuditLogStatus');
-    if (!listEl) return;
-
-    const { data, error } = await supabaseClient.rpc('admin_list_recent_question_actions', { p_limit: 20 });
-
-    if (error) {
-        // بنسيب الودجت فاضي بهدوء لو الـ RPC لسه مش موجودة، من غير
-        // ما نعرض رسالة خطأ مقلقة لأدمن مش هو اللي هيحل المشكلة دي
-        console.error('[admin.js] فشل تحميل سجل تعديلات الأسئلة:', error);
-        if (statusEl) setStatusText(statusEl, '', null);
-        return;
-    }
-
-    const rows = data || [];
-    listEl.innerHTML = '';
-
-    if (!rows.length) {
-        if (statusEl) setStatusText(statusEl, 'مفيش أي عملية تعديل أو حذف مسجّلة لسه.', 'empty');
-        return;
-    }
-    if (statusEl) setStatusText(statusEl, '', null);
-
-    rows.forEach((row) => {
-        const li = document.createElement('li');
-        li.className = 'admin-audit-log-item';
-        const who = row.admin_email ? escapeHtml(row.admin_email) : 'أدمن';
-        const when = row.created_at ? new Date(row.created_at).toLocaleString('ar-EG', {
-            day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
-        }) : '';
-        li.innerHTML = `
-            <span class="admin-audit-log-item-text">${who} — ${escapeHtml(row.summary || '')}</span>
-            <span class="admin-audit-log-item-time">${escapeHtml(when)}</span>
-        `;
-        listEl.appendChild(li);
-    });
-}
+/** تم إلغاء سجل تعديلات الأسئلة بناء على طلب الأدمن */
+async function logQuestionAction() {}
+async function loadQuestionAuditLog() {}
 
 /** (مجموعة 1) تبني قائمة الفئات (datalist اقتراحات الفورم + select
  *  فلترة القائمة) من الفئات الفعلية الموجودة في allLoadedQuestions -
@@ -4077,8 +4013,12 @@ function initAllQuestionsModal() {
     const closeBottomBtn = document.getElementById('closeAllQuestionsModalBtnBottom');
 
     const openModal = () => {
-        if (!modal) return;
+        if (!modal) {
+            console.error('[admin.js] allQuestionsModal not found!');
+            return;
+        }
         modal.classList.remove('hidden');
+        modal.classList.add('flex');
         const subtitle = document.getElementById('allQuestionsModalSubtitle');
         if (subtitle) {
             subtitle.textContent = `تصفح وفلترة جميع الأسئلة (${allLoadedQuestions.length} سؤال) مع الإحصائيات الكاملة`;
@@ -4087,7 +4027,10 @@ function initAllQuestionsModal() {
     };
 
     const closeModal = () => {
-        if (modal) modal.classList.add('hidden');
+        if (modal) {
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
     };
 
     if (openBtn) openBtn.addEventListener('click', openModal);
@@ -4120,9 +4063,13 @@ let currentParticipantFilter = 'all';
  */
 async function openQuestionParticipantsModal(question) {
     const modal = document.getElementById('questionParticipantsModal');
-    if (!modal) return;
+    if (!modal) {
+        console.error('[admin.js] questionParticipantsModal not found!');
+        return;
+    }
 
     modal.classList.remove('hidden');
+    modal.classList.add('flex');
 
     const categoryEl = document.getElementById('qpModalCategory');
     const difficultyEl = document.getElementById('qpModalDifficulty');
@@ -4135,10 +4082,14 @@ async function openQuestionParticipantsModal(question) {
     if (difficultyEl) difficultyEl.textContent = QUESTION_DIFFICULTY_LABELS[question.difficulty] || 'متوسط';
     if (questionTextEl) questionTextEl.textContent = question.question_text || '';
 
-    // معرفة نص الإجابة الصحيحة
+    // معرفة نص الإجابة الصحيحة بأمان
     let correctText = 'غير محددة';
-    if (Array.isArray(question.options)) {
-        const correctOpt = question.options.find((opt) => String(opt.id) === String(question.correct_option_id));
+    let options = question.options;
+    if (typeof options === 'string') {
+        try { options = JSON.parse(options); } catch (e) { options = []; }
+    }
+    if (Array.isArray(options)) {
+        const correctOpt = options.find((opt) => String(opt.id) === String(question.correct_option_id));
         if (correctOpt) correctText = correctOpt.text;
     }
     if (correctAnswerEl) correctAnswerEl.textContent = `الإجابة الصحيحة: ${correctText}`;
@@ -4286,7 +4237,10 @@ function initQuestionParticipantsModal() {
     const closeBottomBtn = document.getElementById('closeQpModalBtnBottom');
 
     const closeModal = () => {
-        if (modal) modal.classList.add('hidden');
+        if (modal) {
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
     };
 
     if (closeBtn) closeBtn.addEventListener('click', closeModal);
@@ -4727,7 +4681,6 @@ function initDailyQuestionsWidget() {
     updateQuestionLivePreview();
     loadDailyQuestionsList();
     loadTodayAndTomorrowPicks();
-    loadQuestionAuditLog(); // (مجموعة 2) سجل التعديلات - مستقل عن قائمة الأسئلة، بيتحمّل بالتوازي
     initQuestionsBulkToolsWidget(); // (مجموعة 3) استيراد/تصدير جماعي
     initManualScheduleWidget(); // (مجموعة 4) تحكم يدوي في سؤال يوم معين
     initAllQuestionsModal();
