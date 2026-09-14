@@ -148,7 +148,21 @@ let longPressTimer = null;
 /** تُستدعى مرة واحدة من app.js (initApp) زي باقي دوال initXxxUI */
 export function initSupportChat() {
     bindStaticListeners();
-    updateSupportFabVisibility();
+
+    // فحص فوري لحالة الجلسة الحالية لتسريع ظهور زر الأدمن بدون تأخير
+    if (typeof supabaseClient?.auth?.getSession === 'function') {
+        supabaseClient.auth.getSession().then(({ data }) => {
+            if (data?.session?.user) {
+                handleUserSignedIn(data.session.user);
+            } else {
+                updateSupportFabVisibility();
+            }
+        }).catch(() => {
+            updateSupportFabVisibility();
+        });
+    } else {
+        updateSupportFabVisibility();
+    }
 
     document.addEventListener('auth:login', (event) => {
         handleUserSignedIn(event.detail?.user);
@@ -250,12 +264,24 @@ export function getSupportAdminUserId() {
     return ADMIN_USER_ID;
 }
 
+function checkAdminState() {
+    return Boolean(
+        isCurrentUserAdmin ||
+        window.__currentUserIsAdmin ||
+        window.currentUserRole === 'admin' ||
+        (currentUser && (currentUser.id === ADMIN_USER_ID || currentUser.role === 'admin')) ||
+        (window.currentProfile && (window.currentProfile.role === 'admin' || window.currentProfile.id === ADMIN_USER_ID)) ||
+        (window.currentProfileRow && (window.currentProfileRow.role === 'admin' || window.currentProfileRow.id === ADMIN_USER_ID))
+    );
+}
+
 /** تحديث ظهور الزرار العائم لصندوق رسائل الدعم (حصري للأدمن فقط) */
 export function updateSupportFabVisibility() {
     const fabBtn = document.getElementById('supportInboxFab');
     if (!fabBtn) return;
-    const isSupportOff = window.__feature_support_chat_enabled === false;
-    fabBtn.classList.toggle('hidden', !isCurrentUserAdmin || isSupportOff);
+    const admin = checkAdminState();
+    // الزرار العائم خاص بصندوق رسائل الأدمن نفسه، ويجب أن يظهر له دائماً طالما حسابه هو الأدمن
+    fabBtn.classList.toggle('hidden', !admin);
 }
 window.updateSupportFabVisibility = updateSupportFabVisibility;
 
@@ -266,7 +292,11 @@ window.updateSupportFabVisibility = updateSupportFabVisibility;
 
 function handleUserSignedIn(user) {
     currentUser = user;
-    isCurrentUserAdmin = Boolean(user && user.id === ADMIN_USER_ID);
+    isCurrentUserAdmin = Boolean(
+        (user && (user.id === ADMIN_USER_ID || user.role === 'admin')) ||
+        window.__currentUserIsAdmin ||
+        (window.currentProfile && (window.currentProfile.role === 'admin' || window.currentProfile.id === ADMIN_USER_ID))
+    );
     window.__currentUserIsAdmin = isCurrentUserAdmin;
 
     updateSupportFabVisibility();

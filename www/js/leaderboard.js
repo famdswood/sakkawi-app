@@ -570,6 +570,7 @@ function bindLeaderboardRefreshButton() {
     refreshBtn.dataset.bound = 'true';
 
     refreshBtn.addEventListener('click', async () => {
+        if (window.__feature_leaderboard_enabled === false) return;
         if (isRefreshingLeaderboard) return;
         isRefreshingLeaderboard = true;
         if (refreshIcon) {
@@ -1529,6 +1530,11 @@ export function getLeaderboardCacheKey(periodKey) {
 }
 
 async function loadAndRenderPeriod(periodKey, options = {}) {
+    if (window.__feature_leaderboard_enabled === false) {
+        const lbContent = document.getElementById('leaderboardMainContent');
+        if (lbContent) lbContent.classList.add('hidden');
+        return;
+    }
     const config = CHAMPIONSHIP_PERIODS[periodKey];
     if (!config) return;
 
@@ -1674,6 +1680,7 @@ export function getActivePeriod() {
  * وترجع.
  */
 export function refreshActiveLeaderboard(options = {}) {
+    if (window.__feature_leaderboard_enabled === false) return;
     loadAndRenderPeriod(activePeriod, { isSilent: true, ...options });
 }
 

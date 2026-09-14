@@ -262,7 +262,17 @@ function applyFeatureFlags(settings) {
     const lbContent = document.getElementById('leaderboardMainContent');
     const lbTab = document.getElementById('tab-leaderboard');
     let lbNotice = document.getElementById('leaderboardDisabledNotice');
+    const lbSearchContainer = document.getElementById('leaderboardSearchContainer') || document.getElementById('leaderboardSearchInput')?.closest('.relative.flex.items-center');
+    const lbSearchResults = document.getElementById('leaderboardSearchResults');
+    const lbSearchInput = document.getElementById('leaderboardSearchInput');
+
     if (settings.feature_leaderboard_enabled === false) {
+        if (lbSearchContainer) lbSearchContainer.classList.add('hidden');
+        if (lbSearchInput) lbSearchInput.value = '';
+        if (lbSearchResults) {
+            lbSearchResults.classList.add('hidden');
+            lbSearchResults.innerHTML = '';
+        }
         if (lbContent) lbContent.classList.add('hidden');
         if (!lbNotice && lbTab) {
             lbNotice = document.createElement('div');
@@ -279,6 +289,7 @@ function applyFeatureFlags(settings) {
             lbNotice.classList.remove('hidden');
         }
     } else {
+        if (lbSearchContainer) lbSearchContainer.classList.remove('hidden');
         if (lbContent) lbContent.classList.remove('hidden');
         if (lbNotice) lbNotice.classList.add('hidden');
     }
@@ -291,12 +302,14 @@ function applyFeatureFlags(settings) {
     window.__feature_support_chat_enabled = !isSupportOff;
 
     if (supportFab) {
-        if (isSupportOff) {
-            supportFab.classList.add('hidden');
-        } else if (typeof window.updateSupportFabVisibility === 'function') {
+        if (typeof window.updateSupportFabVisibility === 'function') {
             window.updateSupportFabVisibility();
         } else {
-            const isViewerAdmin = Boolean(window.__currentUserIsAdmin);
+            const isViewerAdmin = Boolean(
+                window.__currentUserIsAdmin ||
+                window.currentUserRole === 'admin' ||
+                (window.currentProfile && (window.currentProfile.role === 'admin' || window.currentProfile.id === '1d8feb21-c37f-4b27-a028-a668078dbbb5'))
+            );
             supportFab.classList.toggle('hidden', !isViewerAdmin);
         }
     }

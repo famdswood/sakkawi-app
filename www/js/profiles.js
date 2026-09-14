@@ -2977,6 +2977,7 @@ async function notifyLeaderboardPassIfNeeded(metric, oldValue, newValue) {
  * @returns {Promise<Array<object>>}
  */
 async function searchLeaderboardUsers(query, metric) {
+    if (window.__feature_leaderboard_enabled === false) return [];
     const trimmedQuery = (query || '').trim();
     if (!trimmedQuery) return [];
 
@@ -3064,11 +3065,28 @@ function bindLeaderboardSearchInput() {
     let debounceTimer = null;
     input.addEventListener('input', () => {
         clearTimeout(debounceTimer);
+
+        // إذا كانت لوحة الصدارة مغلقة إدارياً، نمنع أي بحث أو إظهار للمحتوى نهائياً
+        if (window.__feature_leaderboard_enabled === false) {
+            input.value = '';
+            if (mainContent) mainContent.classList.add('hidden');
+            if (resultsContainer) {
+                resultsContainer.classList.add('hidden');
+                resultsContainer.innerHTML = '';
+            }
+            return;
+        }
+
         const query = input.value.trim();
 
         if (!query) {
-            if (mainContent) mainContent.classList.remove('hidden');
-            if (resultsContainer) resultsContainer.classList.add('hidden');
+            if (mainContent && window.__feature_leaderboard_enabled !== false) {
+                mainContent.classList.remove('hidden');
+            }
+            if (resultsContainer) {
+                resultsContainer.classList.add('hidden');
+                resultsContainer.innerHTML = '';
+            }
             return;
         }
 
@@ -5027,6 +5045,15 @@ async function loadAndRenderRealProfile(user) {
             profile.points = (profile.points ?? 0) + pendingStepsPointsDelta;
         }
         currentProfileRow = profile;
+        window.currentProfile = profile;
+        window.currentProfileRow = profile;
+        if (profile?.role === 'admin' || profile?.id === '1d8feb21-c37f-4b27-a028-a668078dbbb5' || user?.id === '1d8feb21-c37f-4b27-a028-a668078dbbb5') {
+            window.__currentUserIsAdmin = true;
+            window.currentUserRole = 'admin';
+            if (typeof window.updateSupportFabVisibility === 'function') {
+                window.updateSupportFabVisibility();
+            }
+        }
 
         renderProfileHeader(profile, user);
         updateProfileStats({
