@@ -44,10 +44,10 @@ jobs:
           mkdir -p "$GITHUB_WORKSPACE/release-apks"
           npx cap sync android
           cd android
-          ./gradlew assembleDebug --stacktrace
+          ./gradlew assembleRelease --stacktrace
           cd "$GITHUB_WORKSPACE"
-          cp android/app/build/outputs/apk/debug/*.apk release-apks/Sekkawy.apk
-          rm -rf android/app/build/outputs/apk/debug/*
+          cp android/app/build/outputs/apk/release/*.apk release-apks/Sekkawy.apk
+          rm -rf android/app/build/outputs/apk/release/*
           ls -lh release-apks/
 
       # -------------------------------------------------------------
@@ -58,9 +58,9 @@ jobs:
           node scripts/prepare-admin-build.js
           npx cap sync android
           cd android
-          ./gradlew assembleDebug --stacktrace
+          ./gradlew assembleRelease --stacktrace
           cd "$GITHUB_WORKSPACE"
-          cp android/app/build/outputs/apk/debug/*.apk release-apks/Sekkawy-Admin.apk
+          cp android/app/build/outputs/apk/release/*.apk release-apks/Sekkawy-Admin.apk
           node scripts/restore-main-build.js
           ls -lh release-apks/
 
