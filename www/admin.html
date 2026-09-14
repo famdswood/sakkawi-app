@@ -2251,10 +2251,18 @@
                             </select>
                             <select id="questionsFilterStatus" class="admin-text-input w-full">
                                 <option value="">الكل</option>
+                                <option value="unused">لم تُعرض بعد</option>
+                                <option value="used">عُرضت سابقاً</option>
                                 <option value="active">مفعّل بس</option>
                                 <option value="inactive">غير مفعّل بس</option>
                             </select>
                         </div>
+                    </div>
+
+                    <!-- شريط إحصاء نتائج الفلترة السريعة في الواجهة الرئيسية -->
+                    <div id="questionsFilteredCountBar" class="flex items-center justify-between text-xs text-lux-400 px-1 py-1">
+                        <span>النتائج: <strong id="questionsFilteredCount" class="text-gold-400 font-mono font-bold">0</strong> من أصل <strong id="questionsTotalCount" class="text-lux-200 font-mono font-bold">0</strong> سؤال</span>
+                        <span id="questionsActiveFilterSummary" class="text-[11px] text-lux-500 font-medium"></span>
                     </div>
 
                     <p id="questionsListStatus" class="admin-status-text" role="status" aria-live="polite"></p>
@@ -3672,9 +3680,24 @@
                     </select>
                     <select id="modalQuestionsFilterStatus" class="admin-text-input w-full">
                         <option value="">الكل</option>
+                        <option value="unused">لم تُعرض بعد</option>
+                        <option value="used">عُرضت سابقاً</option>
                         <option value="active">مفعّل بس</option>
                         <option value="inactive">غير مفعّل بس</option>
                     </select>
+                </div>
+            </div>
+
+            <!-- شريط عرض نتائج الفلترة وعدد الأسئلة في التصنيف/المستوى المختار -->
+            <div id="modalQuestionsCountBar" class="flex items-center justify-between gap-2 p-2.5 px-3.5 bg-lux-950/70 border border-lux-800 rounded-2xl text-xs flex-wrap">
+                <div class="flex items-center gap-2 flex-wrap">
+                    <span class="text-lux-400">النتائج المعروضة:</span>
+                    <span id="modalQuestionsFilteredCount" class="font-black text-gold-400 font-mono text-sm">0</span>
+                    <span class="text-lux-400">سؤال</span>
+                    <span id="modalQuestionsFilterBadge" class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-lux-800 text-lux-300 border border-lux-700 hidden"></span>
+                </div>
+                <div class="text-[11px] text-lux-400 font-medium" id="modalQuestionsTotalNote">
+                    من إجمالي 0 سؤال في البنك
                 </div>
             </div>
 

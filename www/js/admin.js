@@ -3663,10 +3663,42 @@ const QUESTION_ACTION_LABELS = {
 async function logQuestionAction() {}
 async function loadQuestionAuditLog() {}
 
-/** (مجموعة 1) تبني قائمة الفئات (datalist اقتراحات الفورم + select
- *  فلترة القائمة) من الفئات الفعلية الموجودة في allLoadedQuestions -
- *  بتتحدث كل ما القائمة تتحمّل من جديد، فأي فئة جديدة تتضاف من فورم
- *  الإنشاء تبان في الفلتر تلقائيًا من غير أي تعديل يدوي في الكود */
+/** استخراج وتنسيق حالة عرض السؤال (عُرض يوم كذا أم لم يُعرض بعد) */
+function getQuestionDisplayStatus(question) {
+    if (question.last_used_date) {
+        const d = new Date(question.last_used_date);
+        let dateStr = '';
+        if (!isNaN(d.getTime())) {
+            dateStr = d.toLocaleDateString('ar-EG', {
+                timeZone: 'Africa/Cairo',
+                day: 'numeric',
+                month: 'long',
+                year: 'numeric',
+            });
+        } else {
+            dateStr = String(question.last_used_date).slice(0, 10);
+        }
+        return {
+            isDisplayed: true,
+            label: `عُرض يوم ${dateStr}`,
+            shortLabel: dateStr,
+        };
+    } else if (question.used_count && question.used_count > 0) {
+        return {
+            isDisplayed: true,
+            label: `عُرض سابقاً (${question.used_count} مرة)`,
+            shortLabel: 'عُرض سابقاً',
+        };
+    }
+    return {
+        isDisplayed: false,
+        label: 'لم يُعرض بعد',
+        shortLabel: 'لم يُعرض بعد',
+    };
+}
+
+/** (مجموعة 1) تبني قائمة الفئات مع عدد الأسئلة في كل فئة وكل مستوى صعوبة وحالة عرض
+ *  وتحديث عناصر الاختيار في الواجهة الرئيسية والمودال ديناميكياً */
 function populateQuestionCategoryFilterOptions() {
     const categories = Array.from(new Set(
         allLoadedQuestions.map((q) => q.category).filter(Boolean),
@@ -3677,21 +3709,85 @@ function populateQuestionCategoryFilterOptions() {
         datalistEl.innerHTML = categories.map((cat) => `<option value="${escapeHtml(cat)}"></option>`).join('');
     }
 
+    // إحصاء عدد الأسئلة في كل تصنيف
+    const categoryCounts = {};
+    allLoadedQuestions.forEach((q) => {
+        if (q.category) {
+            categoryCounts[q.category] = (categoryCounts[q.category] || 0) + 1;
+        }
+    });
+
+    const categoryOptionsHtml = `<option value="">كل الفئات (${allLoadedQuestions.length})</option>`
+        + categories.map((cat) => `<option value="${escapeHtml(cat)}">${escapeHtml(cat)} (${categoryCounts[cat] || 0})</option>`).join('');
+
     const filterSelect = document.getElementById('questionsFilterCategory');
     if (filterSelect) {
         const currentValue = filterSelect.value;
-        filterSelect.innerHTML = '<option value="">كل الفئات</option>'
-            + categories.map((cat) => `<option value="${escapeHtml(cat)}">${escapeHtml(cat)}</option>`).join('');
-        // نحافظ على الفلتر المختار قبل التحديث لو لسه موجود ضمن الفئات الجديدة
-        if (categories.includes(currentValue)) filterSelect.value = currentValue;
+        filterSelect.innerHTML = categoryOptionsHtml;
+        if (categories.includes(currentValue) || currentValue === '') filterSelect.value = currentValue;
     }
 
     const modalFilterSelect = document.getElementById('modalQuestionsFilterCategory');
     if (modalFilterSelect) {
         const currentValue = modalFilterSelect.value;
-        modalFilterSelect.innerHTML = '<option value="">كل الفئات</option>'
-            + categories.map((cat) => `<option value="${escapeHtml(cat)}">${escapeHtml(cat)}</option>`).join('');
-        if (categories.includes(currentValue)) modalFilterSelect.value = currentValue;
+        modalFilterSelect.innerHTML = categoryOptionsHtml;
+        if (categories.includes(currentValue) || currentValue === '') modalFilterSelect.value = currentValue;
+    }
+
+    // إحصاء عدد الأسئلة في كل مستوى صعوبة
+    const difficultyCounts = {
+        easy: allLoadedQuestions.filter((q) => q.difficulty === 'easy').length,
+        medium: allLoadedQuestions.filter((q) => q.difficulty === 'medium' || !q.difficulty).length,
+        hard: allLoadedQuestions.filter((q) => q.difficulty === 'hard').length,
+    };
+
+    const difficultyOptionsHtml = `
+        <option value="">كل الصعوبات (${allLoadedQuestions.length})</option>
+        <option value="easy">سهل (${difficultyCounts.easy})</option>
+        <option value="medium">متوسط (${difficultyCounts.medium})</option>
+        <option value="hard">صعب (${difficultyCounts.hard})</option>
+    `;
+
+    const diffSelect = document.getElementById('questionsFilterDifficulty');
+    if (diffSelect) {
+        const curVal = diffSelect.value;
+        diffSelect.innerHTML = difficultyOptionsHtml;
+        if (curVal) diffSelect.value = curVal;
+    }
+
+    const modalDiffSelect = document.getElementById('modalQuestionsFilterDifficulty');
+    if (modalDiffSelect) {
+        const curVal = modalDiffSelect.value;
+        modalDiffSelect.innerHTML = difficultyOptionsHtml;
+        if (curVal) modalDiffSelect.value = curVal;
+    }
+
+    // إحصاء عدد الأسئلة حسب حالة العرض
+    const unusedCount = allLoadedQuestions.filter((q) => !q.last_used_date && (!q.used_count || q.used_count === 0)).length;
+    const usedCount = allLoadedQuestions.filter((q) => q.last_used_date || (q.used_count && q.used_count > 0)).length;
+    const activeCount = allLoadedQuestions.filter((q) => q.is_active).length;
+    const inactiveCount = allLoadedQuestions.filter((q) => !q.is_active).length;
+
+    const statusOptionsHtml = `
+        <option value="">الكل (${allLoadedQuestions.length})</option>
+        <option value="unused">لم تُعرض بعد (${unusedCount})</option>
+        <option value="used">عُرضت سابقاً (${usedCount})</option>
+        <option value="active">مفعّل بس (${activeCount})</option>
+        <option value="inactive">غير مفعّل بس (${inactiveCount})</option>
+    `;
+
+    const statusSelect = document.getElementById('questionsFilterStatus');
+    if (statusSelect) {
+        const curVal = statusSelect.value;
+        statusSelect.innerHTML = statusOptionsHtml;
+        if (curVal) statusSelect.value = curVal;
+    }
+
+    const modalStatusSelect = document.getElementById('modalQuestionsFilterStatus');
+    if (modalStatusSelect) {
+        const curVal = modalStatusSelect.value;
+        modalStatusSelect.innerHTML = statusOptionsHtml;
+        if (curVal) modalStatusSelect.value = curVal;
     }
 }
 
@@ -3715,10 +3811,28 @@ function applyQuestionsListFilters() {
         if (difficultyValue && q.difficulty !== difficultyValue) return false;
         if (statusValue === 'active' && !q.is_active) return false;
         if (statusValue === 'inactive' && q.is_active) return false;
+        if (statusValue === 'unused' && (q.last_used_date || (q.used_count && q.used_count > 0))) return false;
+        if (statusValue === 'used' && !q.last_used_date && (!q.used_count || q.used_count === 0)) return false;
         return true;
     });
 
     renderQuestionsList(filtered);
+
+    // تحديث شريط نتائج الفلترة بالواجهة الرئيسية
+    const filteredCountEl = document.getElementById('questionsFilteredCount');
+    const totalCountEl = document.getElementById('questionsTotalCount');
+    const filterSummaryEl = document.getElementById('questionsActiveFilterSummary');
+
+    if (filteredCountEl) filteredCountEl.textContent = filtered.length.toLocaleString('ar-EG');
+    if (totalCountEl) totalCountEl.textContent = allLoadedQuestions.length.toLocaleString('ar-EG');
+    if (filterSummaryEl) {
+        const activeFilters = [];
+        if (categoryValue) activeFilters.push(categoryValue);
+        if (difficultyValue) activeFilters.push(QUESTION_DIFFICULTY_LABELS[difficultyValue] || difficultyValue);
+        if (statusValue === 'unused') activeFilters.push('لم تُعرض');
+        if (statusValue === 'used') activeFilters.push('عُرضت سابقاً');
+        filterSummaryEl.textContent = activeFilters.length ? `(${activeFilters.join(' · ')})` : '';
+    }
 
     const statusEl = document.getElementById('questionsListStatus');
     if (!allLoadedQuestions.length) {
@@ -3785,15 +3899,15 @@ function renderQuestionsList(questions) {
             : question.question_text;
 
         const difficultyLabel = QUESTION_DIFFICULTY_LABELS[question.difficulty] || 'متوسط';
-        const usedCountText = (question.used_count && question.used_count > 0)
-            ? `عُرض في ${question.used_count} يوم كـ سؤال يومي`
-            : 'لم يُعرض بعد كـ سؤال يومي';
+        const displayStatus = getQuestionDisplayStatus(question);
+        const displayStatusBadge = displayStatus.isDisplayed
+            ? `<span class="inline-block px-2 py-0.5 rounded text-[11px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30 shrink-0">${escapeHtml(displayStatus.label)}</span>`
+            : `<span class="inline-block px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 shrink-0">لم يُعرض بعد</span>`;
 
         const metaParts = [
             question.is_active ? 'مفعّل' : 'غير مفعّل',
             question.category ? escapeHtml(question.category) : null,
             difficultyLabel,
-            usedCountText,
             question.scheduled_for_date ? `مجدول ليوم: ${question.scheduled_for_date.slice(0, 10)}` : null,
         ].filter(Boolean);
 
@@ -3804,6 +3918,7 @@ function renderQuestionsList(questions) {
                 <div class="admin-user-name flex items-center gap-1.5 flex-wrap">
                     ${questionNumber ? `<span class="inline-block bg-lux-800 text-gold-400 text-xs px-2 py-0.5 rounded-md font-mono font-bold">#${questionNumber}</span>` : ''}
                     <span>${escapeHtml(excerpt)}</span>
+                    ${displayStatusBadge}
                 </div>
                 <div class="admin-user-username mt-1">${metaParts.join(' · ')}</div>
             </div>
@@ -3914,10 +4029,39 @@ function applyModalQuestionsFilters() {
         if (difficultyValue && q.difficulty !== difficultyValue) return false;
         if (statusValue === 'active' && !q.is_active) return false;
         if (statusValue === 'inactive' && q.is_active) return false;
+        if (statusValue === 'unused' && (q.last_used_date || (q.used_count && q.used_count > 0))) return false;
+        if (statusValue === 'used' && !q.last_used_date && (!q.used_count || q.used_count === 0)) return false;
         return true;
     });
 
     renderModalQuestionsList(filtered);
+
+    // تحديث شريط عرض النتائج وعدد الأسئلة في التصنيف أو المستوى
+    const countEl = document.getElementById('modalQuestionsFilteredCount');
+    const badgeEl = document.getElementById('modalQuestionsFilterBadge');
+    const totalNoteEl = document.getElementById('modalQuestionsTotalNote');
+
+    if (countEl) countEl.textContent = filtered.length.toLocaleString('ar-EG');
+    if (totalNoteEl) totalNoteEl.textContent = `من إجمالي ${allLoadedQuestions.length.toLocaleString('ar-EG')} سؤال في البنك`;
+
+    if (badgeEl) {
+        const activeFilters = [];
+        if (categoryValue) activeFilters.push(`تصنيف: ${categoryValue}`);
+        if (difficultyValue) activeFilters.push(`مستوى: ${QUESTION_DIFFICULTY_LABELS[difficultyValue] || difficultyValue}`);
+        if (statusValue === 'unused') activeFilters.push('لم تُعرض بعد');
+        if (statusValue === 'used') activeFilters.push('عُرضت سابقاً');
+        if (statusValue === 'active') activeFilters.push('مفعّل بس');
+        if (statusValue === 'inactive') activeFilters.push('غير مفعّل بس');
+        if (searchQuery) activeFilters.push(`بحث: "${searchQuery}"`);
+
+        if (activeFilters.length > 0) {
+            badgeEl.textContent = activeFilters.join(' · ');
+            badgeEl.classList.remove('hidden');
+        } else {
+            badgeEl.textContent = '';
+            badgeEl.classList.add('hidden');
+        }
+    }
 
     const statusEl = document.getElementById('modalQuestionsListStatus');
     if (!allLoadedQuestions.length) {
@@ -3949,15 +4093,15 @@ function renderModalQuestionsList(questions) {
             : question.question_text;
 
         const difficultyLabel = QUESTION_DIFFICULTY_LABELS[question.difficulty] || 'متوسط';
-        const usedCountText = (question.used_count && question.used_count > 0)
-            ? `عُرض في ${question.used_count} يوم كـ سؤال يومي`
-            : 'لم يُعرض بعد كـ سؤال يومي';
+        const displayStatus = getQuestionDisplayStatus(question);
+        const displayStatusBadge = displayStatus.isDisplayed
+            ? `<span class="inline-block px-2 py-0.5 rounded text-[11px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30 shrink-0">${escapeHtml(displayStatus.label)}</span>`
+            : `<span class="inline-block px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 shrink-0">لم يُعرض بعد</span>`;
 
         const metaParts = [
             question.is_active ? 'مفعّل' : 'غير مفعّل',
             question.category ? escapeHtml(question.category) : null,
             difficultyLabel,
-            usedCountText,
             question.scheduled_for_date ? `مجدول ليوم: ${question.scheduled_for_date.slice(0, 10)}` : null,
         ].filter(Boolean);
 
@@ -3968,6 +4112,7 @@ function renderModalQuestionsList(questions) {
                 <div class="admin-user-name flex items-center gap-1.5 flex-wrap">
                     ${questionNumber ? `<span class="inline-block bg-lux-800 text-gold-400 text-xs px-2 py-0.5 rounded-md font-mono font-bold">#${questionNumber}</span>` : ''}
                     <span>${escapeHtml(excerpt)}</span>
+                    ${displayStatusBadge}
                 </div>
                 <div class="admin-user-username mt-1">${metaParts.join(' · ')}</div>
             </div>
