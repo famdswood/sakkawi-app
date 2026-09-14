@@ -1137,12 +1137,14 @@ body.onb-scroll-lock #appShell {
    بس من غير أي شريط ظاهر خالص - Firefox عن طريق scrollbar-width:none،
    ومتصفحات Chrome/Safari/Edge عن طريق ::-webkit-scrollbar{display:none}) */
 .onb-auth-form-slot {
-    scrollbar-width: none;
-    -ms-overflow-style: none;
+    scrollbar-width: none !important;
+    -ms-overflow-style: none !important;
 }
 
 .onb-auth-form-slot::-webkit-scrollbar {
-    display: none;
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
 }
 
 /* ------------------------------------------------------------------

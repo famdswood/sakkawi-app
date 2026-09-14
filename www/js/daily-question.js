@@ -1059,6 +1059,16 @@ function resetOptionsUI(slot) {
     });
 }
 
+/** نص التوست الموحّد اللي بيظهر للزائر لو حاول يبدأ السؤال اليومي -
+ *  نفس نص GUEST_LOCKED_TOAST_MESSAGE في geofence.js بالظبط، عشان تفضل
+ *  رسالة "محتاج حساب" موحّدة في كل التطبيق مهما كان مصدرها */
+const DQ_GUEST_LOCKED_TOAST_MESSAGE =
+    'الميزة دي محتاجة حساب - سجّل حساب أو سجّل دخول عشان تقدر تستخدمها.';
+
+/** نص التوست عند محاولة فتح السؤال اليومي بدون اتصال بالإنترنت */
+const DQ_OFFLINE_TOAST_MESSAGE =
+    'لا يوجد اتصال بالإنترنت - الأسئلة اليومية تتطلب اتصالاً نشطاً بالإنترنت للمشاركة.';
+
 /**
  * الانتقال من حالة "مغلق" إلى حالة "نشط" لسؤال Slot معيّن: بناء
  * محتوى السؤال + تصفير الشكل + بدء العدّاد بتاع الكارت ده بس. بتتنادى
@@ -1066,6 +1076,13 @@ function resetOptionsUI(slot) {
  * @param {1|2} slot
  */
 function activateDailyQuestion(slot) {
+    if (!navigator.onLine) {
+        document.dispatchEvent(new CustomEvent('app:toast', {
+            detail: { message: DQ_OFFLINE_TOAST_MESSAGE },
+        }));
+        return;
+    }
+
     const { lockedState, activeState } = getDailyQuestionElements(slot);
     if (!lockedState || !activeState) return;
 
@@ -1077,12 +1094,6 @@ function activateDailyQuestion(slot) {
 
     startTimer(slot);
 }
-
-/** نص التوست الموحّد اللي بيظهر للزائر لو حاول يبدأ السؤال اليومي -
- *  نفس نص GUEST_LOCKED_TOAST_MESSAGE في geofence.js بالظبط، عشان تفضل
- *  رسالة "محتاج حساب" موحّدة في كل التطبيق مهما كان مصدرها */
-const DQ_GUEST_LOCKED_TOAST_MESSAGE =
-    'الميزة دي محتاجة حساب - سجّل حساب أو سجّل دخول عشان تقدر تستخدمها.';
 
 /** التعامل مع ضغط زرار البدء بتاع كارت Slot معيّن - بيفتح مودال
  *  التحذير قبل ما يبدأ السؤال ده فعلياً
@@ -1108,6 +1119,14 @@ function handleStartButtonClick(slot) {
         return;
     }
 
+    // شرط الإنترنت: منع فتح السؤال اليومي نهائياً في حال عدم توفر اتصال نشط بالإنترنت
+    if (!navigator.onLine) {
+        document.dispatchEvent(new CustomEvent('app:toast', {
+            detail: { message: DQ_OFFLINE_TOAST_MESSAGE },
+        }));
+        return;
+    }
+
     pendingSlot = slot;
     openDqWarningModal();
 }
@@ -1119,6 +1138,15 @@ function handleWarningConfirmClick() {
     const slotToActivate = pendingSlot;
     closeDqWarningModal();
     if (!slotToActivate) return;
+
+    // فحص إضافي لضمان استمرار وجود إنترنت لحظة بدء التايمر الفعلي
+    if (!navigator.onLine) {
+        document.dispatchEvent(new CustomEvent('app:toast', {
+            detail: { message: DQ_OFFLINE_TOAST_MESSAGE },
+        }));
+        return;
+    }
+
     activateDailyQuestion(slotToActivate);
 }
 

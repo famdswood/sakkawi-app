@@ -156,45 +156,55 @@ html {
 
 
 /* ------------------------------------------------------------------
-   2) التنسيقات الأساسية
+   2) التنسيقات الأساسية - تعزيز المظهر الأصلي للتطبيق (Native Feel)
    ------------------------------------------------------------------ */
 body {
     font-family: 'Cairo', 'Tajawal', sans-serif;
-    -webkit-tap-highlight-color: transparent;
-    user-select: none;
-    /* [تعديل - إصلاح تجاوب APK]: منع أثر "المطاط" (Overscroll Bounce)
-       عند وصول اللف لآخر نقطة فوق/تحت - ده تحديداً بيبان بشكل غريب/مقطوع
-       جوه WebView تطبيق APK (مفيش شريط متصفح حواليه يوضح إنه سكرول عادي)،
-       بعكس المتصفح العادي اللي التأثير ده مقبول فيه بصريًا */
+    -webkit-tap-highlight-color: transparent !important;
+    -webkit-touch-callout: none !important;
+    -webkit-user-select: none !important;
+    user-select: none !important;
     overscroll-behavior-y: none;
-    -ms-overflow-style: none; /* Edge القديم/IE */
+    overscroll-behavior-x: none;
+    overscroll-behavior: none;
+    -ms-overflow-style: none !important;
 }
 
-/* إلغاء شريط التمرير خالص في كل عنصر في التطبيق (Firefox) - "*" هنا
-   عشان تتغطى كل العناصر القابلة للسكرول، مش عنصر body بس (راجع نفس
-   ملحوظة *::-webkit-scrollbar تحت) */
+/* السماح بتحديد النصوص في حقول الإدخال فقط */
+input,
+textarea,
+[contenteditable="true"] {
+    -webkit-user-select: text !important;
+    user-select: text !important;
+}
+
+/* منع سحب الصور والروابط لتجنب أي سلوك متصفح */
+img,
+a {
+    -webkit-user-drag: none !important;
+    user-drag: none !important;
+}
+
+/* إلغاء شريط التمرير خالص في كل عنصر في التطبيق بشكل قطعي */
 * {
-    scrollbar-width: none;
+    scrollbar-width: none !important;
+    -ms-overflow-style: none !important;
 }
 
-/* إلغاء شريط التمرير خالص في كل عنصر قابل للسكرول في التطبيق (Chrome/
-   Safari/Edge الحديث) - كان فيه شريط تمرير مخصص هنا (رفيع بلون ذهبي)
-   بناءً على طلب صريح سابق، اتشال تمامًا بناءً على طلب أحدث. اللف
-   (Scroll) نفسه لسه شغال زي ما هو، بس من غير أي شريط ظاهر
-   ملحوظة (تعديل): السيلكتور كان "::-webkit-scrollbar" من غير أي عنصر
-   قبله، وده كان بيأثر بس على شريط تمرير الصفحة الرئيسي (documentElement)،
-   مش على أي عنصر داخلي عنده overflow-y: auto (زي الفييد/الشات/المودالز) -
-   ده اللي كان بيخلي شريط التمرير يبان أثناء الاستخدام الفعلي جوه الموبايل
-   رغم القاعدة دي. استخدام "*" هنا بيخلي القاعدة تتطبق على شريط تمرير أي
-   عنصر في الصفحة، مش الصفحة نفسها بس */
+/* إلغاء شريط التمرير وكل أجزائه (Track/Thumb) في WebKit/Blink */
 *::-webkit-scrollbar {
-    display: none;
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
+    background: transparent !important;
 }
 
-/* ملحوظة: .notif-scroll و#storiesBar كان ليهم قواعد شريط تمرير مخصصة/
-   مخفية منفصلة قبل كده (شوف قسم "قائمة الإشعارات" تحت) - بقت زيادة عن
-   الحاجة دلوقتي لأن ::-webkit-scrollbar فوق بقى بيغطي كل عنصر في
-   الصفحة، فاتشالت من هناك بدل ما تتكرر لغرض واحد في مكانين */
+*::-webkit-scrollbar-thumb,
+*::-webkit-scrollbar-track,
+*::-webkit-scrollbar-corner {
+    display: none !important;
+    background: transparent !important;
+}
 
 /* إتاحة استخدام focus واضح لأغراض إمكانية الوصول (Accessibility) */
 button:focus-visible,

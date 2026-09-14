@@ -426,13 +426,13 @@ export function initOnboarding() {
 
             // التأكد من أن الحركة أفقية وليست تمريرًا رأسيًا
             if (Math.abs(deltaX) > Math.abs(deltaY) * 1.3 && Math.abs(deltaX) > 35 && elapsed < 700) {
-                if (deltaX < 0) {
-                    // سحب لليسار = التقدم للأمام في الواجهة العربية
+                if (deltaX > 0) {
+                    // سحب باتجاه حركة اليد (التقدم للسلايد التالي)
                     if (currentIndex < TOTAL_SLIDES - 1) {
                         goToPage(currentIndex + 1);
                     }
                 } else {
-                    // سحب لليمين = الرجوع للخلف
+                    // سحب بالاتجاه المعاكس (الرجوع للسلايد السابق)
                     if (currentIndex > 0) {
                         goToPage(currentIndex - 1);
                     }
@@ -446,9 +446,9 @@ export function initOnboarding() {
         // دعم التنقل عبر مفاتيح الأسهم (للتجربة على المتصفح أو أجهزة التحكم)
         function onKeyDown(e) {
             if (!authFormDock.classList.contains('hidden') || !locationRejectedDock.classList.contains('hidden')) return;
-            if (e.key === 'ArrowLeft') {
+            if (e.key === 'ArrowRight') {
                 goToPage(currentIndex + 1);
-            } else if (e.key === 'ArrowRight') {
+            } else if (e.key === 'ArrowLeft') {
                 goToPage(currentIndex - 1);
             }
         }

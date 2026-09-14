@@ -1312,6 +1312,14 @@ function initApp() {
     // المخصصة، بس لـ visibilitychange/beforeunload الخام من المتصفح
     initVisitorPresenceTracking();
 
+    // منع القوائم السياقية للمتصفح (Context Menu) خارج حقول الكتابة لتعزيز المظهر الأصلي للتطبيق
+    window.addEventListener('contextmenu', (event) => {
+        const tag = event.target?.tagName?.toUpperCase();
+        if (tag !== 'INPUT' && tag !== 'TEXTAREA') {
+            event.preventDefault();
+        }
+    });
+
     initOnboarding().then((authIntent) => {
         initSharedUIBridge();
         initTabNavigation();
