@@ -2207,7 +2207,7 @@ function renderBadgesPage() {
  * والشارات" في تبويب بروفايله (مش من بروفايل عام لحد تاني - ده نطاق
  * تاني لو حبينا نضيفه بعدين)
  */
-function openBadgesPage() {
+export function openBadgesPage() {
     const page = document.getElementById('tab-badges-page');
     if (!page) return;
 
@@ -2483,7 +2483,7 @@ function bindShareProfileEvents() {
  * بالظبط. بتتنادى من زرار "شوف كل الأصدقاء" (#btnShowAllFriends) اللي
  * بيظهر بس لو عدد الأصدقاء أكتر من FRIENDS_PREVIEW_LIMIT (شوف renderFriends)
  */
-function openFriendsListPage() {
+export function openFriendsListPage() {
     const page = document.getElementById('tab-friends-list');
     if (!page) return;
 
@@ -2542,7 +2542,7 @@ function bindFriendsListPageEvents() {
  * اللي بيظهر بس لو عدد الطلبات الواردة أكتر من FRIENDS_PREVIEW_LIMIT
  * (شوف renderIncomingFriendRequests)
  */
-function openFriendRequestsListPage() {
+export function openFriendRequestsListPage() {
     const page = document.getElementById('tab-friend-requests-list');
     if (!page) return;
 

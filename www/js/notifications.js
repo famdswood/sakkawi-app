@@ -49,7 +49,14 @@
    ================================================================== */
 
 import { supabaseClient } from './supabase-config.js';
-import { acceptFriendRequest, rejectFriendRequest, openPublicProfile } from './profiles.js';
+import {
+    acceptFriendRequest,
+    rejectFriendRequest,
+    openPublicProfile,
+    openBadgesPage,
+    openFriendsListPage,
+    openFriendRequestsListPage,
+} from './profiles.js';
 import { getStories, openStory } from './stories.js';
 // (تعديل - المرحلة 8) استيراد دوال فتح شات الدعم عشان الضغط على إشعار
 // 'admin_reply' (رد الأدمن على مستخدم عادي) أو 'support_message' (رسالة
@@ -1106,49 +1113,16 @@ function buildNotificationCard(notification) {
     card.dataset.notifType = notification.type;
     card.classList.toggle('is-unread', !notification.is_read);
 
-    // معرّف مُرسل طلب الصداقة (أو صاحب البروفايل اللي قبل طلبك) - مخزّن
-    // هنا على مستوى الكارت نفسه (مش بس جوه أزرار قبول/رفض) عشان نقدر
-    // نفتح بروفايله العام لو المستخدم ضغط على صورته/اسمه أو على الكارت
-    // كله (حسب النوع - شوف الفرع الخاص بكل نوع في
-    // handleNotificationsListClick تحت)
-    if (
-        (notification.type === 'friend_request' || notification.type === 'friend_accept')
-        && notification.data && notification.data.sender_id
-    ) {
-        card.dataset.senderId = notification.data.sender_id;
-    }
-
-    // (تعديل - المرحلة 8) إشعار "support_message" بيوصل للأدمن لما
-    // مستخدم عادي يبعت رسالة جديدة في شات الدعم - محتاجين sender_id
-    // بتاعه عشان نقدر نفتح شاته هو بالظبط لما الأدمن يضغط على الإشعار
-    // (شوف openSupportChatAsAdminWithUser في handleNotificationsListClick تحت)
-    if (
-        notification.type === 'support_message'
-        && notification.data && notification.data.sender_id
-    ) {
-        card.dataset.senderId = notification.data.sender_id;
-    }
-
-    // معرّف الستوري المرتبطة بإشعار تفاعل على ستوري - محتاجينه عشان
-    // نقدر نفتح الستوري بالظبط اللي حصل عليها التفاعل لما المستخدم
-    // يضغط على الإشعار (شوف openStoryById تحت)
-    if (
-        notification.type === 'story_reaction'
-        && notification.data && notification.data.story_id
-    ) {
-        card.dataset.storyId = notification.data.story_id;
-    }
-
-    // معرّف المنشور (+ الكومنت الأساسي المرتبط) لإشعارات الرد/اللايك على
-    // كومنت - محتاجينهم عشان نقدر نوصل بالظبط لنفس المنشور ونفتح قسم
-    // الكومنتات على الكومنت المقصود لما المستخدم يضغط على الإشعار (شوف
-    // openPostReplyById تحت - نفس دالة التنقل لكل الاثنين)
-    if (
-        (notification.type === 'comment_reply' || notification.type === 'comment_like')
-        && notification.data && notification.data.post_id
-    ) {
-        card.dataset.postId = notification.data.post_id;
+    // تخزين المعرفات والبيانات التوجيهية في dataset الكارت لضمان استرجاعها فوراً عند النقر
+    if (notification.data && typeof notification.data === 'object') {
+        if (notification.data.sender_id) card.dataset.senderId = notification.data.sender_id;
+        if (notification.data.story_id) card.dataset.storyId = notification.data.story_id;
+        if (notification.data.post_id) card.dataset.postId = notification.data.post_id;
         if (notification.data.comment_id) card.dataset.commentId = notification.data.comment_id;
+        if (notification.data.badge_id) card.dataset.badgeId = notification.data.badge_id;
+        if (notification.data.request_id) card.dataset.requestId = notification.data.request_id;
+        if (notification.data.tab || notification.data.tabId) card.dataset.targetTab = notification.data.tab || notification.data.tabId;
+        if (notification.data.url) card.dataset.targetUrl = notification.data.url;
     }
 
     const iconWrapEl = card.querySelector('.notif-icon-wrap');
@@ -1274,65 +1248,165 @@ function updateUnreadBadges() {
  *   أو البيانات اللازمة للتنقّل ناقصة (المستدعي في الحالة دي المفروض
  *   يكتفي بعمل markNotificationAsRead بس)
  */
-export function resolveNotificationNavigation(type, data) {
+export function resolveNotificationNavigation(type, data, notification = null) {
     data = data || {};
+    const notifTitle = notification?.title || '';
+    const notifMessage = notification?.message || '';
 
+    // 1) لو الإشعار يحتوي على رابط ويب خارجي مباشر
+    if (data.url || data.targetUrl) {
+        const urlToOpen = data.url || data.targetUrl;
+        return {
+            action: () => {
+                window.open(urlToOpen, '_blank');
+            },
+        };
+    }
+
+    // 2) لو الإشعار يحدد تبويباً معيناً بالاسم
+    if (data.tabId || data.tab || data.targetTab) {
+        const targetTabId = data.tabId || data.tab || data.targetTab;
+        return {
+            action: () => {
+                document.dispatchEvent(new CustomEvent('app:switch-tab', {
+                    detail: {
+                        tabId: targetTabId,
+                        scrollToId: data.scrollToId || null,
+                    },
+                }));
+            },
+        };
+    }
+
+    // 3) فحص نوع الإشعار
     switch (type) {
         case 'friend_request':
-            // طلب صداقة وارد - نفتح البروفايل العام للمُرسل أو لوحة الإشعارات
-            if (data.sender_id) {
-                return { action: () => openPublicProfile(data.sender_id, { replaceHistory: true }) };
+            if (data.sender_id || data.senderId) {
+                const sId = data.sender_id || data.senderId;
+                return { action: () => openPublicProfile(sId, { replaceHistory: true }) };
             }
-            return { action: () => openNotificationsModal() };
+            return {
+                action: () => {
+                    if (typeof openFriendRequestsListPage === 'function') {
+                        openFriendRequestsListPage();
+                    } else {
+                        navigateToProfileSection();
+                    }
+                },
+            };
 
         case 'friend_accept':
-            // حد قبل طلب صداقتك - بنفتح بروفايله العام مباشرة (نفس
-            // فلسفة فتح البروفايل من أي مكان تاني في المشروع)
-            if (!data.sender_id) return null;
-            return { action: () => openPublicProfile(data.sender_id, { replaceHistory: true }) };
+            if (data.sender_id || data.senderId) {
+                const sId = data.sender_id || data.senderId;
+                return { action: () => openPublicProfile(sId, { replaceHistory: true }) };
+            }
+            return {
+                action: () => {
+                    if (typeof openFriendsListPage === 'function') {
+                        openFriendsListPage();
+                    } else {
+                        navigateToProfileSection();
+                    }
+                },
+            };
 
         case 'story_reaction':
-            // حد تفاعل مع ستوري بتاعتك - بنفتح نفس الستوري دي بالظبط
-            // لو لسه متاحة (لو مش متاحة، openStoryById بتعرض توست بنفسها)
-            if (!data.story_id) return null;
-            return { action: () => openStoryById(data.story_id) };
+            if (data.story_id || data.storyId) {
+                const stId = data.story_id || data.storyId;
+                return { action: () => openStoryById(stId) };
+            }
+            return { action: () => navigateToHomeSection() };
 
         case 'achievement':
         case 'achievement_unlocked':
-            // فتحت وسام جديد - بنودّيك لتبويب بروفايلي عشان تشوفه في
-            // دولاب الأوسمة
-            return { action: () => navigateToAchievementsSection() };
+            return { action: () => navigateToAchievementsSection(data.badge_id || data.badgeId) };
 
+        case 'championship_won':
+        case 'championship_win':
         case 'leaderboard_pass':
-            // حد تخطاك في الترتيب - بنودّيك لتبويب "الترتيب" مباشرة
             return { action: () => navigateToLeaderboardSection() };
 
         case 'comment_reply':
         case 'comment_like':
-            // حد رد على كومنت بتاعك أو عمل لايك عليه - بنودّيك لتبويب
-            // المنشورات ونفتح قسم الكومنتات بتاعة نفس المنشور على
-            // الكومنت بالظبط (لو لسه موجود)
-            if (!data.post_id) return null;
-            return { action: () => openPostReplyById(data.post_id, data.comment_id) };
+            if (data.post_id || data.postId) {
+                const pId = data.post_id || data.postId;
+                const cId = data.comment_id || data.commentId;
+                return { action: () => openPostReplyById(pId, cId) };
+            }
+            return { action: () => navigateToHomeSection() };
 
         case 'admin_reply':
-            // الأدمن رد عليك في شات الدعم - بنفتحلك نفس شاتك معاه على طول
             return { action: () => openSupportChatWithAdmin() };
 
         case 'support_message':
-            // مستخدم بعت رسالة جديدة في شات الدعم - النوع ده بيوصل
-            // للأدمن بس، وبيفتحله شاته هو بالظبط مع المستخدم ده
-            if (!data.sender_id) return null;
-            return { action: () => openSupportChatAsAdminWithUser(data.sender_id) };
+            if (data.sender_id || data.senderId) {
+                const sId = data.sender_id || data.senderId;
+                return { action: () => openSupportChatAsAdminWithUser(sId) };
+            }
+            return { action: () => openSupportChatWithAdmin() };
 
         case 'daily_question':
         case 'daily_question_forfeited':
         case 'daily_question_reminder':
-            // إشعارات السؤال اليومي - التوجيه مباشرة لبطاقة السؤال بالرئيسية
             return { action: () => navigateToDailyQuestionSection() };
 
+        case 'points':
+            return { action: () => navigateToProfileSection() };
+
+        case 'streak':
+            return { action: () => navigateToHomeSection() };
+
+        case 'system_broadcast':
+        case 'admin_message':
+        case 'system':
+            if (data.post_id || data.postId) {
+                return { action: () => openPostReplyById(data.post_id || data.postId, data.comment_id || data.commentId) };
+            }
+            if (data.story_id || data.storyId) {
+                return { action: () => openStoryById(data.story_id || data.storyId) };
+            }
+            if (data.sender_id || data.senderId) {
+                return { action: () => openPublicProfile(data.sender_id || data.senderId, { replaceHistory: true }) };
+            }
+            if (data.badge_id || data.badgeId) {
+                return { action: () => navigateToAchievementsSection(data.badge_id || data.badgeId) };
+            }
+            return {
+                action: () => {
+                    navigateToHomeSection();
+                    showNotificationAnnouncementModal(notifTitle, notifMessage, data);
+                },
+            };
+
         default:
-            return null;
+            // فحص أي معرّفات موجودة داخل بيانات الإشعار
+            if (data.post_id || data.postId) {
+                return { action: () => openPostReplyById(data.post_id || data.postId, data.comment_id || data.commentId) };
+            }
+            if (data.story_id || data.storyId) {
+                return { action: () => openStoryById(data.story_id || data.storyId) };
+            }
+            if (data.sender_id || data.senderId) {
+                return { action: () => openPublicProfile(data.sender_id || data.senderId, { replaceHistory: true }) };
+            }
+            if (data.badge_id || data.badgeId) {
+                return { action: () => navigateToAchievementsSection(data.badge_id || data.badgeId) };
+            }
+
+            // الملاذ الأخير: التوجيه للرئيسية وعرض رسالة بمحتوى الإشعار
+            return {
+                action: () => {
+                    navigateToHomeSection();
+                    if (notifTitle || notifMessage) {
+                        document.dispatchEvent(new CustomEvent('app:toast', {
+                            detail: {
+                                message: notifTitle ? `${notifTitle}: ${notifMessage}` : notifMessage,
+                                type: 'info',
+                            },
+                        }));
+                    }
+                },
+            };
     }
 }
 
@@ -1342,8 +1416,8 @@ export function resolveNotificationNavigation(type, data) {
 
 /**
  * مستمع واحد على #notificationsList (Event Delegation) بيتعامل مع
- * كل الضغطات جواه: زرار قبول، زرار رفض، أو أي نقر تاني على الكارت
- * نفسه (بيعتبره "فتح/قراءة" الإشعار)
+ * كل الضغطات جواه: زرار قبول، زرار رفض، أو أي نقر على الكارت نفسه
+ * (توجيه فوري لمكان الإشعار المطلوب مع نقله لقسم المقروء دون حذفه)
  * @param {MouseEvent} event
  */
 function handleNotificationsListClick(event) {
@@ -1351,11 +1425,7 @@ function handleNotificationsListClick(event) {
     const rejectBtn = event.target.closest('.notif-action-reject');
     const card = event.target.closest('.notif-card');
 
-    // Guard ضد الضغط المتكرر (Double Click): لو الكارت ده أصلاً وسط
-    // معالجة طلب قبول/رفض سابق (card.dataset.processing)، بنتجاهل أي
-    // ضغطة جديدة عليه تماماً - الزرارين نفسهم بيتعطّلوا (disabled) في
-    // handleFriendRequestAction، فده طبقة حماية إضافية بس (مثلاً لو
-    // حدث تكراري اتطلق من قبل ما التعطيل يتطبق فعلياً على الـ DOM)
+    // Guard ضد الضغط المتكرر أثناء معالجة طلب قبول/رفض
     if ((acceptBtn || rejectBtn) && card && card.dataset.processing === 'true') {
         return;
     }
@@ -1374,53 +1444,36 @@ function handleNotificationsListClick(event) {
 
     if (!card) return;
 
-    // friend_request: منطقة الضغط محصورة عمداً في الصورة/الاسم بس (مش
-    // الكارت كله)، عشان زرار "قبول/رفض" ومنطقة الرسالة/الوقت تفضل
-    // بتعمل markNotificationAsRead العادي من غير ما تفتح البروفايل
-    // بالغلط وهو لسه بيقرر يقبل ولا يرفض
-    if (card.dataset.notifType === 'friend_request') {
-        const profileTrigger = event.target.closest('.notif-icon-wrap, .notif-title');
-        if (profileTrigger && card.dataset.senderId) {
-            markNotificationAsRead(card.dataset.notifId);
-            closeNotificationsModal();
-            openPublicProfile(card.dataset.senderId, { replaceHistory: true });
-            return;
-        }
+    const notifId = card.dataset.notifId;
+    const notifType = card.dataset.notifType;
 
-        if (card.dataset.notifId) markNotificationAsRead(card.dataset.notifId);
-        return;
-    }
-
-    // باقي الأنواع: مفيش زرارين قبول/رفض هنا، فالضغط في أي مكان في
-    // الكارت (مش منطقة محصورة زي friend_request) بيعتبر "فتح" الإشعار.
-    // لو الضغطة أدّت فعلياً لتنقّل لمكان الإشعار (فتح بروفايل/ستوري/
-    // بوست/شات..إلخ)، بنحذف الكارت نهائياً بدل ما نكتفي بتعليمه مقروء -
-    // عشان الإشعار ما يفضلش عالق في اللوحة من غير داعي بعد ما المستخدم
-    // شافه فعلاً وراح لمكانه (نفس منطق الحذف المستخدم أصلاً في قبول/رفض
-    // طلبات الصداقة). لو مفيش تنقّل حصل فعلاً (مثلاً البيانات ناقصة)
-    // بنكتفي بتعليمه مقروء زي الأول.
-    // (تعديل - Phase 6) بدل الـ switch اللي كان هنا بالظبط، بنستخدم
-    // دلوقتي resolveNotificationNavigation الموحّدة (شوف قسم 7.5 فوق) -
-    // نفس بيانات dataset الكارت بنبنيها كـ object زي شكل عمود `data`
-    // بتاع صف الإشعار، ونمررها هي والنوع للدالة. لو رجّعت action فعلي
-    // (يعني فيه تنقّل ممكن يحصل)، بنعمل نفس اللي كان بيحصل قبل كده:
-    // نقفل المودال، ننفّذ التنقّل، ونحذف الكارت. لو رجّعت null (نوع مش
-    // معروف أو بيانات ناقصة)، نكتفي بتعليم الإشعار مقروء زي الأول
-    const navigation = resolveNotificationNavigation(card.dataset.notifType, {
-        sender_id: card.dataset.senderId,
-        story_id: card.dataset.storyId,
-        post_id: card.dataset.postId,
-        comment_id: card.dataset.commentId,
+    // استرجاع الإشعار وبياناته الأصلية من الكاش
+    const notification = (notificationsCache || []).find((n) => String(n.id) === String(notifId)) || null;
+    const notifData = Object.assign({}, notification?.data || {}, {
+        sender_id: card.dataset.senderId || notification?.data?.sender_id,
+        story_id: card.dataset.storyId || notification?.data?.story_id,
+        post_id: card.dataset.postId || notification?.data?.post_id,
+        comment_id: card.dataset.commentId || notification?.data?.comment_id,
+        badge_id: card.dataset.badgeId || notification?.data?.badge_id,
+        request_id: card.dataset.requestId || notification?.data?.request_id,
+        targetTab: card.dataset.targetTab || notification?.data?.tab || notification?.data?.tabId,
+        targetUrl: card.dataset.targetUrl || notification?.data?.url,
     });
 
-    if (navigation && navigation.action) {
-        closeNotificationsModal();
+    // 1) تعليم الإشعار كمقروء دون حذفه نهائياً
+    if (notifId) {
+        markNotificationAsRead(notifId);
+    }
+
+    // 2) إغلاق نافذة الإشعارات
+    closeNotificationsModal();
+
+    // 3) حل وجهة الانتقال المطلوبة
+    const navigation = resolveNotificationNavigation(notifType, notifData, notification);
+
+    // 4) تنفيذ التوجيه فوراً
+    if (navigation && typeof navigation.action === 'function') {
         navigation.action();
-        removeNotificationCard(card);
-    } else if (card.dataset.notifId) {
-        markNotificationAsRead(card.dataset.notifId);
-        // النقر على الإشعار يعتبر مشاهدة له وتتم إزالته من القائمة بسلاسة
-        removeNotificationCard(card);
     }
 }
 
@@ -1629,19 +1682,83 @@ function openStoryById(storyId) {
     openStory(index);
 }
 
-/**
- * الانتقال لتبويب "بروفايلي" (اللي فيه دولاب الأوسمة والشارات) بعد فتح
- * إشعار "فتحت وسام جديد" - بنستخدم حدث مخصص 'app:switch-tab' بدل ما
- * نستورد switchTab من app.js مباشرة (نفس فلسفة app:toast/app:sound
- * الموصوفة أعلى الملف، عشان نتجنب Circular Import: app.js هو أصلاً
- * اللي بيستورد initNotificationsUI من هنا). app.js هو المسؤول عن
- * الاستماع للحدث ده وتفعيل التاب فعلياً + التمرير لقسم الأوسمة
- * (#badgesGrid) بعد ما يبقى ظاهر
- */
-function navigateToAchievementsSection() {
+function navigateToHomeSection() {
     document.dispatchEvent(new CustomEvent('app:switch-tab', {
-        detail: { tabId: 'profile', scrollToId: 'badgesGrid' },
+        detail: { tabId: 'home' },
     }));
+}
+
+function navigateToProfileSection() {
+    document.dispatchEvent(new CustomEvent('app:switch-tab', {
+        detail: { tabId: 'profile' },
+    }));
+}
+
+function showNotificationAnnouncementModal(title, message, data = {}) {
+    const modal = document.getElementById('announcementModal');
+    if (!modal) {
+        if (title || message) {
+            document.dispatchEvent(new CustomEvent('app:toast', {
+                detail: { message: title ? `${title}: ${message}` : message, type: 'info' },
+            }));
+        }
+        return;
+    }
+
+    const titleEl = document.getElementById('announcementModalTitle');
+    const bodyEl = document.getElementById('announcementModalBody');
+    const imgEl = document.getElementById('announcementModalImage');
+    const actionBtn = document.getElementById('announcementModalActionBtn');
+    const closeBtn = document.getElementById('announcementModalCloseBtn');
+
+    if (titleEl) titleEl.textContent = title || 'إشعار من الإدارة';
+    if (bodyEl) bodyEl.textContent = message || '';
+
+    if (imgEl) {
+        if (data && data.image_url) {
+            imgEl.src = data.image_url;
+            imgEl.classList.remove('hidden');
+        } else {
+            imgEl.classList.add('hidden');
+        }
+    }
+
+    if (actionBtn) {
+        actionBtn.textContent = (data && data.button_text) || 'حسناً';
+        actionBtn.onclick = () => {
+            modal.classList.add('hidden');
+            if (data && data.url) {
+                window.open(data.url, '_blank');
+            } else if (data && (data.tab || data.tabId)) {
+                document.dispatchEvent(new CustomEvent('app:switch-tab', {
+                    detail: { tabId: data.tab || data.tabId },
+                }));
+            }
+        };
+    }
+
+    if (closeBtn) {
+        closeBtn.classList.remove('hidden');
+        closeBtn.onclick = () => {
+            modal.classList.add('hidden');
+        };
+    }
+
+    modal.classList.remove('hidden');
+}
+
+/**
+ * الانتقال لتبويب الأوسمة والشارات أو صفحة الأوسمة الكاملة
+ * @param {string|null} [badgeId]
+ */
+function navigateToAchievementsSection(badgeId = null) {
+    if (typeof openBadgesPage === 'function') {
+        openBadgesPage();
+    } else {
+        document.dispatchEvent(new CustomEvent('app:switch-tab', {
+            detail: { tabId: 'profile', scrollToId: 'badgesGrid' },
+        }));
+    }
 }
 
 /**
@@ -2148,7 +2265,7 @@ export function showGlassyInAppNotification(notification) {
             markNotificationAsRead(notification.id);
         }
 
-        const nav = resolveNotificationNavigation(notification.type, notification.data);
+        const nav = resolveNotificationNavigation(notification.type, notification.data, notification);
         if (nav && nav.action) {
             nav.action();
         } else {
