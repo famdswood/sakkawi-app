@@ -6,11 +6,6 @@
       "source": "/download",
       "destination": "https://github.com/famdswood/sakkawi-app/releases/latest/download/Sekkawy.apk",
       "permanent": false
-    },
-    {
-      "source": "/admin",
-      "destination": "https://github.com/famdswood/sakkawi-app/releases/latest/download/Sekkawy-Admin.apk",
-      "permanent": false
     }
   ]
 }
