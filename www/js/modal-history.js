@@ -88,6 +88,23 @@ export function hasOpenModal() {
 }
 
 /**
+ * إزالة دالة معينة من أعلى الـ Stack يدويًا بدون إطلاق history.back()
+ * يُستخدم عند التبديل المباشر من مودال إلى تبويب عادي (غير مودال)، حيث نقوم
+ * باستبدال الـ URL والحالة عبر history.replaceState دون إحداث Race Condition.
+ * @param {Function} [expectedHideFn] - الدالة المتوقعة في أعلى الـ Stack
+ * @returns {boolean}
+ */
+export function popModalStateIfTop(expectedHideFn) {
+    if (modalStack.length > 0) {
+        if (!expectedHideFn || modalStack[modalStack.length - 1] === expectedHideFn) {
+            modalStack.pop();
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
  * حالة خاصة: مودال بيتقفل عشان يتفتح بدل منه مباشرة "عرض" تاني (زي
  * مودال البحث عن صديق اللي بيتقفل عشان تتفتح صفحة بروفايل عام، أو
  * مودال الاستوري اللي بيتقفل عشان يتفتح بروفايل صاحب الاستوري).

@@ -167,13 +167,13 @@ export function initSupportChat() {
  * تُفتح من زرار "إرسال رسالة" في بروفايل الأدمن العام (profiles.js) -
  * مخصصة للمستخدم العادي بس (مش الأدمن نفسه، ومش لو مفيش تسجيل دخول)
  */
-export async function openSupportChatWithAdmin() {
+export async function openSupportChatWithAdmin(options = {}) {
     if (!currentUser || isCurrentUserAdmin) return;
 
     currentViewMode = 'user_thread';
     activeConversationUserId = currentUser.id;
 
-    showModal();
+    showModal(options);
     setPeerHeader(ADMIN_USER_ID);
     setHeaderExitMode('close');
     showThreadView();
@@ -207,14 +207,15 @@ export async function openSupportChatWithAdmin() {
  * غير بروفايله هو (شوف renderPublicProfileSupportButton في profiles.js).
  * زرار الرجوع بيظهر عشان الأدمن يقدر يرجع لقائمة كل المحادثات لو حب.
  * @param {string} targetUserId
+ * @param {object} [options]
  */
-export async function openSupportChatAsAdminWithUser(targetUserId) {
+export async function openSupportChatAsAdminWithUser(targetUserId, options = {}) {
     if (!isCurrentUserAdmin || !targetUserId) return;
 
     currentViewMode = 'admin_thread';
     activeConversationUserId = targetUserId;
 
-    showModal();
+    showModal(options);
     setPeerHeader(targetUserId);
     setHeaderExitMode('back');
     showThreadView();
@@ -673,14 +674,18 @@ function unbindKeyboardAwareness() {
    5) فتح/قفل المودال (نفس نمط hideAvatarLightbox في profiles.js)
    ------------------------------------------------------------------ */
 
-function showModal() {
+function showModal(options = {}) {
     const modalEl = document.getElementById('supportChatModal');
     if (!modalEl) return;
 
     modalEl.classList.remove('hidden');
     modalEl.classList.add('flex');
 
-    pushModalState(hideSupportChatModal);
+    if (options?.replaceHistory) {
+        replaceModalState(hideSupportChatModal);
+    } else {
+        pushModalState(hideSupportChatModal);
+    }
     // (المرحلة 6 من خطة الريسبونسف) شوف قسم 16 فوق - بيخلي حقل
     // الكتابة يفضل فوق لوحة المفاتيح مباشرة على كل الأجهزة
     bindKeyboardAwareness();

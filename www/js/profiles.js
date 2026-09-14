@@ -2207,7 +2207,7 @@ function renderBadgesPage() {
  * والشارات" في تبويب بروفايله (مش من بروفايل عام لحد تاني - ده نطاق
  * تاني لو حبينا نضيفه بعدين)
  */
-export function openBadgesPage() {
+export function openBadgesPage(options = {}) {
     const page = document.getElementById('tab-badges-page');
     if (!page) return;
 
@@ -2221,9 +2221,26 @@ export function openBadgesPage() {
     document.querySelectorAll('.tab-content').forEach((el) => el.classList.remove('active'));
     page.classList.add('active');
 
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (options?.badgeId) {
+        requestAnimationFrame(() => {
+            const badgeEl = page.querySelector(`[data-badge-id="${options.badgeId}"]`);
+            if (badgeEl) {
+                badgeEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                badgeEl.classList.add('ring-2', 'ring-gold-400');
+                setTimeout(() => badgeEl.classList.remove('ring-2', 'ring-gold-400'), 2500);
+            } else {
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+        });
+    } else {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
 
-    pushModalState(hideBadgesPage);
+    if (options?.replaceHistory) {
+        replaceModalState(hideBadgesPage);
+    } else {
+        pushModalState(hideBadgesPage);
+    }
 }
 
 /** الإخفاء الخام لصفحة "الأوسمة والشارات" فقط - استخدم closeBadgesPage تحت */
@@ -2483,7 +2500,7 @@ function bindShareProfileEvents() {
  * بالظبط. بتتنادى من زرار "شوف كل الأصدقاء" (#btnShowAllFriends) اللي
  * بيظهر بس لو عدد الأصدقاء أكتر من FRIENDS_PREVIEW_LIMIT (شوف renderFriends)
  */
-export function openFriendsListPage() {
+export function openFriendsListPage(options = {}) {
     const page = document.getElementById('tab-friends-list');
     if (!page) return;
 
@@ -2499,7 +2516,11 @@ export function openFriendsListPage() {
 
     window.scrollTo({ top: 0, behavior: 'smooth' });
 
-    pushModalState(hideFriendsListPage);
+    if (options?.replaceHistory) {
+        replaceModalState(hideFriendsListPage);
+    } else {
+        pushModalState(hideFriendsListPage);
+    }
 }
 
 /** الإخفاء الخام لصفحة "كل الأصدقاء" فقط - استخدم closeFriendsListPage تحت */
@@ -2542,7 +2563,7 @@ function bindFriendsListPageEvents() {
  * اللي بيظهر بس لو عدد الطلبات الواردة أكتر من FRIENDS_PREVIEW_LIMIT
  * (شوف renderIncomingFriendRequests)
  */
-export function openFriendRequestsListPage() {
+export function openFriendRequestsListPage(options = {}) {
     const page = document.getElementById('tab-friend-requests-list');
     if (!page) return;
 
@@ -2558,7 +2579,11 @@ export function openFriendRequestsListPage() {
 
     window.scrollTo({ top: 0, behavior: 'smooth' });
 
-    pushModalState(hideFriendRequestsListPage);
+    if (options?.replaceHistory) {
+        replaceModalState(hideFriendRequestsListPage);
+    } else {
+        pushModalState(hideFriendRequestsListPage);
+    }
 }
 
 /** الإخفاء الخام لصفحة "كل طلبات الصداقة الواردة" فقط - استخدم closeFriendRequestsListPage تحت */

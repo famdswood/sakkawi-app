@@ -263,10 +263,15 @@ function initTabNavigation() {
  */
 function initCrossModuleTabNavigation() {
     document.addEventListener('app:switch-tab', (event) => {
-        const { tabId, scrollToId } = event.detail || {};
+        const { tabId, scrollToId, replaceHistory = false } = event.detail || {};
         if (!tabId) return;
 
-        switchTab(tabId);
+        if (replaceHistory) {
+            history.replaceState({ sakkawyTab: tabId }, '', `#${tabId}`);
+            switchTab(tabId, { fromPopState: true });
+        } else {
+            switchTab(tabId);
+        }
 
         if (scrollToId) {
             // بنستنى فريم واحد عشان التاب الجديد يبقى ظاهر فعلياً

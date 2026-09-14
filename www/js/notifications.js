@@ -63,7 +63,7 @@ import { getStories, openStory } from './stories.js';
 // مستخدم جديدة توصل للأدمن) يودّي مباشرة لنفس المحادثة بدل ما الإشعار
 // يفضل بلا أي فعل عند الضغط عليه
 import { openSupportChatWithAdmin, openSupportChatAsAdminWithUser } from './support-chat.js';
-import { pushModalState, closeModal, hasOpenModal } from './modal-history.js';
+import { pushModalState, closeModal, hasOpenModal, replaceModalState, popModalStateIfTop } from './modal-history.js';
 // (كاش الأوفلاين) حفظ واسترجاع الإشعارات بدون إنترنت
 import { fetchWithCache, setCached } from './offline-cache.js';
 
@@ -888,6 +888,38 @@ export function closeNotificationsModal() {
     }
 }
 
+/**
+ * إخفاء لوحة الإشعارات فورياً وبشكل متزامن (0ms) بدون أي تأخير أو أنيميشن
+ * يُستدعى فور النقر على أي إشعار حتى تختفي صفحة الإشعارات لحظياً وينتقل المستخدم
+ * لمكان وجهة الإشعار دون أن يرى نافذة الإشعارات باقية فوق الوجهة.
+ */
+export function dismissNotificationsModalImmediately() {
+    const modal = getNotificationsModalEl();
+    if (modal) {
+        modal.classList.remove('is-open');
+        modal.classList.add('hidden');
+    }
+    if (closeModalTimeoutId) {
+        clearTimeout(closeModalTimeoutId);
+        closeModalTimeoutId = null;
+    }
+    updateUnreadBadges();
+}
+
+/**
+ * التوجيه لأي تبويب رئيسي بشكل نظيف ومستقر مع استبدال حالة مودال الإشعارات
+ * في تاريخ المتصفح فورياً بدون إحداث Race Condition مع زرار الرجوع.
+ * @param {string} tabId - اسم التبويب (home, leaderboard, profile)
+ * @param {string|null} [scrollToId] - معرف العنصر المراد التمرير إليه داخل التبويب
+ */
+export function navigateToTabCleanly(tabId, scrollToId = null) {
+    dismissNotificationsModalImmediately();
+    const wasPopped = popModalStateIfTop(hideNotificationsModal);
+    document.dispatchEvent(new CustomEvent('app:switch-tab', {
+        detail: { tabId, scrollToId, replaceHistory: wasPopped },
+    }));
+}
+
 
 /* ------------------------------------------------------------------
    5) التبويبات (الكل / غير المقروء)
@@ -1258,6 +1290,8 @@ export function resolveNotificationNavigation(type, data, notification = null) {
         const urlToOpen = data.url || data.targetUrl;
         return {
             action: () => {
+                dismissNotificationsModalImmediately();
+                popModalStateIfTop(hideNotificationsModal);
                 window.open(urlToOpen, '_blank');
             },
         };
@@ -1268,12 +1302,7 @@ export function resolveNotificationNavigation(type, data, notification = null) {
         const targetTabId = data.tabId || data.tab || data.targetTab;
         return {
             action: () => {
-                document.dispatchEvent(new CustomEvent('app:switch-tab', {
-                    detail: {
-                        tabId: targetTabId,
-                        scrollToId: data.scrollToId || null,
-                    },
-                }));
+                navigateToTabCleanly(targetTabId, data.scrollToId || null);
             },
         };
     }
@@ -1283,14 +1312,20 @@ export function resolveNotificationNavigation(type, data, notification = null) {
         case 'friend_request':
             if (data.sender_id || data.senderId) {
                 const sId = data.sender_id || data.senderId;
-                return { action: () => openPublicProfile(sId, { replaceHistory: true }) };
+                return {
+                    action: () => {
+                        dismissNotificationsModalImmediately();
+                        openPublicProfile(sId, { replaceHistory: true });
+                    },
+                };
             }
             return {
                 action: () => {
+                    dismissNotificationsModalImmediately();
                     if (typeof openFriendRequestsListPage === 'function') {
-                        openFriendRequestsListPage();
+                        openFriendRequestsListPage({ replaceHistory: true });
                     } else {
-                        navigateToProfileSection();
+                        navigateToTabCleanly('profile');
                     }
                 },
             };
@@ -1298,14 +1333,20 @@ export function resolveNotificationNavigation(type, data, notification = null) {
         case 'friend_accept':
             if (data.sender_id || data.senderId) {
                 const sId = data.sender_id || data.senderId;
-                return { action: () => openPublicProfile(sId, { replaceHistory: true }) };
+                return {
+                    action: () => {
+                        dismissNotificationsModalImmediately();
+                        openPublicProfile(sId, { replaceHistory: true });
+                    },
+                };
             }
             return {
                 action: () => {
+                    dismissNotificationsModalImmediately();
                     if (typeof openFriendsListPage === 'function') {
-                        openFriendsListPage();
+                        openFriendsListPage({ replaceHistory: true });
                     } else {
-                        navigateToProfileSection();
+                        navigateToTabCleanly('profile');
                     }
                 },
             };
@@ -1313,9 +1354,9 @@ export function resolveNotificationNavigation(type, data, notification = null) {
         case 'story_reaction':
             if (data.story_id || data.storyId) {
                 const stId = data.story_id || data.storyId;
-                return { action: () => openStoryById(stId) };
+                return { action: () => openStoryById(stId, { replaceHistory: true }) };
             }
-            return { action: () => navigateToHomeSection() };
+            return { action: () => navigateToTabCleanly('home') };
 
         case 'achievement':
         case 'achievement_unlocked':
@@ -1333,17 +1374,32 @@ export function resolveNotificationNavigation(type, data, notification = null) {
                 const cId = data.comment_id || data.commentId;
                 return { action: () => openPostReplyById(pId, cId) };
             }
-            return { action: () => navigateToHomeSection() };
+            return { action: () => navigateToTabCleanly('home') };
 
         case 'admin_reply':
-            return { action: () => openSupportChatWithAdmin() };
+            return {
+                action: () => {
+                    dismissNotificationsModalImmediately();
+                    openSupportChatWithAdmin({ replaceHistory: true });
+                },
+            };
 
         case 'support_message':
             if (data.sender_id || data.senderId) {
                 const sId = data.sender_id || data.senderId;
-                return { action: () => openSupportChatAsAdminWithUser(sId) };
+                return {
+                    action: () => {
+                        dismissNotificationsModalImmediately();
+                        openSupportChatAsAdminWithUser(sId, { replaceHistory: true });
+                    },
+                };
             }
-            return { action: () => openSupportChatWithAdmin() };
+            return {
+                action: () => {
+                    dismissNotificationsModalImmediately();
+                    openSupportChatWithAdmin({ replaceHistory: true });
+                },
+            };
 
         case 'daily_question':
         case 'daily_question_forfeited':
@@ -1359,41 +1415,72 @@ export function resolveNotificationNavigation(type, data, notification = null) {
         case 'system_broadcast':
         case 'admin_message':
         case 'system':
+        case 'warning':
+        case 'admin_alert':
+        case 'admin_notification':
             if (data.post_id || data.postId) {
                 return { action: () => openPostReplyById(data.post_id || data.postId, data.comment_id || data.commentId) };
             }
             if (data.story_id || data.storyId) {
-                return { action: () => openStoryById(data.story_id || data.storyId) };
+                return { action: () => openStoryById(data.story_id || data.storyId, { replaceHistory: true }) };
             }
             if (data.sender_id || data.senderId) {
-                return { action: () => openPublicProfile(data.sender_id || data.senderId, { replaceHistory: true }) };
+                return {
+                    action: () => {
+                        dismissNotificationsModalImmediately();
+                        openPublicProfile(data.sender_id || data.senderId, { replaceHistory: true });
+                    },
+                };
             }
             if (data.badge_id || data.badgeId) {
                 return { action: () => navigateToAchievementsSection(data.badge_id || data.badgeId) };
             }
+            if (data.url || data.targetUrl) {
+                const targetUrl = data.url || data.targetUrl;
+                return {
+                    action: () => {
+                        dismissNotificationsModalImmediately();
+                        popModalStateIfTop(hideNotificationsModal);
+                        window.open(targetUrl, '_blank');
+                    },
+                };
+            }
             return {
                 action: () => {
-                    navigateToHomeSection();
-                    showNotificationAnnouncementModal(notifTitle, notifMessage, data);
+                    dismissNotificationsModalImmediately();
+                    showNotificationAnnouncementModal(notifTitle, notifMessage, data, { replaceHistory: true });
                 },
             };
 
         default:
-            // فحص أي معرّفات موجودة داخل بيانات الإشعار
             if (data.post_id || data.postId) {
                 return { action: () => openPostReplyById(data.post_id || data.postId, data.comment_id || data.commentId) };
             }
             if (data.story_id || data.storyId) {
-                return { action: () => openStoryById(data.story_id || data.storyId) };
+                return { action: () => openStoryById(data.story_id || data.storyId, { replaceHistory: true }) };
             }
             if (data.sender_id || data.senderId) {
-                return { action: () => openPublicProfile(data.sender_id || data.senderId, { replaceHistory: true }) };
+                return {
+                    action: () => {
+                        dismissNotificationsModalImmediately();
+                        openPublicProfile(data.sender_id || data.senderId, { replaceHistory: true });
+                    },
+                };
             }
             if (data.badge_id || data.badgeId) {
                 return { action: () => navigateToAchievementsSection(data.badge_id || data.badgeId) };
             }
+            if (data.url || data.targetUrl) {
+                const targetUrl = data.url || data.targetUrl;
+                return {
+                    action: () => {
+                        dismissNotificationsModalImmediately();
+                        popModalStateIfTop(hideNotificationsModal);
+                        window.open(targetUrl, '_blank');
+                    },
+                };
+            }
 
-            // الملاذ الأخير: التوجيه للرئيسية وعرض رسالة بمحتوى الإشعار
             return {
                 action: () => {
                     navigateToHomeSection();
@@ -1465,15 +1552,14 @@ function handleNotificationsListClick(event) {
         markNotificationAsRead(notifId);
     }
 
-    // 2) إغلاق نافذة الإشعارات
-    closeNotificationsModal();
-
-    // 3) حل وجهة الانتقال المطلوبة
+    // 2) حل وجهة الانتقال المطلوبة
     const navigation = resolveNotificationNavigation(notifType, notifData, notification);
 
-    // 4) تنفيذ التوجيه فوراً
+    // 3) تنفيذ التوجيه فوراً مع إخفاء المودال فوراً 0ms بدون race condition
     if (navigation && typeof navigation.action === 'function') {
         navigation.action();
+    } else {
+        navigateToTabCleanly('home');
     }
 }
 
@@ -1668,35 +1754,41 @@ function suppressNextClick(card) {
  * النهاردة)، بنعرض توست واضح بدل ما نفشل بصمت
  * @param {string} storyId
  */
-function openStoryById(storyId) {
+function openStoryById(storyId, options = {}) {
+    dismissNotificationsModalImmediately();
     const stories = getStories();
     const index = stories.findIndex((s) => String(s.id) === String(storyId));
 
     if (index === -1) {
+        popModalStateIfTop(hideNotificationsModal);
+        document.dispatchEvent(new CustomEvent('app:switch-tab', {
+            detail: { tabId: 'home', replaceHistory: true },
+        }));
         document.dispatchEvent(new CustomEvent('app:toast', {
             detail: { message: 'الاستوري ده لم يعد متاحاً', type: 'info' },
         }));
         return;
     }
 
-    openStory(index);
+    openStory(index, options);
 }
 
 function navigateToHomeSection() {
-    document.dispatchEvent(new CustomEvent('app:switch-tab', {
-        detail: { tabId: 'home' },
-    }));
+    navigateToTabCleanly('home');
 }
 
 function navigateToProfileSection() {
-    document.dispatchEvent(new CustomEvent('app:switch-tab', {
-        detail: { tabId: 'profile' },
-    }));
+    navigateToTabCleanly('profile');
 }
 
-function showNotificationAnnouncementModal(title, message, data = {}) {
+function showNotificationAnnouncementModal(title, message, data = {}, options = {}) {
+    dismissNotificationsModalImmediately();
     const modal = document.getElementById('announcementModal');
     if (!modal) {
+        popModalStateIfTop(hideNotificationsModal);
+        document.dispatchEvent(new CustomEvent('app:switch-tab', {
+            detail: { tabId: 'home', replaceHistory: true },
+        }));
         if (title || message) {
             document.dispatchEvent(new CustomEvent('app:toast', {
                 detail: { message: title ? `${title}: ${message}` : message, type: 'info' },
@@ -1723,16 +1815,18 @@ function showNotificationAnnouncementModal(title, message, data = {}) {
         }
     }
 
+    const hideAnnouncement = () => {
+        modal.classList.add('hidden');
+    };
+
     if (actionBtn) {
         actionBtn.textContent = (data && data.button_text) || 'حسناً';
         actionBtn.onclick = () => {
-            modal.classList.add('hidden');
+            closeModal();
             if (data && data.url) {
                 window.open(data.url, '_blank');
             } else if (data && (data.tab || data.tabId)) {
-                document.dispatchEvent(new CustomEvent('app:switch-tab', {
-                    detail: { tabId: data.tab || data.tabId },
-                }));
+                navigateToTabCleanly(data.tab || data.tabId);
             }
         };
     }
@@ -1740,11 +1834,17 @@ function showNotificationAnnouncementModal(title, message, data = {}) {
     if (closeBtn) {
         closeBtn.classList.remove('hidden');
         closeBtn.onclick = () => {
-            modal.classList.add('hidden');
+            closeModal();
         };
     }
 
     modal.classList.remove('hidden');
+
+    if (options?.replaceHistory !== false) {
+        replaceModalState(hideAnnouncement);
+    } else {
+        pushModalState(hideAnnouncement);
+    }
 }
 
 /**
@@ -1752,24 +1852,20 @@ function showNotificationAnnouncementModal(title, message, data = {}) {
  * @param {string|null} [badgeId]
  */
 function navigateToAchievementsSection(badgeId = null) {
+    dismissNotificationsModalImmediately();
     if (typeof openBadgesPage === 'function') {
-        openBadgesPage();
+        openBadgesPage({ replaceHistory: true, badgeId });
     } else {
-        document.dispatchEvent(new CustomEvent('app:switch-tab', {
-            detail: { tabId: 'profile', scrollToId: 'badgesGrid' },
-        }));
+        navigateToTabCleanly('profile', 'badgesGrid');
     }
 }
 
 /**
  * الانتقال لتبويب "الترتيب" (لوحة الصدارة) بعد فتح إشعار "حد تخطاك في
- * الترتيب" - بنفس فلسفة navigateToAchievementsSection فوق (حدث مخصص
- * 'app:switch-tab' بدل استيراد switchTab مباشرة من app.js)
+ * الترتيب" - بنفس فلسفة navigateToAchievementsSection فوق
  */
 function navigateToLeaderboardSection() {
-    document.dispatchEvent(new CustomEvent('app:switch-tab', {
-        detail: { tabId: 'leaderboard' },
-    }));
+    navigateToTabCleanly('leaderboard');
 }
 
 /**
@@ -1777,31 +1873,17 @@ function navigateToLeaderboardSection() {
  * بعد الضغط على أي إشعار يخص السؤال اليومي
  */
 function navigateToDailyQuestionSection() {
-    document.dispatchEvent(new CustomEvent('app:switch-tab', {
-        detail: { tabId: 'home', scrollToId: 'dailyQuestionCard1' },
-    }));
+    navigateToTabCleanly('home', 'dailyQuestionCard1');
 }
 
 /**
  * فتح المنشور اللي حصل فيه رد/لايك على كومنت بتاعك، وقسم الكومنتات
- * بتاعه على الكومنت المقصود بالظبط. المنشورات مش عندها section/id ثابت
- * زي بروفايلي (badgesGrid) عشان نستخدم scrollToId بتاعة 'app:switch-tab'
- * العادية، فبنبعت حدث تاني مخصص ليها بس ('posts:open-comment') بعد
- * التبديل للتاب - نفس فلسفة app:switch-tab/app:toast (تجنب استيراد دوال
- * posts.js هنا مباشرة، عشان منعملش Circular Import: posts.js أصلاً
- * بيستورد sendNotification من الملف ده عشان يبعت الإشعارين دول من
- * الأساس - شوف handleCommentSubmit/handleCommentLikeToggle في
- * posts.js). posts.js هو المسؤول عن الاستماع للحدث ده وفتح قسم
- * الكومنتات + التمرير + تظليل الكومنت لحظياً لو لسه موجود؛ لو المنشور
- * أو الكومنت اتحذف، posts.js نفسه بيعرض توست واضح بدل ما يفشل بصمت
- * (نفس فلسفة openStoryById فوق)
+ * بتاعه على الكومنت المقصود بالظبط.
  * @param {string} postId
  * @param {string|undefined} commentId
  */
 function openPostReplyById(postId, commentId) {
-    document.dispatchEvent(new CustomEvent('app:switch-tab', {
-        detail: { tabId: 'home' },
-    }));
+    navigateToTabCleanly('home');
     document.dispatchEvent(new CustomEvent('posts:open-comment', {
         detail: { postId, commentId },
     }));
