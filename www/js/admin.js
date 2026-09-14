@@ -5144,7 +5144,7 @@ function setStatusText(el, message, state) {
 const ADMIN_TAB_ROUTING_MAP = {
     // Overview
     tabPanelOverview: { main: 'tabPanelOverview', sub: 'subPanelOverviewPulse' },
-    tabPanelVisitors: { main: 'tabPanelOverview', sub: 'subPanelOverviewPulse' },
+    tabPanelVisitors: { main: 'tabPanelOverview', sub: 'subPanelOverviewVisitors' },
     tabPanelSponsors: { main: 'tabPanelOverview', sub: 'subPanelOverviewSponsors' },
 
     // Users
@@ -5193,8 +5193,10 @@ function switchAdminTab(targetTabId, targetSubTabId = null) {
         }
     }
 
-    if (effectiveMain === 'tabPanelOverview' || effectiveSub === 'subPanelOverviewSponsors') {
+    if (effectiveSub === 'subPanelOverviewSponsors' || effectiveMain === 'tabPanelSponsors') {
         renderSponsorAnalytics();
+    } else if (effectiveSub === 'subPanelOverviewVisitors' || effectiveMain === 'tabPanelVisitors') {
+        loadVisitorStats();
     } else if (effectiveSub === 'subPanelCompetitorsHallOfFame') {
         renderCompetitorsHallOfFame();
     }
@@ -5252,6 +5254,8 @@ function initAdminTabNavigation() {
 
             if (subTargetId === 'subPanelOverviewSponsors' || subTargetId === 'tabPanelSponsors') {
                 renderSponsorAnalytics();
+            } else if (subTargetId === 'subPanelOverviewVisitors' || subTargetId === 'tabPanelVisitors') {
+                loadVisitorStats();
             } else if (subTargetId === 'subPanelCompetitorsHallOfFame') {
                 renderCompetitorsHallOfFame();
             }
