@@ -51,18 +51,32 @@ jobs:
           ls -lh release-apks/
 
       # -------------------------------------------------------------
-      # 2) Upload APK Artifacts
+      # 2) Prepare & Build Admin App APK (Sekkawy-Admin.apk)
+      # -------------------------------------------------------------
+      - name: Build Admin Sekkawy APK
+        run: |
+          node scripts/prepare-admin-build.js
+          npx cap sync android
+          cd android
+          ./gradlew assembleDebug --stacktrace
+          cd "$GITHUB_WORKSPACE"
+          cp android/app/build/outputs/apk/debug/*.apk release-apks/Sekkawy-Admin.apk
+          node scripts/restore-main-build.js
+          ls -lh release-apks/
+
+      # -------------------------------------------------------------
+      # 3) Upload APK Artifacts
       # -------------------------------------------------------------
       - name: Upload APK Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: Sekkawy-User-APK
+          name: Sekkawy-APKs
           path: release-apks/*.apk
           if-no-files-found: error
           retention-days: 30
 
       # -------------------------------------------------------------
-      # 3) Create GitHub Release with Sekkawy User APK
+      # 4) Create GitHub Release with both APKs
       # -------------------------------------------------------------
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -72,5 +86,6 @@ jobs:
           name: "Sekkawy v${{ github.run_number }}"
           files: |
             release-apks/Sekkawy.apk
+            release-apks/Sekkawy-Admin.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
