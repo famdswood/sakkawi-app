@@ -1521,6 +1521,10 @@
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="w-4 h-4"><circle cx="9" cy="8" r="3.5"></circle><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"></path><circle cx="18" cy="9" r="2.5"></circle><path d="M15.5 14.2c2.6.4 4.5 2.7 4.5 5.3"></path></svg>
                                 <span>سجل الحسابات والتحكم التفاعلي</span>
                             </button>
+                            <button type="button" class="admin-subtab-btn" data-subtab-target="subPanelCompetitorsHallOfFame">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="w-4 h-4"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"></path><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"></path><path d="M4 22h16"></path><path d="M10 14.66V17c0 .55-.45 1-1 1H8c-.55 0-1 .45-1 1v1c0 .55.45 1 1 1h8c.55 0 1-.45 1-1v-1c0-.55-.45-1-1-1h-1c-.55 0-1-.45-1-1v-2.34"></path><path d="M6 4h12a2 2 0 0 1 2 2v4a6 6 0 0 1-6 6h0a6 6 0 0 1-6-6V6a2 2 0 0 1 2-2z"></path></svg>
+                                <span>سجل التنافس ولوحة الشرف</span>
+                            </button>
                             <button type="button" class="admin-subtab-btn" data-subtab-target="subPanelUserBadges">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="w-4 h-4"><path d="M12 3l2.2 4.5 5 .7-3.6 3.5.9 5-4.5-2.4-4.5 2.4.9-5-3.6-3.5 5-.7z"></path></svg>
                                 <span>الأوسمة والشارات</span>
@@ -1572,6 +1576,201 @@
 
                 </section>
 
+                        </div>
+
+                        <!-- سجل التنافس ولوحة الشرف والشرائح التاريخية -->
+                        <div id="subPanelCompetitorsHallOfFame" class="admin-subpanel hidden space-y-4 sm:space-y-5">
+                            <!-- بطاقة العنوان والتعريف -->
+                            <div class="glass-card p-4 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border border-gold-500/20">
+                                <div>
+                                    <div class="flex items-center gap-2">
+                                        <span class="w-2.5 h-2.5 rounded-full bg-gold-400 admin-radar-pulse shrink-0"></span>
+                                        <h3 class="text-sm sm:text-base md:text-lg font-black text-lux-50">سجل التنافس ولوحة شرف أبطال نزلة عبيد</h3>
+                                        <span class="px-2 py-0.5 rounded-full text-[9px] sm:text-[10px] font-bold bg-gold-500/20 text-gold-300 border border-gold-500/30">سجل تاريخي</span>
+                                    </div>
+                                    <p class="text-[11px] sm:text-xs text-lux-400 font-medium mt-1">إحصاءات المنافسين، كؤوس البطولات، الأرقام القياسية التاريخية وهرم نشاط الأهالي</p>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <button type="button" id="btnRefreshHofStats" class="px-3.5 py-2 rounded-xl bg-lux-800 hover:bg-lux-700 text-lux-200 text-xs font-bold border border-lux-700 transition flex items-center justify-center gap-1.5 active:scale-95">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-3.5 h-3.5"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+                                        <span>تحديث السجل</span>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- كروت القمة الثلاثية التاريخية (Bento Highlights) -->
+                            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+                                <!-- كارت 1: أعلى رقم قياسي في يوم واحد -->
+                                <div class="glass-card p-4 sm:p-5 space-y-2 border border-gold-500/30 bg-gradient-to-b from-gold-500/10 via-lux-900/50 to-transparent">
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-[11px] sm:text-xs font-bold text-lux-400">الرقم القياسي التاريخي (يوم)</span>
+                                        <div class="w-8 h-8 rounded-xl bg-gold-500/15 border border-gold-500/30 text-gold-400 flex items-center justify-center shrink-0">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-4 h-4"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                                        </div>
+                                    </div>
+                                    <div class="flex items-baseline gap-1.5">
+                                        <span id="hofStatBestRecord" class="font-mono text-2xl sm:text-3xl font-black text-gold-400 block leading-tight">—</span>
+                                        <span class="text-xs font-bold text-lux-400">خطوة</span>
+                                    </div>
+                                    <div id="hofStatBestRecordHolder" class="text-xs font-bold text-lux-200 truncate pt-1 border-t border-lux-800/60">—</div>
+                                </div>
+
+                                <!-- كارت 2: زعيم البطولات والكؤوس -->
+                                <div class="glass-card p-4 sm:p-5 space-y-2 border border-amber-500/30 bg-gradient-to-b from-amber-500/10 via-lux-900/50 to-transparent">
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-[11px] sm:text-xs font-bold text-lux-400">زعيم البطولات (الأكثر تتويجاً)</span>
+                                        <div class="w-8 h-8 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-400 flex items-center justify-center shrink-0">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-4 h-4"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"></path><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"></path><path d="M4 22h16"></path><path d="M10 14.66V17c0 .55-.45 1-1 1H8c-.55 0-1 .45-1 1v1c0 .55.45 1 1 1h8c.55 0 1-.45 1-1v-1c0-.55-.45-1-1-1h-1c-.55 0-1-.45-1-1v-2.34"></path><path d="M6 4h12a2 2 0 0 1 2 2v4a6 6 0 0 1-6 6h0a6 6 0 0 1-6-6V6a2 2 0 0 1 2-2z"></path></svg>
+                                        </div>
+                                    </div>
+                                    <div class="flex items-baseline gap-1.5">
+                                        <span id="hofStatMostWins" class="font-mono text-2xl sm:text-3xl font-black text-amber-400 block leading-tight">—</span>
+                                        <span class="text-xs font-bold text-lux-400">بطولة مسجلة</span>
+                                    </div>
+                                    <div id="hofStatMostWinsHolder" class="text-xs font-bold text-lux-200 truncate pt-1 border-t border-lux-800/60">—</div>
+                                </div>
+
+                                <!-- كارت 3: سلسلة الالتزام القياسية -->
+                                <div class="glass-card p-4 sm:p-5 space-y-2 border border-emerald-500/30 bg-gradient-to-b from-emerald-500/10 via-lux-900/50 to-transparent">
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-[11px] sm:text-xs font-bold text-lux-400">أطول سلسلة التزام (Streak)</span>
+                                        <div class="w-8 h-8 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 flex items-center justify-center shrink-0">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-4 h-4"><path d="M12 2c1 3 4 5 4 9a6 6 0 0 1-12 0c0-4 3-6 4-9 1 2 3 3 4 0z"/></svg>
+                                        </div>
+                                    </div>
+                                    <div class="flex items-baseline gap-1.5">
+                                        <span id="hofStatBestStreak" class="font-mono text-2xl sm:text-3xl font-black text-emerald-400 block leading-tight">—</span>
+                                        <span class="text-xs font-bold text-lux-400">يوم متواصل</span>
+                                    </div>
+                                    <div id="hofStatBestStreakHolder" class="text-xs font-bold text-lux-200 truncate pt-1 border-t border-lux-800/60">—</div>
+                                </div>
+                            </div>
+
+                            <!-- هرم شرائح المشتركين وتوزيع النشاط (Community Walking Funnel) -->
+                            <div class="glass-card p-4 sm:p-6 space-y-4">
+                                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                    <div>
+                                        <h4 class="text-xs sm:text-sm font-black text-lux-100">هرم تصنيف المشتركين حسب معدل المشي اليومي</h4>
+                                        <p class="text-[10px] sm:text-xs text-lux-400 mt-0.5">توزيع أهل القرية على فئات اللياقة والالتزام</p>
+                                    </div>
+                                    <div class="flex items-center gap-2">
+                                        <span class="text-[10px] text-lux-400">إجمالي الحسابات المسجلة:</span>
+                                        <span id="hofTiersTotalUsers" class="font-mono text-xs font-black text-gold-400">—</span>
+                                    </div>
+                                </div>
+
+                                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                                    <!-- شريحة الصقور -->
+                                    <div class="p-3.5 rounded-2xl bg-lux-950/60 border border-gold-500/30 space-y-2">
+                                        <div class="flex items-center justify-between">
+                                            <span class="text-[11px] font-bold text-gold-400">أبطال الصقور (+10k)</span>
+                                            <span id="tierElitesPct" class="font-mono text-xs font-bold text-gold-400">—%</span>
+                                        </div>
+                                        <div class="w-full bg-lux-800 rounded-full h-2 overflow-hidden">
+                                            <div id="tierElitesBar" class="h-full bg-gradient-to-r from-gold-500 to-amber-400 rounded-full transition-all duration-500" style="width: 0%"></div>
+                                        </div>
+                                        <div class="flex items-center justify-between text-[10px] text-lux-400">
+                                            <span>العدد:</span>
+                                            <span id="tierElitesCount" class="font-mono font-black text-lux-200">—</span>
+                                        </div>
+                                    </div>
+
+                                    <!-- شريحة النشطين -->
+                                    <div class="p-3.5 rounded-2xl bg-lux-950/60 border border-emerald-500/30 space-y-2">
+                                        <div class="flex items-center justify-between">
+                                            <span class="text-[11px] font-bold text-emerald-400">نشط منتظم (6k-10k)</span>
+                                            <span id="tierActivePct" class="font-mono text-xs font-bold text-emerald-400">—%</span>
+                                        </div>
+                                        <div class="w-full bg-lux-800 rounded-full h-2 overflow-hidden">
+                                            <div id="tierActiveBar" class="h-full bg-gradient-to-r from-emerald-500 to-teal-400 rounded-full transition-all duration-500" style="width: 0%"></div>
+                                        </div>
+                                        <div class="flex items-center justify-between text-[10px] text-lux-400">
+                                            <span>العدد:</span>
+                                            <span id="tierActiveCount" class="font-mono font-black text-lux-200">—</span>
+                                        </div>
+                                    </div>
+
+                                    <!-- شريحة المشي الخفيف -->
+                                    <div class="p-3.5 rounded-2xl bg-lux-950/60 border border-cyan-500/30 space-y-2">
+                                        <div class="flex items-center justify-between">
+                                            <span class="text-[11px] font-bold text-cyan-400">مشي خفيف (1k-6k)</span>
+                                            <span id="tierLightPct" class="font-mono text-xs font-bold text-cyan-400">—%</span>
+                                        </div>
+                                        <div class="w-full bg-lux-800 rounded-full h-2 overflow-hidden">
+                                            <div id="tierLightBar" class="h-full bg-gradient-to-r from-cyan-500 to-blue-400 rounded-full transition-all duration-500" style="width: 0%"></div>
+                                        </div>
+                                        <div class="flex items-center justify-between text-[10px] text-lux-400">
+                                            <span>العدد:</span>
+                                            <span id="tierLightCount" class="font-mono font-black text-lux-200">—</span>
+                                        </div>
+                                    </div>
+
+                                    <!-- شريحة الخاملين -->
+                                    <div class="p-3.5 rounded-2xl bg-lux-950/60 border border-rose-500/30 space-y-2">
+                                        <div class="flex items-center justify-between">
+                                            <span class="text-[11px] font-bold text-rose-400">خامل أو صامت (&lt;1k)</span>
+                                            <span id="tierInactivePct" class="font-mono text-xs font-bold text-rose-400">—%</span>
+                                        </div>
+                                        <div class="w-full bg-lux-800 rounded-full h-2 overflow-hidden">
+                                            <div id="tierInactiveBar" class="h-full bg-gradient-to-r from-rose-500 to-red-400 rounded-full transition-all duration-500" style="width: 0%"></div>
+                                        </div>
+                                        <div class="flex items-center justify-between text-[10px] text-lux-400">
+                                            <span>العدد:</span>
+                                            <span id="tierInactiveCount" class="font-mono font-black text-lux-200">—</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- سجل لوحة الشرف التاريخية للمتنافسين (Hall of Fame Table) -->
+                            <div class="glass-card p-4 sm:p-6 space-y-4">
+                                <div class="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                                    <div>
+                                        <h4 class="text-xs sm:text-sm font-black text-lux-100 flex items-center gap-2">
+                                            <span>لوحة شرف المنافسين التاريخية</span>
+                                            <span class="px-2 py-0.5 rounded-full text-[9px] font-bold bg-lux-800 text-gold-400 border border-gold-500/20">أبطال القرية</span>
+                                        </h4>
+                                        <p class="text-[10px] sm:text-xs text-lux-400 mt-0.5">ترتيب وتفاصيل الأبطال حسب معايير التتويج والأرقام القياسية</p>
+                                    </div>
+                                    <!-- أزرار تبديل معيار الترتيب -->
+                                    <div class="flex items-center gap-1.5 p-1 rounded-xl bg-lux-950/80 border border-lux-800 overflow-x-auto notif-scroll">
+                                        <button type="button" class="hof-sort-btn px-2.5 py-1 rounded-lg text-[10px] sm:text-[11px] font-bold transition is-active bg-gold-500 text-lux-950" data-hof-sort="wins">
+                                            <span>الأكثر تتويجاً (الكؤوس)</span>
+                                        </button>
+                                        <button type="button" class="hof-sort-btn px-2.5 py-1 rounded-lg text-[10px] sm:text-[11px] font-bold text-lux-300 hover:text-lux-100 transition" data-hof-sort="record">
+                                            <span>الرقم القياسي (أعلى يوم)</span>
+                                        </button>
+                                        <button type="button" class="hof-sort-btn px-2.5 py-1 rounded-lg text-[10px] sm:text-[11px] font-bold text-lux-300 hover:text-lux-100 transition" data-hof-sort="streak">
+                                            <span>سلاسل الالتزام (Streak)</span>
+                                        </button>
+                                        <button type="button" class="hof-sort-btn px-2.5 py-1 rounded-lg text-[10px] sm:text-[11px] font-bold text-lux-300 hover:text-lux-100 transition" data-hof-sort="steps">
+                                            <span>إجمالي كل الخطوات</span>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div id="hofCompetitorsListContainer" class="space-y-2.5">
+                                    <div class="p-6 rounded-2xl bg-lux-950/40 border border-lux-800/60 text-center text-lux-400 text-xs font-medium">
+                                        جاري تحميل سجل لوحة الشرف…
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- سجل العمليات والتعديلات الإدارية على المتسابقين (Competitors Audit History) -->
+                            <div class="glass-card p-4 sm:p-6 space-y-3.5">
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <h4 class="text-xs sm:text-sm font-black text-lux-100">سجل القرارات والتعديلات الإدارية على المتسابقين</h4>
+                                        <p class="text-[10px] sm:text-xs text-lux-400 mt-0.5">توثيق كامل لكافة عمليات تعديل الخطوات والتجميد والتوثيق مع الأسباب والتواريخ</p>
+                                    </div>
+                                    <span class="px-2 py-0.5 rounded-full text-[9px] font-bold bg-lux-800 text-lux-300 border border-lux-700">سجل مدقق</span>
+                                </div>
+                                <div id="hofAuditLogContainer" class="space-y-2 max-h-56 overflow-y-auto notif-scroll">
+                                    <div class="p-4 rounded-xl bg-lux-950/40 border border-lux-800/60 text-center text-lux-400 text-xs font-medium">
+                                        جاري تحميل سجل التعديلات…
+                                    </div>
+                                </div>
+                            </div>
                         </div>
 
                         <!-- الأوسمة والشارات -->

@@ -751,6 +751,14 @@ async function toggleUserBlock(userId, shouldBlock, reason, durationHours = null
         return null;
     }
 
+    try {
+        const u = Array.isArray(allUsersList) ? allUsersList.find((x) => x.id === userId) : null;
+        const name = u?.full_name || u?.username || 'مستخدم';
+        if (typeof addCompetitorAuditEntry === 'function') {
+            addCompetitorAuditEntry(name, shouldBlock ? 'حظر/تجميد' : 'إلغاء حظر', shouldBlock ? `حظر الحساب: ${reason || 'بدون سبب'}` : 'فك الحظر وتفعيل الحساب');
+        }
+    } catch (_) {}
+
     return data || { success: true };
 }
 
@@ -918,8 +926,9 @@ function updateVillageOverviewStats() {
         changeLabelEl.textContent = `${activeWalkers.length.toLocaleString('ar-EG')} متسابق مشى اليوم`;
     }
 
-    // 3) رسم منصة تتويج أبطال اليوم
+    // 3) رسم منصة تتويج أبطال اليوم وسجل التنافس ولوحة الشرف
     renderVillageDailyPodium();
+    renderCompetitorsHallOfFame();
 }
 
 /**
@@ -1027,6 +1036,384 @@ function renderVillageDailyPodium() {
             </div>
         `;
     }).join('');
+}
+
+/* ==================================================================
+   سجل التنافس ولوحة الشرف والشرائح (Competitors Hall of Fame & History)
+   ================================================================== */
+
+let hofCurrentSort = 'wins';
+const COMPETITORS_AUDIT_STORAGE_KEY = 'sekkawi_competitors_audit_log';
+
+/**
+ * جلب سجل العمليات الإدارية المخزنة على المتسابقين
+ * @returns {Array<{id: string, timestamp: string, admin: string, user_name: string, action_type: string, detail: string}>}
+ */
+function getCompetitorsAuditLog() {
+    try {
+        const raw = localStorage.getItem(COMPETITORS_AUDIT_STORAGE_KEY);
+        if (raw) {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed)) return parsed;
+        }
+    } catch (e) {
+        console.error('فشل قراءة سجل التعديلات الإدارية:', e);
+    }
+    return [];
+}
+
+/**
+ * إضافة عملية إدارية جديدة إلى سجل المتسابقين
+ * @param {string} userName
+ * @param {string} actionType
+ * @param {string} detail
+ */
+function addCompetitorAuditEntry(userName, actionType, detail) {
+    try {
+        const currentLogs = getCompetitorsAuditLog();
+        const newEntry = {
+            id: 'audit_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
+            timestamp: new Date().toISOString(),
+            admin: 'إدارة سِكّاوي',
+            user_name: userName || 'متسابق',
+            action_type: actionType,
+            detail: detail,
+        };
+        currentLogs.unshift(newEntry);
+        if (currentLogs.length > 100) currentLogs.length = 100;
+        localStorage.setItem(COMPETITORS_AUDIT_STORAGE_KEY, JSON.stringify(currentLogs));
+        renderCompetitorsAuditLog();
+    } catch (e) {
+        console.error('فشل حفظ العملية في سجل التعديلات:', e);
+    }
+}
+
+/**
+ * رسم سجل العمليات الإدارية في #hofAuditLogContainer
+ */
+function renderCompetitorsAuditLog() {
+    const container = document.getElementById('hofAuditLogContainer');
+    if (!container) return;
+
+    const logs = getCompetitorsAuditLog();
+    if (!logs.length) {
+        container.innerHTML = `
+            <div class="p-4 rounded-xl bg-lux-950/40 border border-lux-800/60 text-center text-lux-400 text-xs font-medium">
+                لا توجد عمليات مسجلة حتى الآن. أي تعديل للخطوات أو تجميد أو توثيق سيُسجل هنا فوراً.
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = logs.map((log) => {
+        const dateObj = new Date(log.timestamp);
+        const timeText = dateObj.toLocaleString('ar-EG', {
+            day: '2-digit', month: '2-digit', year: 'numeric',
+            hour: '2-digit', minute: '2-digit',
+        });
+
+        let badgeColor = 'bg-blue-500/15 text-blue-300 border-blue-500/30';
+        if (log.action_type.includes('تجميد') || log.action_type.includes('حظر') || log.action_type.includes('خصم')) {
+            badgeColor = 'bg-rose-500/15 text-rose-300 border-rose-500/30';
+        } else if (log.action_type.includes('توثيق') || log.action_type.includes('إضافة')) {
+            badgeColor = 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30';
+        }
+
+        return `
+            <div class="p-2.5 sm:p-3 rounded-xl bg-lux-950/60 border border-lux-800/60 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                <div class="flex items-center gap-2 flex-wrap">
+                    <span class="px-2 py-0.5 rounded-md text-[10px] font-bold border ${badgeColor}">${escapeHtml(log.action_type)}</span>
+                    <span class="font-bold text-lux-100">${escapeHtml(log.user_name)}:</span>
+                    <span class="text-lux-300">${escapeHtml(log.detail)}</span>
+                </div>
+                <div class="text-[10px] font-mono text-lux-500 shrink-0">${escapeHtml(timeText)}</div>
+            </div>
+        `;
+    }).join('');
+}
+
+/**
+ * تحديث ورسم سجل التنافس ولوحة الشرف والشرائح بالكامل
+ */
+function renderCompetitorsHallOfFame() {
+    if (!Array.isArray(allUsersList) || allUsersList.length === 0) return;
+
+    // 1) كروت القمة التاريخية
+    let bestRecordUser = null;
+    let maxDailyRecord = 0;
+
+    let mostWinsUser = null;
+    let maxWinsTotal = 0;
+
+    let bestStreakUser = null;
+    let maxStreakDays = 0;
+
+    allUsersList.forEach((u) => {
+        const rec = Number(u.best_daily_steps || 0);
+        if (rec > maxDailyRecord) {
+            maxDailyRecord = rec;
+            bestRecordUser = u;
+        }
+
+        const wins = Number(u.daily_championship_wins || 0)
+            + Number(u.weekly_championship_wins || 0)
+            + Number(u.monthly_championship_wins || 0);
+        if (wins > maxWinsTotal) {
+            maxWinsTotal = wins;
+            mostWinsUser = u;
+        }
+
+        const strk = Math.max(Number(u.streak_count || 0), Number(u.best_streak_days || 0));
+        if (strk > maxStreakDays) {
+            maxStreakDays = strk;
+            bestStreakUser = u;
+        }
+    });
+
+    const elBestRecord = document.getElementById('hofStatBestRecord');
+    const elBestRecordHolder = document.getElementById('hofStatBestRecordHolder');
+    const elMostWins = document.getElementById('hofStatMostWins');
+    const elMostWinsHolder = document.getElementById('hofStatMostWinsHolder');
+    const elBestStreak = document.getElementById('hofStatBestStreak');
+    const elBestStreakHolder = document.getElementById('hofStatBestStreakHolder');
+
+    if (elBestRecord) elBestRecord.textContent = maxDailyRecord > 0 ? maxDailyRecord.toLocaleString('ar-EG') : '—';
+    if (elBestRecordHolder) {
+        elBestRecordHolder.textContent = bestRecordUser
+            ? `${bestRecordUser.full_name || bestRecordUser.username || 'بطل نزلة عبيد'} (@${bestRecordUser.username || '—'})`
+            : 'لم يُسجل بعد';
+    }
+
+    if (elMostWins) elMostWins.textContent = maxWinsTotal > 0 ? maxWinsTotal.toLocaleString('ar-EG') : '0';
+    if (elMostWinsHolder) {
+        if (mostWinsUser && maxWinsTotal > 0) {
+            const d = Number(mostWinsUser.daily_championship_wins || 0);
+            const w = Number(mostWinsUser.weekly_championship_wins || 0);
+            const m = Number(mostWinsUser.monthly_championship_wins || 0);
+            elMostWinsHolder.textContent = `${mostWinsUser.full_name || mostWinsUser.username}: ${d} يومي · ${w} أسبوعي · ${m} شهري`;
+        } else {
+            elMostWinsHolder.textContent = 'في انتظار أول بطل متوج';
+        }
+    }
+
+    if (elBestStreak) elBestStreak.textContent = maxStreakDays > 0 ? maxStreakDays.toLocaleString('ar-EG') : '0';
+    if (elBestStreakHolder) {
+        elBestStreakHolder.textContent = bestStreakUser && maxStreakDays > 0
+            ? `${bestStreakUser.full_name || bestStreakUser.username || 'بطل الالتزام'} (@${bestStreakUser.username || '—'})`
+            : 'لم تبدأ السلاسل بعد';
+    }
+
+    // 2) هرم وتوزيع الشرائح
+    const totalCount = allUsersList.length;
+    const elTotalUsers = document.getElementById('hofTiersTotalUsers');
+    if (elTotalUsers) elTotalUsers.textContent = totalCount.toLocaleString('ar-EG');
+
+    let countElites = 0;
+    let countActive = 0;
+    let countLight = 0;
+    let countInactive = 0;
+
+    allUsersList.forEach((u) => {
+        const steps = Number(u.daily_steps || 0);
+        if (steps >= 10000) {
+            countElites += 1;
+        } else if (steps >= 6000) {
+            countActive += 1;
+        } else if (steps >= 1000) {
+            countLight += 1;
+        } else {
+            countInactive += 1;
+        }
+    });
+
+    const pctElites = totalCount > 0 ? Math.round((countElites / totalCount) * 100) : 0;
+    const pctActive = totalCount > 0 ? Math.round((countActive / totalCount) * 100) : 0;
+    const pctLight = totalCount > 0 ? Math.round((countLight / totalCount) * 100) : 0;
+    const pctInactive = totalCount > 0 ? Math.round((countInactive / totalCount) * 100) : 0;
+
+    const setTier = (idPrefix, count, pct) => {
+        const cEl = document.getElementById(`${idPrefix}Count`);
+        const pEl = document.getElementById(`${idPrefix}Pct`);
+        const bEl = document.getElementById(`${idPrefix}Bar`);
+        if (cEl) cEl.textContent = count.toLocaleString('ar-EG');
+        if (pEl) pEl.textContent = `${pct.toLocaleString('ar-EG')}%`;
+        if (bEl) bEl.style.width = `${pct}%`;
+    };
+
+    setTier('tierElites', countElites, pctElites);
+    setTier('tierActive', countActive, pctActive);
+    setTier('tierLight', countLight, pctLight);
+    setTier('tierInactive', countInactive, pctInactive);
+
+    // 3) رسم جدول لوحة الشرف
+    renderHofList();
+
+    // 4) رسم سجل العمليات الإدارية
+    renderCompetitorsAuditLog();
+}
+
+/**
+ * رسم قائمة المتسابقين في لوحة الشرف بناءً على معيار الترتيب hofCurrentSort
+ */
+function renderHofList() {
+    const container = document.getElementById('hofCompetitorsListContainer');
+    if (!container) return;
+
+    const sorted = allUsersList.slice().sort((a, b) => {
+        if (hofCurrentSort === 'record') {
+            return Number(b.best_daily_steps || 0) - Number(a.best_daily_steps || 0);
+        } else if (hofCurrentSort === 'streak') {
+            const strkB = Math.max(Number(b.streak_count || 0), Number(b.best_streak_days || 0));
+            const strkA = Math.max(Number(a.streak_count || 0), Number(a.best_streak_days || 0));
+            return strkB - strkA;
+        } else if (hofCurrentSort === 'steps') {
+            return Number(b.total_steps || 0) - Number(a.total_steps || 0);
+        } else {
+            // 'wins' الافتراضي
+            const scoreB = Number(b.daily_championship_wins || 0)
+                + Number(b.weekly_championship_wins || 0) * 3
+                + Number(b.monthly_championship_wins || 0) * 10;
+            const scoreA = Number(a.daily_championship_wins || 0)
+                + Number(a.weekly_championship_wins || 0) * 3
+                + Number(a.monthly_championship_wins || 0) * 10;
+            if (scoreB !== scoreA) return scoreB - scoreA;
+            return Number(b.total_steps || 0) - Number(a.total_steps || 0);
+        }
+    });
+
+    const topList = sorted.slice(0, 30);
+
+    if (topList.length === 0) {
+        container.innerHTML = `
+            <div class="p-6 rounded-2xl bg-lux-950/40 border border-lux-800/60 text-center text-lux-400 text-xs font-medium">
+                لا توجد بيانات متاحة لعرضها في لوحة الشرف.
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = topList.map((user, idx) => {
+        const rank = idx + 1;
+        const name = escapeHtml(user.full_name || user.username || 'متسابق');
+        const username = user.username ? `@${escapeHtml(user.username)}` : '';
+        const isVerified = isUserVerificationActive(user);
+        const avatarUrl = user.avatar_url || '';
+
+        const dWins = Number(user.daily_championship_wins || 0);
+        const wWins = Number(user.weekly_championship_wins || 0);
+        const mWins = Number(user.monthly_championship_wins || 0);
+        const totalWins = dWins + wWins + mWins;
+
+        const bestRecord = Number(user.best_daily_steps || 0).toLocaleString('ar-EG');
+        const streakDays = Math.max(Number(user.streak_count || 0), Number(user.best_streak_days || 0)).toLocaleString('ar-EG');
+        const totalSteps = Number(user.total_steps || 0).toLocaleString('ar-EG');
+
+        let rankBadge = `<span class="w-7 h-7 rounded-xl bg-lux-800 text-lux-300 font-mono text-xs font-black flex items-center justify-center">${rank}</span>`;
+        let cardBorder = 'border-lux-800/70 bg-lux-950/40';
+
+        if (rank === 1) {
+            rankBadge = `<span class="w-7 h-7 rounded-xl bg-gold-500/20 border border-gold-500/40 text-gold-400 font-mono text-xs font-black flex items-center justify-center">1</span>`;
+            cardBorder = 'border-gold-500/40 bg-gradient-to-r from-gold-500/10 via-lux-950/60 to-lux-950/40';
+        } else if (rank === 2) {
+            rankBadge = `<span class="w-7 h-7 rounded-xl bg-slate-400/20 border border-slate-400/40 text-slate-200 font-mono text-xs font-black flex items-center justify-center">2</span>`;
+            cardBorder = 'border-slate-500/30 bg-gradient-to-r from-slate-500/10 via-lux-950/60 to-lux-950/40';
+        } else if (rank === 3) {
+            rankBadge = `<span class="w-7 h-7 rounded-xl bg-amber-700/20 border border-amber-700/40 text-amber-300 font-mono text-xs font-black flex items-center justify-center">3</span>`;
+            cardBorder = 'border-amber-700/30 bg-gradient-to-r from-amber-700/10 via-lux-950/60 to-lux-950/40';
+        }
+
+        return `
+            <div class="p-3 sm:p-4 rounded-2xl border ${cardBorder} flex flex-col md:flex-row md:items-center justify-between gap-3 hover:border-gold-500/40 transition group">
+                <div class="flex items-center gap-3 min-w-0">
+                    <div class="shrink-0 flex items-center gap-2">
+                        ${rankBadge}
+                        <div class="w-10 h-10 rounded-full overflow-hidden border border-lux-700 bg-lux-800 shrink-0 flex items-center justify-center">
+                            ${avatarUrl ? `
+                                <img src="${escapeHtml(avatarUrl)}" class="w-full h-full object-cover" alt="${name}">
+                            ` : `
+                                <span class="text-xs font-bold text-gold-400">${name.slice(0, 2)}</span>
+                            `}
+                        </div>
+                    </div>
+                    <div class="min-w-0">
+                        <div class="flex items-center gap-1.5 flex-wrap">
+                            <span class="text-xs sm:text-sm font-black text-lux-100 truncate">${name}</span>
+                            ${isVerified ? buildVerifiedBadgeHtml(true, 'scale-90') : ''}
+                        </div>
+                        <div class="text-[10px] font-mono text-lux-400 truncate">${username}</div>
+                    </div>
+                </div>
+
+                <!-- إحصاءات المنافس التفصيلية -->
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-right pt-2 md:pt-0 border-t md:border-t-0 border-lux-800/60">
+                    <div class="p-1.5 sm:p-2 rounded-xl bg-lux-900/50 border border-lux-800/40">
+                        <div class="text-[9px] font-bold text-lux-400">كؤوس البطولات</div>
+                        <div class="font-mono text-xs font-black text-gold-400 mt-0.5">${totalWins.toLocaleString('ar-EG')} (${dWins}ي/${wWins}أ)</div>
+                    </div>
+                    <div class="p-1.5 sm:p-2 rounded-xl bg-lux-900/50 border border-lux-800/40">
+                        <div class="text-[9px] font-bold text-lux-400">الرقم القياسي</div>
+                        <div class="font-mono text-xs font-black text-cyan-300 mt-0.5">${bestRecord}</div>
+                    </div>
+                    <div class="p-1.5 sm:p-2 rounded-xl bg-lux-900/50 border border-lux-800/40">
+                        <div class="text-[9px] font-bold text-lux-400">سلسلة الالتزام</div>
+                        <div class="font-mono text-xs font-black text-emerald-400 mt-0.5">${streakDays} يوم</div>
+                    </div>
+                    <div class="p-1.5 sm:p-2 rounded-xl bg-lux-900/50 border border-lux-800/40">
+                        <div class="text-[9px] font-bold text-lux-400">إجمالي الخطوات</div>
+                        <div class="font-mono text-xs font-black text-lux-200 mt-0.5">${totalSteps}</div>
+                    </div>
+                </div>
+
+                <div class="shrink-0 flex items-center justify-end">
+                    <button type="button" class="px-3 py-1.5 rounded-xl bg-lux-800 hover:bg-gold-500 hover:text-lux-950 text-lux-200 text-xs font-bold border border-lux-700 hover:border-gold-500 transition active:scale-95 flex items-center gap-1" onclick='openUserActionModalById("${user.id}")'>
+                        <span>لوحة القيادة</span>
+                    </button>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+/**
+ * فتح لوحة قيادة المستخدم بالـ id
+ * @param {string} userId
+ */
+function openUserActionModalById(userId) {
+    if (!userId || !Array.isArray(allUsersList)) return;
+    const user = allUsersList.find((u) => u.id === userId);
+    if (user && typeof openUserActionModal === 'function') {
+        openUserActionModal(user);
+    }
+}
+window.openUserActionModalById = openUserActionModalById;
+
+function initCompetitorsHallOfFame() {
+    const sortButtons = document.querySelectorAll('.hof-sort-btn');
+    sortButtons.forEach((btn) => {
+        btn.addEventListener('click', () => {
+            const sortMode = btn.dataset.hofSort;
+            if (!sortMode) return;
+            hofCurrentSort = sortMode;
+            sortButtons.forEach((b) => {
+                const isActive = b === btn;
+                b.classList.toggle('is-active', isActive);
+                if (isActive) {
+                    b.className = 'hof-sort-btn px-2.5 py-1 rounded-lg text-[10px] sm:text-[11px] font-bold transition is-active bg-gold-500 text-lux-950';
+                } else {
+                    b.className = 'hof-sort-btn px-2.5 py-1 rounded-lg text-[10px] sm:text-[11px] font-bold text-lux-300 hover:text-lux-100 transition';
+                }
+            });
+            renderHofList();
+        });
+    });
+
+    const refreshBtn = document.getElementById('btnRefreshHofStats');
+    if (refreshBtn) {
+        refreshBtn.addEventListener('click', () => {
+            renderCompetitorsHallOfFame();
+            if (window.showToast) window.showToast('تم تحديث سجل التنافس ولوحة الشرف بنجاح');
+        });
+    }
 }
 
 /** ربط مربع البحث وشرائح الترتيب (فلترة/ترتيب محلي فوري) وتحميل/تحديث القائمة لثالث تاب */
@@ -1217,6 +1604,14 @@ async function handleQuickStepAdjust(user, delta, li, btn, customReason = null) 
             }
             showUserCardStatus(targetEl, `تم ${delta > 0 ? 'إضافة' : 'خصم'} ${Math.abs(delta).toLocaleString('ar-EG')} خطوة بنجاح. رصيد اليوم: ${Number(newDaily).toLocaleString('ar-EG')}`, 'success');
         }
+
+        if (typeof addCompetitorAuditEntry === 'function') {
+            addCompetitorAuditEntry(
+                user.full_name || user.username || 'متسابق',
+                delta > 0 ? 'مكافأة خطوات' : 'خصم خطوات',
+                `${delta > 0 ? 'إضافة' : 'خصم'} ${Math.abs(delta).toLocaleString('ar-EG')} خطوة (${reason}). الرصيد الجديد: ${Number(newDaily).toLocaleString('ar-EG')}`
+            );
+        }
     } catch (err) {
         console.error('[admin.js] خطأ غير متوقع:', err);
         if (li) showUserCardStatus(li, 'حدث خطأ أثناء تنفيذ التعديل.', 'error');
@@ -1259,6 +1654,14 @@ async function handleQuickStepSet(user, value, li, btn, reason) {
         if (pointsEl && data?.new_total_points !== undefined) pointsEl.textContent = Number(data.new_total_points).toLocaleString('ar-EG');
 
         showUserCardStatus(li, `تم تصفير خطوات اليوم ومزامنة الحساس بنجاح.`, 'success');
+
+        if (typeof addCompetitorAuditEntry === 'function') {
+            addCompetitorAuditEntry(
+                user.full_name || user.username || 'متسابق',
+                'تصفير خطوات',
+                `تصفير خطوات اليوم (${reason})`
+            );
+        }
     } catch (err) {
         showUserCardStatus(li, 'تعذر تصفير الخطوات.', 'error');
     } finally {
@@ -1304,6 +1707,14 @@ async function handleQuickVerifToggle(user, li, btn) {
     }
 
     showUserCardStatus(li, nextVal ? 'تم توثيق الحساب بنجاح وإضافة الشارة الذهبية.' : 'تم إلغاء التوثيق اليدوي للحساب.', 'success');
+
+    if (typeof addCompetitorAuditEntry === 'function') {
+        addCompetitorAuditEntry(
+            user.full_name || user.username || 'متسابق',
+            nextVal ? 'توثيق حساب' : 'إلغاء توثيق',
+            nextVal ? 'منح شارة التوثيق الذهبية' : 'إلغاء شارة التوثيق اليدوية'
+        );
+    }
 }
 
 /**
@@ -4784,6 +5195,8 @@ function switchAdminTab(targetTabId, targetSubTabId = null) {
 
     if (effectiveMain === 'tabPanelOverview' || effectiveSub === 'subPanelOverviewSponsors') {
         renderSponsorAnalytics();
+    } else if (effectiveSub === 'subPanelCompetitorsHallOfFame') {
+        renderCompetitorsHallOfFame();
     }
 
     const drawer = document.getElementById('adminMobileDrawer');
@@ -4839,6 +5252,8 @@ function initAdminTabNavigation() {
 
             if (subTargetId === 'subPanelOverviewSponsors' || subTargetId === 'tabPanelSponsors') {
                 renderSponsorAnalytics();
+            } else if (subTargetId === 'subPanelCompetitorsHallOfFame') {
+                renderCompetitorsHallOfFame();
             }
         });
     });
@@ -5140,6 +5555,14 @@ function initUserActionModal() {
             if (inputAdjustStepsValue) inputAdjustStepsValue.value = '';
             if (inputAdjustStepsReason) inputAdjustStepsReason.value = '';
             setStatusText(statusEl, `تم تطبيق تعديل الخطوات بنجاح ومزامنة الحساس. رصيد خطوات اليوم: ${Number(newDaily).toLocaleString('ar-EG')}`, 'success');
+
+            if (typeof addCompetitorAuditEntry === 'function') {
+                addCompetitorAuditEntry(
+                    selectedUserForAction.full_name || selectedUserForAction.username || 'متسابق',
+                    currentStepControlMode === 'delta' ? (stepsVal > 0 ? 'مكافأة خطوات' : 'خصم خطوات') : 'تعيين خطوات',
+                    `${actionDesc} (${reason}). رصيد اليوم الجديد: ${Number(newDaily).toLocaleString('ar-EG')}`
+                );
+            }
         });
     }
 
@@ -5189,6 +5612,14 @@ function initUserActionModal() {
             }
 
             setStatusText(statusEl, 'تم تصفير خطوات اليوم لـ 0 بنجاح وتحديث نقاطها ومزامنة الحساس.', 'success');
+
+            if (typeof addCompetitorAuditEntry === 'function') {
+                addCompetitorAuditEntry(
+                    selectedUserForAction.full_name || selectedUserForAction.username || 'متسابق',
+                    'تصفير خطوات',
+                    `تصفير خطوات اليوم (${cleanReason})`
+                );
+            }
         });
     }
 
@@ -5518,6 +5949,14 @@ function initUserActionModal() {
             updateUserModalFreezeDisplay(selectedUserForAction);
             if (inputFreezeReason) inputFreezeReason.value = '';
             setStatusText(statusEl, `تم تطبيق ${durationText} بنجاح وإشعار المستخدم.`, 'success');
+
+            if (typeof addCompetitorAuditEntry === 'function') {
+                addCompetitorAuditEntry(
+                    selectedUserForAction.full_name || selectedUserForAction.username || 'مستخدم',
+                    'حظر/تجميد',
+                    `تطبيق ${durationText}: ${reason}`
+                );
+            }
         });
     }
 
@@ -5561,6 +6000,14 @@ function initUserActionModal() {
 
             updateUserModalFreezeDisplay(selectedUserForAction);
             setStatusText(statusEl, 'تم رفع التجميد/الحظر عن الحساب بنجاح واستعادته.', 'success');
+
+            if (typeof addCompetitorAuditEntry === 'function') {
+                addCompetitorAuditEntry(
+                    selectedUserForAction.full_name || selectedUserForAction.username || 'مستخدم',
+                    'فك تجميد/حظر',
+                    'فك التجميد واستعادة صلاحيات الحساب'
+                );
+            }
         });
     }
 }
@@ -6909,6 +7356,7 @@ function initAdminDashboardModules() {
     initUserActionModal();
     initInactiveUsersNotifyModal();
     initSponsorAnalyticsWidget();
+    initCompetitorsHallOfFame();
 }
 
 async function initAdminPage() {
