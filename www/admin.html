@@ -2163,12 +2163,58 @@
 
                 </section>
 
+                <!-- ------------------------------------------------------- -->
+                <!-- سؤالا اليوم وسؤالا الغد (اليوم الجديد) -->
+                <!-- ------------------------------------------------------- -->
+                <section id="todayAndTomorrowQuestionsWidget"
+                         class="admin-card bg-lux-900/40 rounded-2xl p-5 md:p-6 border border-lux-800/70 space-y-4">
+
+                    <div class="flex items-center justify-between gap-2 flex-wrap">
+                        <div>
+                            <h2 class="text-sm font-extrabold text-lux-50">سؤالا اليوم وسؤالا الغد (اليوم الجديد)</h2>
+                            <p class="text-xs text-lux-400 font-medium mt-0.5">متابعة الأسئلة المعروضة حالياً والأسئلة المقررة لليوم القادم لمنع التكرار ومعرفة المشاركين</p>
+                        </div>
+                        <button type="button" id="refreshTodayTomorrowBtn" class="admin-notify-clear-btn admin-notify-clear-btn--wide">
+                            تحديث
+                        </button>
+                    </div>
+
+                    <p id="todayTomorrowStatus" class="admin-status-text" role="status" aria-live="polite"></p>
+
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                        <!-- عمود اليوم الحالي -->
+                        <div class="space-y-3 bg-lux-950/40 p-4 rounded-2xl border border-emerald-500/20">
+                            <div class="flex items-center justify-between">
+                                <span class="text-xs font-black text-emerald-400">سؤالا اليوم (المعروضان الآن)</span>
+                                <span id="todayDateLabel" class="text-[11px] font-mono text-lux-400"></span>
+                            </div>
+                            <div id="todayQuestionsContainer" class="space-y-3">
+                                <p class="text-xs text-lux-400">جاري التحميل…</p>
+                            </div>
+                        </div>
+
+                        <!-- عمود اليوم القادم (الغد) -->
+                        <div class="space-y-3 bg-lux-950/40 p-4 rounded-2xl border border-amber-500/20">
+                            <div class="flex items-center justify-between">
+                                <span class="text-xs font-black text-amber-400">سؤالا الغد (المقرران لليوم الجديد)</span>
+                                <span id="tomorrowDateLabel" class="text-[11px] font-mono text-lux-400"></span>
+                            </div>
+                            <div id="tomorrowQuestionsContainer" class="space-y-3">
+                                <p class="text-xs text-lux-400">جاري التحميل…</p>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
                 <section id="questionsListWidget"
                          class="admin-card bg-lux-900/40 rounded-2xl p-5 md:p-6 border border-lux-800/70 space-y-4">
 
-                    <div>
-                        <h2 class="text-sm font-extrabold text-lux-50">بنك الأسئلة</h2>
-                        <p class="text-xs text-lux-400 font-medium mt-0.5">كل الأسئلة المضافة - الأسئلة المعروضة النهاردة عليها وسم "ظاهر اليوم"</p>
+                    <div class="flex items-center justify-between gap-2 flex-wrap">
+                        <div>
+                            <h2 class="text-sm font-extrabold text-lux-50">بنك الأسئلة</h2>
+                            <p class="text-xs text-lux-400 font-medium mt-0.5">معاينة لأول 5 أسئلة - اضغط على الزر بالأسفل لتصفح البنك بالكامل</p>
+                        </div>
+                        <span id="questionsTotalCountBadge" class="admin-user-bounds-badge is-inside font-bold text-xs">إجمالي: …</span>
                     </div>
 
                     <!-- (مجموعة 2) تحذير لو عدد الأسئلة المفعّلة قلّ عن
@@ -2214,6 +2260,16 @@
                     <p id="questionsListStatus" class="admin-status-text" role="status" aria-live="polite"></p>
 
                     <ul id="questionsListEl" class="space-y-2"></ul>
+
+                    <!-- زر فتح بنك الأسئلة بالكامل في نافذة مستقلة -->
+                    <button type="button" id="openAllQuestionsModalBtn" class="admin-save-btn w-full py-3 flex items-center justify-center gap-2 text-xs font-extrabold">
+                        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M15 3h6v6"></path>
+                            <path d="M10 14L21 3"></path>
+                            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                        </svg>
+                        <span id="openAllQuestionsModalBtnText">عرض بنك الأسئلة بالكامل في نافذة مستقلة</span>
+                    </button>
 
                 </section>
 
@@ -3596,6 +3652,117 @@
                     حذف هذه القصة
                 </button>
                 <button type="button" id="btnAdminViewerCloseBottom" class="px-4 py-2.5 rounded-xl bg-lux-800/80 hover:bg-lux-700 text-lux-200 text-xs font-bold transition">
+                    إغلاق
+                </button>
+    <!-- نافذة بنك الأسئلة بالكامل المستقلة -->
+    <div id="allQuestionsModal" class="fixed inset-0 z-[75] bg-black/85 backdrop-blur-md hidden flex items-center justify-center p-3 sm:p-5">
+        <div class="relative w-full max-w-4xl bg-lux-900 border border-lux-700/80 rounded-3xl shadow-2xl p-5 md:p-6 flex flex-col max-h-[92vh] overflow-hidden space-y-4">
+            <!-- رأس النافذة -->
+            <div class="flex items-center justify-between gap-3 pb-3 border-b border-lux-800">
+                <div class="flex items-center gap-2.5">
+                    <span class="w-3 h-3 rounded-full bg-gold-400"></span>
+                    <div>
+                        <h2 class="text-sm sm:text-base font-extrabold text-lux-50">بنك الأسئلة بالكامل</h2>
+                        <p id="allQuestionsModalSubtitle" class="text-xs text-lux-400 font-medium mt-0.5">تصفح وفلترة جميع الأسئلة مع الإحصائيات الكاملة</p>
+                    </div>
+                </div>
+                <button type="button" id="closeAllQuestionsModalBtn" class="w-8 h-8 rounded-full bg-lux-800 hover:bg-lux-700 text-lux-300 flex items-center justify-center font-bold transition" aria-label="إغلاق">
+                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </button>
+            </div>
+
+            <!-- شريط البحث والفلترة داخل المودال -->
+            <div class="space-y-2">
+                <input type="text" id="modalQuestionsSearchInput" class="admin-text-input w-full" placeholder="ابحث في نصوص أسئلة البنك…">
+                <div class="grid grid-cols-3 gap-2">
+                    <select id="modalQuestionsFilterCategory" class="admin-text-input w-full">
+                        <option value="">كل الفئات</option>
+                    </select>
+                    <select id="modalQuestionsFilterDifficulty" class="admin-text-input w-full">
+                        <option value="">كل الصعوبات</option>
+                        <option value="easy">سهل</option>
+                        <option value="medium">متوسط</option>
+                        <option value="hard">صعب</option>
+                    </select>
+                    <select id="modalQuestionsFilterStatus" class="admin-text-input w-full">
+                        <option value="">الكل</option>
+                        <option value="active">مفعّل بس</option>
+                        <option value="inactive">غير مفعّل بس</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- قائمة كل الأسئلة مع السكرول المخصص -->
+            <div class="flex-1 overflow-y-auto space-y-2 pr-1" id="modalQuestionsListContainer">
+                <ul id="modalQuestionsListEl" class="space-y-2"></ul>
+                <p id="modalQuestionsListStatus" class="admin-status-text" role="status" aria-live="polite"></p>
+            </div>
+
+            <!-- زر إغلاق سفلي -->
+            <div class="pt-3 border-t border-lux-800 flex justify-end">
+                <button type="button" id="closeAllQuestionsModalBtnBottom" class="admin-notify-clear-btn admin-notify-clear-btn--wide">
+                    إغلاق النافذة
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- نافذة تفاصيل إجابات المشاركين لسؤال معين -->
+    <div id="questionParticipantsModal" class="fixed inset-0 z-[80] bg-black/85 backdrop-blur-md hidden flex items-center justify-center p-3 sm:p-5">
+        <div class="relative w-full max-w-3xl bg-lux-900 border border-lux-700/80 rounded-3xl shadow-2xl p-5 md:p-6 flex flex-col max-h-[92vh] overflow-hidden space-y-4">
+            <!-- رأس النافذة -->
+            <div class="flex items-start justify-between gap-3 pb-3 border-b border-lux-800">
+                <div class="space-y-1">
+                    <div class="flex items-center gap-2">
+                        <span class="text-[11px] font-extrabold text-gold-400 bg-gold-500/10 px-2 py-0.5 rounded-full border border-gold-500/20" id="qpModalCategory"></span>
+                        <span class="text-[11px] font-bold text-lux-400" id="qpModalDifficulty"></span>
+                    </div>
+                    <h3 class="text-sm sm:text-base font-extrabold text-lux-50 leading-relaxed" id="qpModalQuestionText"></h3>
+                    <p class="text-xs text-emerald-400 font-bold" id="qpModalCorrectAnswer"></p>
+                </div>
+                <button type="button" id="closeQpModalBtn" class="w-8 h-8 rounded-full bg-lux-800 hover:bg-lux-700 text-lux-300 flex items-center justify-center font-bold transition shrink-0" aria-label="إغلاق">
+                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </button>
+            </div>
+
+            <!-- ملخص الإحصائيات (كروت سريعة) -->
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center" id="qpModalSummaryGrid">
+                <div class="bg-lux-950/60 p-2.5 rounded-2xl border border-lux-800">
+                    <span class="block text-base font-black text-lux-100" id="qpStatTotal">0</span>
+                    <span class="text-[10px] text-lux-400 font-medium">إجمالي المحاولات</span>
+                </div>
+                <div class="bg-emerald-950/30 p-2.5 rounded-2xl border border-emerald-500/20">
+                    <span class="block text-base font-black text-emerald-400" id="qpStatCorrect">0 (0%)</span>
+                    <span class="text-[10px] text-emerald-300 font-medium">إجابات صحيحة</span>
+                </div>
+                <div class="bg-rose-950/30 p-2.5 rounded-2xl border border-rose-500/20">
+                    <span class="block text-base font-black text-rose-400" id="qpStatIncorrect">0</span>
+                    <span class="text-[10px] text-rose-300 font-medium">إجابات خاطئة</span>
+                </div>
+                <div class="bg-amber-950/30 p-2.5 rounded-2xl border border-amber-500/20">
+                    <span class="block text-base font-black text-amber-400" id="qpStatForfeited">0</span>
+                    <span class="text-[10px] text-amber-300 font-medium">انسحبوا أثناء السؤال</span>
+                </div>
+            </div>
+
+            <!-- فلاتر المشاركين السريعة -->
+            <div class="flex items-center gap-1.5 overflow-x-auto pb-1" id="qpFilterTabs">
+                <button type="button" data-filter="all" class="qp-filter-tab px-3 py-1 rounded-xl text-xs font-bold transition bg-gold-500 text-lux-950 font-black">الكل</button>
+                <button type="button" data-filter="correct" class="qp-filter-tab px-3 py-1 rounded-xl text-xs font-bold transition bg-lux-800 text-lux-300 hover:text-emerald-400">إجابة صحيحة</button>
+                <button type="button" data-filter="incorrect" class="qp-filter-tab px-3 py-1 rounded-xl text-xs font-bold transition bg-lux-800 text-lux-300 hover:text-rose-400">إجابة خاطئة</button>
+                <button type="button" data-filter="forfeited" class="qp-filter-tab px-3 py-1 rounded-xl text-xs font-bold transition bg-lux-800 text-lux-300 hover:text-amber-400">انسحبوا</button>
+                <button type="button" data-filter="timeout" class="qp-filter-tab px-3 py-1 rounded-xl text-xs font-bold transition bg-lux-800 text-lux-300 hover:text-lux-200">انتهى الوقت</button>
+            </div>
+
+            <!-- قائمة المشاركين -->
+            <div class="flex-1 overflow-y-auto space-y-2 pr-1" id="qpParticipantsListContainer">
+                <ul id="qpParticipantsList" class="space-y-2"></ul>
+                <p id="qpParticipantsStatus" class="admin-status-text" role="status" aria-live="polite"></p>
+            </div>
+
+            <!-- زر إغلاق سفلي -->
+            <div class="pt-3 border-t border-lux-800 flex justify-end">
+                <button type="button" id="closeQpModalBtnBottom" class="admin-notify-clear-btn admin-notify-clear-btn--wide">
                     إغلاق
                 </button>
             </div>

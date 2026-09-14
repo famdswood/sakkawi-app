@@ -3576,6 +3576,8 @@ async function loadDailyQuestionsList() {
     // وبعدين تتحدث لوحدها لما توصل (شوف loadQuestionAnswerStats)
     loadQuestionAnswerStats();
     applyQuestionsListFilters();
+    applyModalQuestionsFilters();
+    loadTodayAndTomorrowPicks();
 }
 
 /** (مجموعة 2) تحميل نسبة الإجابة الصح لكل سؤال عن طريق
@@ -3606,6 +3608,7 @@ async function loadQuestionAnswerStats() {
         // نفسها بدل استدعاء renderQuestionsList مباشرة عشان لو الأدمن
         // كان بيبحث/يفلتر بالفعل، النتيجة المفلترة تفضل زي ما هي)
         applyQuestionsListFilters();
+        applyModalQuestionsFilters();
     } catch (err) {
         console.error('[admin.js] استثناء غير متوقع أثناء تحميل نسبة الإجابة الصح:', err);
     }
@@ -3746,6 +3749,14 @@ function populateQuestionCategoryFilterOptions() {
         // نحافظ على الفلتر المختار قبل التحديث لو لسه موجود ضمن الفئات الجديدة
         if (categories.includes(currentValue)) filterSelect.value = currentValue;
     }
+
+    const modalFilterSelect = document.getElementById('modalQuestionsFilterCategory');
+    if (modalFilterSelect) {
+        const currentValue = modalFilterSelect.value;
+        modalFilterSelect.innerHTML = '<option value="">كل الفئات</option>'
+            + categories.map((cat) => `<option value="${escapeHtml(cat)}">${escapeHtml(cat)}</option>`).join('');
+        if (categories.includes(currentValue)) modalFilterSelect.value = currentValue;
+    }
 }
 
 /** (مجموعة 1) تطبيق البحث النصي + فلاتر الفئة/الصعوبة/الحالة على
@@ -3802,51 +3813,79 @@ function getQuestionStatBadge(questionId) {
     };
 }
 
-/** @param {Array<{id:string, question_text:string, options:Array, correct_option_id:string, is_active:boolean, used_count:number, category:string|null, difficulty:string}>} questions */
+/** عرض أول 5 أسئلة فقط في الواجهة الرئيسية لبنك الأسئلة مع ترقيم الأسئلة
+ * @param {Array<{id:string, question_text:string, options:Array, correct_option_id:string, is_active:boolean, used_count:number, category:string|null, difficulty:string}>} questions */
 function renderQuestionsList(questions) {
     const listEl = document.getElementById('questionsListEl');
     if (!listEl) return;
 
+    // تحديث شارة إجمالي عدد الأسئلة
+    const totalCountBadge = document.getElementById('questionsTotalCountBadge');
+    if (totalCountBadge) {
+        totalCountBadge.textContent = `إجمالي: ${allLoadedQuestions.length} سؤال`;
+    }
+    const openModalBtnText = document.getElementById('openAllQuestionsModalBtnText');
+    if (openModalBtnText) {
+        openModalBtnText.textContent = `عرض بنك الأسئلة بالكامل (${allLoadedQuestions.length} سؤال)`;
+    }
+
     listEl.innerHTML = '';
 
-    questions.forEach((question) => {
+    // عرض أول 5 أسئلة فقط في الواجهة الرئيسية لمنع ازدحام الصفحة
+    const displayQuestions = questions.slice(0, 5);
+
+    displayQuestions.forEach((question) => {
         const isToday = todaysQuestionIds.has(question.id);
         const li = document.createElement('li');
         li.className = 'admin-user-row';
-        if (!question.is_active) li.classList.add('is-blocked'); // إعادة استخدام نفس تلوين "غير مفعّل" بصريًا
+        if (!question.is_active) li.classList.add('is-blocked');
+
+        // ترقيم السؤال بناءً على ترتيبه الكلي في البنك
+        const globalIndex = allLoadedQuestions.findIndex((q) => q.id === question.id);
+        const questionNumber = globalIndex >= 0 ? (globalIndex + 1) : '';
 
         const excerpt = question.question_text.length > 70
             ? `${question.question_text.slice(0, 70)}…`
             : question.question_text;
 
-        // (مجموعة 1) سطر معلومات ثاني: الفئة (لو موجودة) + الصعوبة +
-        // عدد مرات الظهور، عشان القائمة تديك سياق كفاية من غير ما تفتح تعديل
         const difficultyLabel = QUESTION_DIFFICULTY_LABELS[question.difficulty] || 'متوسط';
+        const usedCountText = (question.used_count && question.used_count > 0)
+            ? `عُرض في ${question.used_count} يوم كـ سؤال يومي`
+            : 'لم يُعرض بعد كـ سؤال يومي';
+
         const metaParts = [
             question.is_active ? 'مفعّل' : 'غير مفعّل',
             question.category ? escapeHtml(question.category) : null,
             difficultyLabel,
-            `اتعرض ${question.used_count || 0} مرة`,
+            usedCountText,
             question.scheduled_for_date ? `مجدول ليوم: ${question.scheduled_for_date.slice(0, 10)}` : null,
         ].filter(Boolean);
 
-        // (مجموعة 2) شارة نسبة الإجابة الصح - بتتحط بس لو فيه بيانات
-        // فعلاً (شوف getQuestionStatBadge)
         const statBadge = getQuestionStatBadge(question.id);
 
         li.innerHTML = `
             <div class="admin-user-info">
-                <div class="admin-user-name">${escapeHtml(excerpt)}</div>
-                <div class="admin-user-username">${metaParts.join(' · ')}</div>
+                <div class="admin-user-name flex items-center gap-1.5 flex-wrap">
+                    ${questionNumber ? `<span class="inline-block bg-lux-800 text-gold-400 text-xs px-2 py-0.5 rounded-md font-mono font-bold">#${questionNumber}</span>` : ''}
+                    <span>${escapeHtml(excerpt)}</span>
+                </div>
+                <div class="admin-user-username mt-1">${metaParts.join(' · ')}</div>
             </div>
-            ${isToday ? '<span class="admin-user-bounds-badge is-inside">ظاهر اليوم</span>' : ''}
-            ${statBadge ? `<span class="admin-question-stat-badge" data-tier="${statBadge.tier}">${escapeHtml(statBadge.text)}</span>` : ''}
+            ${isToday ? '<span class="admin-user-bounds-badge is-inside shrink-0">ظاهر اليوم</span>' : ''}
+            ${statBadge ? `<button type="button" class="admin-question-stat-badge question-participants-trigger cursor-pointer" data-tier="${statBadge.tier}" title="اضغط لعرض تفاصيل المشاركين">${escapeHtml(statBadge.text)}</button>` : ''}
             <div class="admin-user-actions">
+                <button type="button" class="admin-notify-clear-btn admin-notify-clear-btn--wide question-participants-btn" title="تفاصيل إجابات المشاركين">المشاركون</button>
                 <button type="button" class="admin-notify-clear-btn admin-notify-clear-btn--wide question-toggle-btn">${question.is_active ? 'إيقاف' : 'تفعيل'}</button>
                 <button type="button" class="admin-notify-clear-btn admin-notify-clear-btn--wide question-edit-btn">تعديل</button>
                 <button type="button" class="admin-notify-clear-btn admin-notify-clear-btn--wide question-delete-btn">حذف</button>
             </div>
         `;
+
+        const statTrigger = li.querySelector('.question-participants-trigger');
+        if (statTrigger) statTrigger.addEventListener('click', () => openQuestionParticipantsModal(question));
+
+        const participantsBtn = li.querySelector('.question-participants-btn');
+        if (participantsBtn) participantsBtn.addEventListener('click', () => openQuestionParticipantsModal(question));
 
         const toggleBtn = li.querySelector('.question-toggle-btn');
         if (toggleBtn) toggleBtn.addEventListener('click', () => handleToggleQuestionActive(question, toggleBtn, li));
@@ -3861,10 +3900,7 @@ function renderQuestionsList(questions) {
     });
 }
 
-/** (مجموعة 1) تفعيل/تعطيل سريع من غير ما تفتح فورم التعديل - عن طريق
- *  admin_set_daily_question_active RPC (خفيفة، بتلمس عمود is_active
- *  بس) - بتحدّث النسخة المحلية في allLoadedQuestions كمان عشان
- *  الفلترة اللاحقة تفضل متزامنة من غير إعادة تحميل كاملة */
+/** تفعيل أو إيقاف تفعيل سؤال */
 async function handleToggleQuestionActive(question, buttonEl, rowEl) {
     const newValue = !question.is_active;
     if (buttonEl) buttonEl.disabled = true;
@@ -3889,29 +3925,14 @@ async function handleToggleQuestionActive(question, buttonEl, rowEl) {
     if (rowEl) rowEl.classList.toggle('is-blocked', !newValue);
     if (buttonEl) buttonEl.textContent = newValue ? 'إيقاف' : 'تفعيل';
 
-    const usernameEl = rowEl ? rowEl.querySelector('.admin-user-username') : null;
-    if (usernameEl) {
-        const difficultyLabel = QUESTION_DIFFICULTY_LABELS[question.difficulty] || 'متوسط';
-        const metaParts = [
-            newValue ? 'مفعّل' : 'غير مفعّل',
-            question.category ? escapeHtml(question.category) : null,
-            difficultyLabel,
-            `اتعرض ${question.used_count || 0} مرة`,
-        ].filter(Boolean);
-        usernameEl.textContent = metaParts.join(' · ');
-    }
-
-    // (مجموعة 2) البانر بيتحدّث فورًا (العدد المفعّل اتغيّر) + سطر جديد
-    // في سجل التعديلات - الاتنين مش حرجين لعملية التفعيل نفسها، فلو
-    // فشلوا لأي سبب (مثلاً سكريبت phase-7 لسه مش مشغّل) العملية
-    // الأساسية فوق بتفضل ناجحة عادي
     renderQuestionsActiveWarning();
     logQuestionAction(newValue ? 'question_toggle_active_on' : 'question_toggle_active_off', question);
+
+    applyQuestionsListFilters();
+    applyModalQuestionsFilters();
 }
 
-/** حذف سؤال - عن طريق admin_delete_daily_question RPC بس، بعد تأكيد.
- *  الدالة نفسها بترفض حذف سؤال معروض النهاردة فعلاً (شوف السبب في
- *  الـ SQL)، فبنعرض رسالة الخطأ اللي راجعة من السيرفر زي ما هي */
+/** حذف سؤال من البنك */
 async function handleDeleteQuestion(question, rowEl) {
     if (!window.confirm('تأكيد حذف السؤال ده؟ الحذف نهائي.')) return;
 
@@ -3929,12 +3950,550 @@ async function handleDeleteQuestion(question, rowEl) {
 
     allLoadedQuestions = allLoadedQuestions.filter((q) => q.id !== question.id);
     if (rowEl) rowEl.remove();
-    renderQuestionsActiveWarning(); // (مجموعة 2) العدد المفعّل ممكن يكون قل لو السؤال المحذوف كان مفعّل
+    renderQuestionsActiveWarning();
 
-    const listEl = document.getElementById('questionsListEl');
-    const statusEl = document.getElementById('questionsListStatus');
-    if (listEl && !listEl.children.length) {
-        setStatusText(statusEl, 'مفيش أسئلة في البنك لسه - ضيف أول سؤال من الفورم فوق.', 'empty');
+    applyQuestionsListFilters();
+    applyModalQuestionsFilters();
+    loadTodayAndTomorrowPicks();
+}
+
+/* ==================================================================
+   نافذة تصفح بنك الأسئلة بالكامل (All Questions Modal)
+   ================================================================== */
+
+function applyModalQuestionsFilters() {
+    const searchInput = document.getElementById('modalQuestionsSearchInput');
+    const categoryFilter = document.getElementById('modalQuestionsFilterCategory');
+    const difficultyFilter = document.getElementById('modalQuestionsFilterDifficulty');
+    const statusFilter = document.getElementById('modalQuestionsFilterStatus');
+
+    const searchQuery = searchInput ? searchInput.value.trim().toLowerCase() : '';
+    const categoryValue = categoryFilter ? categoryFilter.value : '';
+    const difficultyValue = difficultyFilter ? difficultyFilter.value : '';
+    const statusValue = statusFilter ? statusFilter.value : '';
+
+    const filtered = allLoadedQuestions.filter((q) => {
+        if (searchQuery && !q.question_text.toLowerCase().includes(searchQuery)) return false;
+        if (categoryValue && q.category !== categoryValue) return false;
+        if (difficultyValue && q.difficulty !== difficultyValue) return false;
+        if (statusValue === 'active' && !q.is_active) return false;
+        if (statusValue === 'inactive' && q.is_active) return false;
+        return true;
+    });
+
+    renderModalQuestionsList(filtered);
+
+    const statusEl = document.getElementById('modalQuestionsListStatus');
+    if (!allLoadedQuestions.length) {
+        setStatusText(statusEl, 'مفيش أسئلة في البنك لسه.', 'empty');
+    } else if (!filtered.length) {
+        setStatusText(statusEl, 'مفيش أسئلة مطابقة للبحث/الفلتر ده.', 'empty');
+    } else {
+        setStatusText(statusEl, '', null);
+    }
+}
+
+function renderModalQuestionsList(questions) {
+    const listEl = document.getElementById('modalQuestionsListEl');
+    if (!listEl) return;
+
+    listEl.innerHTML = '';
+
+    questions.forEach((question) => {
+        const isToday = todaysQuestionIds.has(question.id);
+        const li = document.createElement('li');
+        li.className = 'admin-user-row';
+        if (!question.is_active) li.classList.add('is-blocked');
+
+        const globalIndex = allLoadedQuestions.findIndex((q) => q.id === question.id);
+        const questionNumber = globalIndex >= 0 ? (globalIndex + 1) : '';
+
+        const excerpt = question.question_text.length > 85
+            ? `${question.question_text.slice(0, 85)}…`
+            : question.question_text;
+
+        const difficultyLabel = QUESTION_DIFFICULTY_LABELS[question.difficulty] || 'متوسط';
+        const usedCountText = (question.used_count && question.used_count > 0)
+            ? `عُرض في ${question.used_count} يوم كـ سؤال يومي`
+            : 'لم يُعرض بعد كـ سؤال يومي';
+
+        const metaParts = [
+            question.is_active ? 'مفعّل' : 'غير مفعّل',
+            question.category ? escapeHtml(question.category) : null,
+            difficultyLabel,
+            usedCountText,
+            question.scheduled_for_date ? `مجدول ليوم: ${question.scheduled_for_date.slice(0, 10)}` : null,
+        ].filter(Boolean);
+
+        const statBadge = getQuestionStatBadge(question.id);
+
+        li.innerHTML = `
+            <div class="admin-user-info">
+                <div class="admin-user-name flex items-center gap-1.5 flex-wrap">
+                    ${questionNumber ? `<span class="inline-block bg-lux-800 text-gold-400 text-xs px-2 py-0.5 rounded-md font-mono font-bold">#${questionNumber}</span>` : ''}
+                    <span>${escapeHtml(excerpt)}</span>
+                </div>
+                <div class="admin-user-username mt-1">${metaParts.join(' · ')}</div>
+            </div>
+            ${isToday ? '<span class="admin-user-bounds-badge is-inside shrink-0">ظاهر اليوم</span>' : ''}
+            ${statBadge ? `<button type="button" class="admin-question-stat-badge question-participants-trigger cursor-pointer" data-tier="${statBadge.tier}" title="اضغط لعرض تفاصيل المشاركين">${escapeHtml(statBadge.text)}</button>` : ''}
+            <div class="admin-user-actions">
+                <button type="button" class="admin-notify-clear-btn admin-notify-clear-btn--wide question-participants-btn" title="تفاصيل إجابات المشاركين">المشاركون</button>
+                <button type="button" class="admin-notify-clear-btn admin-notify-clear-btn--wide question-toggle-btn">${question.is_active ? 'إيقاف' : 'تفعيل'}</button>
+                <button type="button" class="admin-notify-clear-btn admin-notify-clear-btn--wide question-edit-btn">تعديل</button>
+                <button type="button" class="admin-notify-clear-btn admin-notify-clear-btn--wide question-delete-btn">حذف</button>
+            </div>
+        `;
+
+        const statTrigger = li.querySelector('.question-participants-trigger');
+        if (statTrigger) statTrigger.addEventListener('click', () => openQuestionParticipantsModal(question));
+
+        const participantsBtn = li.querySelector('.question-participants-btn');
+        if (participantsBtn) participantsBtn.addEventListener('click', () => openQuestionParticipantsModal(question));
+
+        const toggleBtn = li.querySelector('.question-toggle-btn');
+        if (toggleBtn) toggleBtn.addEventListener('click', () => handleToggleQuestionActive(question, toggleBtn, li));
+
+        const editBtn = li.querySelector('.question-edit-btn');
+        if (editBtn) {
+            editBtn.addEventListener('click', () => {
+                const modal = document.getElementById('allQuestionsModal');
+                if (modal) modal.classList.add('hidden');
+                fillQuestionFormForEdit(question);
+            });
+        }
+
+        const deleteBtn = li.querySelector('.question-delete-btn');
+        if (deleteBtn) deleteBtn.addEventListener('click', () => handleDeleteQuestion(question, li));
+
+        listEl.appendChild(li);
+    });
+}
+
+function initAllQuestionsModal() {
+    const modal = document.getElementById('allQuestionsModal');
+    const openBtn = document.getElementById('openAllQuestionsModalBtn');
+    const closeBtn = document.getElementById('closeAllQuestionsModalBtn');
+    const closeBottomBtn = document.getElementById('closeAllQuestionsModalBtnBottom');
+
+    const openModal = () => {
+        if (!modal) return;
+        modal.classList.remove('hidden');
+        const subtitle = document.getElementById('allQuestionsModalSubtitle');
+        if (subtitle) {
+            subtitle.textContent = `تصفح وفلترة جميع الأسئلة (${allLoadedQuestions.length} سؤال) مع الإحصائيات الكاملة`;
+        }
+        applyModalQuestionsFilters();
+    };
+
+    const closeModal = () => {
+        if (modal) modal.classList.add('hidden');
+    };
+
+    if (openBtn) openBtn.addEventListener('click', openModal);
+    if (closeBtn) closeBtn.addEventListener('click', closeModal);
+    if (closeBottomBtn) closeBottomBtn.addEventListener('click', closeModal);
+    if (modal) {
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) closeModal();
+        });
+    }
+
+    const searchInput = document.getElementById('modalQuestionsSearchInput');
+    if (searchInput) searchInput.addEventListener('input', applyModalQuestionsFilters);
+
+    ['modalQuestionsFilterCategory', 'modalQuestionsFilterDifficulty', 'modalQuestionsFilterStatus'].forEach((id) => {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener('change', applyModalQuestionsFilters);
+    });
+}
+
+/* ==================================================================
+   نافذة تفاصيل إجابات المشاركين لسؤال معين (Question Participants Modal)
+   ================================================================== */
+
+let currentQuestionParticipants = [];
+let currentParticipantFilter = 'all';
+
+/** فتح نافذة المشاركين لسؤال معين وجلب إجاباتهم
+ * @param {{id:string, question_id?:string, question_text:string, options:Array, correct_option_id:string, category:string|null, difficulty:string}} question
+ */
+async function openQuestionParticipantsModal(question) {
+    const modal = document.getElementById('questionParticipantsModal');
+    if (!modal) return;
+
+    modal.classList.remove('hidden');
+
+    const categoryEl = document.getElementById('qpModalCategory');
+    const difficultyEl = document.getElementById('qpModalDifficulty');
+    const questionTextEl = document.getElementById('qpModalQuestionText');
+    const correctAnswerEl = document.getElementById('qpModalCorrectAnswer');
+    const statusEl = document.getElementById('qpParticipantsStatus');
+    const listEl = document.getElementById('qpParticipantsList');
+
+    if (categoryEl) categoryEl.textContent = question.category || 'عام';
+    if (difficultyEl) difficultyEl.textContent = QUESTION_DIFFICULTY_LABELS[question.difficulty] || 'متوسط';
+    if (questionTextEl) questionTextEl.textContent = question.question_text || '';
+
+    // معرفة نص الإجابة الصحيحة
+    let correctText = 'غير محددة';
+    if (Array.isArray(question.options)) {
+        const correctOpt = question.options.find((opt) => String(opt.id) === String(question.correct_option_id));
+        if (correctOpt) correctText = correctOpt.text;
+    }
+    if (correctAnswerEl) correctAnswerEl.textContent = `الإجابة الصحيحة: ${correctText}`;
+
+    const totalEl = document.getElementById('qpStatTotal');
+    const correctEl = document.getElementById('qpStatCorrect');
+    const incorrectEl = document.getElementById('qpStatIncorrect');
+    const forfeitedEl = document.getElementById('qpStatForfeited');
+
+    if (totalEl) totalEl.textContent = '0';
+    if (correctEl) correctEl.textContent = '0 (0%)';
+    if (incorrectEl) incorrectEl.textContent = '0';
+    if (forfeitedEl) forfeitedEl.textContent = '0';
+
+    if (listEl) listEl.innerHTML = '';
+    setStatusText(statusEl, 'جاري تحميل تفاصيل المشاركين…', 'loading');
+
+    currentParticipantFilter = 'all';
+    updateParticipantFilterTabsUI('all');
+
+    const questionTargetId = question.id || question.question_id;
+
+    try {
+        const { data, error } = await supabaseClient.rpc('admin_get_question_participants', {
+            p_question_id: questionTargetId,
+        });
+
+        if (error) {
+            console.error('[admin.js] فشل جلب تفاصيل المشاركين:', error);
+            setStatusText(statusEl, 'تعذّر تحميل تفاصيل المشاركين.', 'error');
+            return;
+        }
+
+        currentQuestionParticipants = data || [];
+
+        const total = currentQuestionParticipants.length;
+        const correctCount = currentQuestionParticipants.filter((p) => p.status === 'answered' && p.is_correct === true).length;
+        const incorrectCount = currentQuestionParticipants.filter((p) => p.status === 'answered' && p.is_correct === false).length;
+        const forfeitedCount = currentQuestionParticipants.filter((p) => p.status === 'forfeited').length;
+        const correctPct = total > 0 ? Math.round((correctCount / total) * 100) : 0;
+
+        if (totalEl) totalEl.textContent = total.toLocaleString('ar-EG');
+        if (correctEl) correctEl.textContent = `${correctCount.toLocaleString('ar-EG')} (${correctPct}%)`;
+        if (incorrectEl) incorrectEl.textContent = incorrectCount.toLocaleString('ar-EG');
+        if (forfeitedEl) forfeitedEl.textContent = forfeitedCount.toLocaleString('ar-EG');
+
+        renderQuestionParticipantsList();
+    } catch (err) {
+        console.error('[admin.js] خطأ أثناء جلب تفاصيل المشاركين:', err);
+        setStatusText(statusEl, 'حدث خطأ غير متوقع أثناء التحميل.', 'error');
+    }
+}
+
+function renderQuestionParticipantsList() {
+    const listEl = document.getElementById('qpParticipantsList');
+    const statusEl = document.getElementById('qpParticipantsStatus');
+    if (!listEl) return;
+
+    listEl.innerHTML = '';
+
+    const filtered = currentQuestionParticipants.filter((p) => {
+        if (currentParticipantFilter === 'all') return true;
+        if (currentParticipantFilter === 'correct') return p.status === 'answered' && p.is_correct === true;
+        if (currentParticipantFilter === 'incorrect') return p.status === 'answered' && p.is_correct === false;
+        if (currentParticipantFilter === 'forfeited') return p.status === 'forfeited';
+        if (currentParticipantFilter === 'timeout') return p.status === 'timeout';
+        return true;
+    });
+
+    if (!currentQuestionParticipants.length) {
+        setStatusText(statusEl, 'لم يقم أي مستخدم بالإجابة على هذا السؤال بعد.', 'empty');
+        return;
+    }
+
+    if (!filtered.length) {
+        setStatusText(statusEl, 'لا يوجد مشاركون مطابقون لهذا التصنيف.', 'empty');
+        return;
+    }
+
+    setStatusText(statusEl, '', null);
+
+    filtered.forEach((p) => {
+        const li = document.createElement('li');
+        li.className = 'p-3 bg-lux-950/60 rounded-2xl border border-lux-800 flex items-center justify-between gap-3 flex-wrap';
+
+        let statusBadge = '';
+        if (p.status === 'forfeited') {
+            statusBadge = '<span class="px-2.5 py-1 rounded-full text-xs font-black bg-amber-500/15 text-amber-400 border border-amber-500/30">انسحب من التطبيق</span>';
+        } else if (p.status === 'timeout') {
+            statusBadge = '<span class="px-2.5 py-1 rounded-full text-xs font-black bg-lux-800 text-lux-300 border border-lux-700">انتهى الوقت</span>';
+        } else if (p.is_correct === true) {
+            statusBadge = '<span class="px-2.5 py-1 rounded-full text-xs font-black bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">إجابة صحيحة</span>';
+        } else {
+            statusBadge = '<span class="px-2.5 py-1 rounded-full text-xs font-black bg-rose-500/15 text-rose-400 border border-rose-500/30">إجابة خاطئة</span>';
+        }
+
+        const avatarSrc = p.avatar_url ? escapeHtml(p.avatar_url) : (p.gender === 'female' ? 'assets/images/default-avatar-female.png' : 'assets/images/default-avatar-male.png');
+        const fallbackSrc = 'assets/images/default-avatar-male.png';
+
+        const choiceText = p.status === 'forfeited'
+            ? '<span class="text-amber-400/90 text-xs font-medium">أغلق أو خرج من التطبيق أثناء تشغيل السؤال</span>'
+            : (p.status === 'timeout'
+                ? '<span class="text-lux-400 text-xs font-medium">انتهت مهلة الإجابة دون اختيار</span>'
+                : `<span class="text-xs text-lux-300">الاختيار: <strong class="text-lux-100 font-bold">${escapeHtml(p.option_text || 'خيار ' + p.option_id)}</strong>${p.remaining_seconds != null ? ` <span class="font-mono text-lux-400 text-[11px]">(متبقي ${p.remaining_seconds} ثانية)</span>` : ''}</span>`);
+
+        const formattedDate = p.created_at ? new Date(p.created_at).toLocaleString('ar-EG', {
+            day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
+        }) : '';
+
+        li.innerHTML = `
+            <div class="flex items-center gap-3">
+                <img src="${avatarSrc}" onerror="this.src='${fallbackSrc}'" alt="" class="w-10 h-10 rounded-full object-cover border border-lux-700 shrink-0">
+                <div>
+                    <div class="flex items-center gap-2">
+                        <span class="text-xs sm:text-sm font-extrabold text-lux-100">${escapeHtml(p.full_name || 'مستخدم سِكّاوي')}</span>
+                        ${p.username ? `<span class="text-[11px] font-mono text-lux-400 dir-ltr">@${escapeHtml(p.username)}</span>` : ''}
+                    </div>
+                    <div class="mt-0.5">${choiceText}</div>
+                </div>
+            </div>
+            <div class="flex flex-col items-end gap-1 shrink-0 mr-auto sm:mr-0">
+                ${statusBadge}
+                <span class="text-[10px] text-lux-500 font-mono">${escapeHtml(formattedDate)}</span>
+            </div>
+        `;
+        listEl.appendChild(li);
+    });
+}
+
+function updateParticipantFilterTabsUI(activeFilter) {
+    const tabs = document.querySelectorAll('.qp-filter-tab');
+    tabs.forEach((tab) => {
+        const filter = tab.getAttribute('data-filter');
+        if (filter === activeFilter) {
+            tab.className = 'qp-filter-tab px-3 py-1 rounded-xl text-xs font-bold transition bg-gold-500 text-lux-950 font-black shadow-sm';
+        } else {
+            tab.className = 'qp-filter-tab px-3 py-1 rounded-xl text-xs font-bold transition bg-lux-800 text-lux-300 hover:text-lux-100';
+        }
+    });
+}
+
+function initQuestionParticipantsModal() {
+    const modal = document.getElementById('questionParticipantsModal');
+    const closeBtn = document.getElementById('closeQpModalBtn');
+    const closeBottomBtn = document.getElementById('closeQpModalBtnBottom');
+
+    const closeModal = () => {
+        if (modal) modal.classList.add('hidden');
+    };
+
+    if (closeBtn) closeBtn.addEventListener('click', closeModal);
+    if (closeBottomBtn) closeBottomBtn.addEventListener('click', closeModal);
+    if (modal) {
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) closeModal();
+        });
+    }
+
+    const tabsContainer = document.getElementById('qpFilterTabs');
+    if (tabsContainer) {
+        tabsContainer.addEventListener('click', (e) => {
+            const btn = e.target.closest('.qp-filter-tab');
+            if (!btn) return;
+            const filter = btn.getAttribute('data-filter');
+            if (!filter || filter === currentParticipantFilter) return;
+            currentParticipantFilter = filter;
+            updateParticipantFilterTabsUI(filter);
+            renderQuestionParticipantsList();
+        });
+    }
+}
+
+/* ==================================================================
+   سؤالا اليوم وسؤالا الغد (اليوم الجديد)
+   ================================================================== */
+
+async function loadTodayAndTomorrowPicks() {
+    const statusEl = document.getElementById('todayTomorrowStatus');
+    const todayContainer = document.getElementById('todayQuestionsContainer');
+    const tomorrowContainer = document.getElementById('tomorrowQuestionsContainer');
+    const todayDateLabel = document.getElementById('todayDateLabel');
+    const tomorrowDateLabel = document.getElementById('tomorrowDateLabel');
+
+    if (!todayContainer || !tomorrowContainer) return;
+
+    setStatusText(statusEl, 'جاري جلب أسئلة اليوم والغد…', 'loading');
+
+    try {
+        const { data, error } = await supabaseClient.rpc('admin_get_today_and_tomorrow_picks');
+
+        if (error) {
+            console.error('[admin.js] فشل جلب أسئلة اليوم والغد:', error);
+            setStatusText(statusEl, 'تعذّر جلب الأسئلة المعروضة والقادمة.', 'error');
+            return;
+        }
+
+        setStatusText(statusEl, '', null);
+        const rows = data || [];
+
+        const todayRows = rows.filter((r) => r.is_today === true);
+        const tomorrowRows = rows.filter((r) => r.is_today === false);
+
+        if (todayRows.length && todayDateLabel) {
+            todayDateLabel.textContent = todayRows[0].question_date;
+        }
+        if (tomorrowRows.length && tomorrowDateLabel) {
+            tomorrowDateLabel.textContent = tomorrowRows[0].question_date;
+        }
+
+        renderTodayPicks(todayRows, todayContainer);
+        renderTomorrowPicks(tomorrowRows, tomorrowContainer);
+    } catch (err) {
+        console.error('[admin.js] خطأ أثناء تحميل أسئلة اليوم والغد:', err);
+        setStatusText(statusEl, 'حدث خطأ أثناء الاتصال بالسيرفر.', 'error');
+    }
+}
+
+function renderTodayPicks(rows, container) {
+    container.innerHTML = '';
+    if (!rows.length) {
+        container.innerHTML = '<p class="text-xs text-lux-400 p-3 bg-lux-950/40 rounded-xl">لا توجد أسئلة نشطة اليوم بعد.</p>';
+        return;
+    }
+
+    rows.forEach((row) => {
+        const card = document.createElement('div');
+        card.className = 'p-3.5 bg-lux-900/90 rounded-2xl border border-lux-800 space-y-2.5';
+
+        const difficultyLabel = QUESTION_DIFFICULTY_LABELS[row.difficulty] || 'متوسط';
+        const total = Number(row.total_answers) || 0;
+        const pct = row.correct_percentage != null ? `${row.correct_percentage}% صح` : '0% صح';
+
+        card.innerHTML = `
+            <div class="flex items-center justify-between gap-2">
+                <span class="text-[11px] font-black px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-400 border border-emerald-500/25">سؤال رقم ${row.question_slot}</span>
+                <div class="flex items-center gap-1.5 text-[11px]">
+                    <span class="text-lux-400 font-bold">${escapeHtml(row.category || 'عام')} · ${difficultyLabel}</span>
+                    <span class="px-1.5 py-0.5 rounded text-[10px] font-bold ${row.is_manual ? 'bg-purple-500/20 text-purple-300' : 'bg-lux-800 text-lux-400'}">${row.is_manual ? 'يدوي' : 'تلقائي'}</span>
+                </div>
+            </div>
+            <p class="text-xs sm:text-sm font-extrabold text-lux-100 leading-relaxed">${escapeHtml(row.question_text)}</p>
+            <div class="pt-2 border-t border-lux-800/80 flex items-center justify-between gap-2 flex-wrap">
+                <span class="text-xs font-bold text-lux-300">${total.toLocaleString('ar-EG')} محاولة <span class="text-emerald-400 font-mono">(${pct})</span></span>
+                <button type="button" class="admin-notify-clear-btn view-participants-btn font-black text-xs">
+                    عرض إجابات المشاركين (${total})
+                </button>
+            </div>
+        `;
+
+        const btn = card.querySelector('.view-participants-btn');
+        if (btn) {
+            btn.addEventListener('click', () => {
+                openQuestionParticipantsModal({
+                    id: row.question_id,
+                    question_id: row.question_id,
+                    question_text: row.question_text,
+                    options: row.options,
+                    correct_option_id: row.correct_option_id,
+                    category: row.category,
+                    difficulty: row.difficulty,
+                });
+            });
+        }
+
+        container.appendChild(card);
+    });
+}
+
+function renderTomorrowPicks(rows, container) {
+    container.innerHTML = '';
+    if (!rows.length) {
+        container.innerHTML = '<p class="text-xs text-lux-400 p-3 bg-lux-950/40 rounded-xl">لا توجد أسئلة مقررة للغد بعد.</p>';
+        return;
+    }
+
+    rows.forEach((row) => {
+        const card = document.createElement('div');
+        card.className = 'p-3.5 bg-lux-900/90 rounded-2xl border border-lux-800 space-y-2.5';
+
+        const difficultyLabel = QUESTION_DIFFICULTY_LABELS[row.difficulty] || 'متوسط';
+        const options = Array.isArray(row.options) ? row.options : [];
+
+        const optionsHtml = options.map((opt) => {
+            const isCorrect = String(opt.id) === String(row.correct_option_id);
+            return `
+                <div class="text-[11px] p-1.5 rounded-lg border ${isCorrect ? 'bg-emerald-500/10 border-emerald-500/40 text-emerald-300 font-bold' : 'bg-lux-950/40 border-lux-800/80 text-lux-300'}">
+                    ${isCorrect ? '<span class="text-emerald-400 font-black ml-1">[صح]</span> ' : ''}${escapeHtml(opt.text)}
+                </div>
+            `;
+        }).join('');
+
+        card.innerHTML = `
+            <div class="flex items-center justify-between gap-2">
+                <span class="text-[11px] font-black px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-400 border border-amber-500/25">سؤال رقم ${row.question_slot}</span>
+                <div class="flex items-center gap-1.5 text-[11px]">
+                    <span class="text-lux-400 font-bold">${escapeHtml(row.category || 'عام')} · ${difficultyLabel}</span>
+                    <span class="px-1.5 py-0.5 rounded text-[10px] font-bold ${row.is_manual ? 'bg-purple-500/20 text-purple-300' : 'bg-lux-800 text-lux-400'}">${row.is_manual ? 'يدوي' : 'تلقائي'}</span>
+                </div>
+            </div>
+            <p class="text-xs sm:text-sm font-extrabold text-lux-100 leading-relaxed">${escapeHtml(row.question_text)}</p>
+            <div class="grid grid-cols-2 gap-1.5 pt-1">
+                ${optionsHtml}
+            </div>
+            <div class="pt-2 border-t border-lux-800/80 flex items-center justify-end gap-2">
+                ${row.is_manual ? `<button type="button" class="admin-notify-clear-btn clear-manual-pick-btn text-xs text-rose-400 hover:text-rose-300">إرجاع للتلقائي</button>` : ''}
+                <button type="button" class="admin-notify-clear-btn change-tomorrow-pick-btn text-xs font-bold text-amber-400">
+                    تغيير السؤال
+                </button>
+            </div>
+        `;
+
+        const changeBtn = card.querySelector('.change-tomorrow-pick-btn');
+        if (changeBtn) {
+            changeBtn.addEventListener('click', () => {
+                promptChangeTomorrowQuestion(row);
+            });
+        }
+
+        const clearBtn = card.querySelector('.clear-manual-pick-btn');
+        if (clearBtn) {
+            clearBtn.addEventListener('click', async () => {
+                if (!window.confirm(`هل تريد إرجاع سؤال ${row.question_slot} للغد إلى الاختيار التلقائي؟`)) return;
+                clearBtn.disabled = true;
+                const { error } = await supabaseClient.rpc('admin_clear_manual_daily_question', {
+                    p_date: row.question_date,
+                    p_slot: row.question_slot,
+                });
+                clearBtn.disabled = false;
+                if (error) {
+                    window.alert(error.message || 'تعذّر إرجاع السؤال للتلقائي.');
+                    return;
+                }
+                loadTodayAndTomorrowPicks();
+            });
+        }
+
+        container.appendChild(card);
+    });
+}
+
+function promptChangeTomorrowQuestion(row) {
+    const widget = document.getElementById('questionManualScheduleWidget');
+    const dateInput = document.getElementById('manualScheduleDateInput');
+    const slotInput = document.getElementById('manualScheduleSlotInput');
+    const questionSelect = document.getElementById('manualScheduleQuestionInput');
+
+    if (dateInput) dateInput.value = row.question_date;
+    if (slotInput) slotInput.value = String(row.question_slot);
+    if (widget) {
+        widget.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        widget.classList.add('ring-2', 'ring-amber-500');
+        setTimeout(() => widget.classList.remove('ring-2', 'ring-amber-500'), 2500);
+    }
+    if (questionSelect) {
+        questionSelect.focus();
     }
 }
 
@@ -4077,6 +4636,7 @@ async function handleSaveManualSchedule() {
     if (question) logQuestionAction('question_manual_assign', question);
 
     loadManualScheduleList();
+    loadTodayAndTomorrowPicks();
     // لو التاريخ المحدد هو النهاردة، سؤالي اليوم في البنك ممكن يكونوا
     // اتغيّروا فعليًا - نعيد تحميل القائمة عشان وسم "ظاهر اليوم" يتزامن
     if (date === new Date().toISOString().slice(0, 10)) loadDailyQuestionsList();
@@ -4109,6 +4669,7 @@ async function handleClearManualSchedule(row, buttonEl, isToday) {
 
     logQuestionAction('question_manual_clear', { id: null, question_text: `${row.question_date} - سؤال ${row.question_slot}` });
     loadManualScheduleList();
+    loadTodayAndTomorrowPicks();
 }
 
 /** تهيئة ويدجت التحكم اليدوي - تُستدعى مرة واحدة من initDailyQuestionsWidget */
@@ -4157,12 +4718,20 @@ function initDailyQuestionsWidget() {
         if (el) el.addEventListener('change', applyQuestionsListFilters);
     });
 
+    const refreshTodayTomorrowBtn = document.getElementById('refreshTodayTomorrowBtn');
+    if (refreshTodayTomorrowBtn) {
+        refreshTodayTomorrowBtn.addEventListener('click', loadTodayAndTomorrowPicks);
+    }
+
     updateQuestionTextCounter();
     updateQuestionLivePreview();
     loadDailyQuestionsList();
+    loadTodayAndTomorrowPicks();
     loadQuestionAuditLog(); // (مجموعة 2) سجل التعديلات - مستقل عن قائمة الأسئلة، بيتحمّل بالتوازي
     initQuestionsBulkToolsWidget(); // (مجموعة 3) استيراد/تصدير جماعي
     initManualScheduleWidget(); // (مجموعة 4) تحكم يدوي في سؤال يوم معين
+    initAllQuestionsModal();
+    initQuestionParticipantsModal();
 }
 
 
