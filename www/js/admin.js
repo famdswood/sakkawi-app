@@ -4280,6 +4280,7 @@ function normalizeImportRow(raw, rowIndex) {
     const difficulty = ['easy', 'medium', 'hard'].includes(difficultyRaw) ? difficultyRaw : 'medium';
 
     const category = raw.category ? String(raw.category).trim() : '';
+    const scheduledForDate = String(raw.scheduled_for_date ?? raw.scheduledForDate ?? '').trim() || null;
 
     return {
         row: {
@@ -4288,6 +4289,7 @@ function normalizeImportRow(raw, rowIndex) {
             correctOptionId,
             category,
             difficulty,
+            scheduledForDate,
         },
     };
 }
@@ -4464,6 +4466,7 @@ async function handleConfirmImport() {
             p_correct_option_id: row.correctOptionId,
             p_category: row.category || null,
             p_difficulty: row.difficulty,
+            p_scheduled_for_date: row.scheduledForDate || null,
         });
 
         if (error) {
